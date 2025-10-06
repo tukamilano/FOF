@@ -83,7 +83,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"])
     parser.add_argument("--selftest", action="store_true", help="run intro/apply deterministic checks and exit")
-    parser.add_argument("--max_steps", type=int, default=5, help="max number of tactic applications to attempt per example")
+    parser.add_argument("--max_steps", type=int, default=5, help="max number of tactic steps (attempts) per example, including both successful and failed attempts")
     args = parser.parse_args()
 
     root_dir = os.path.dirname(__file__)
@@ -169,7 +169,7 @@ def main() -> None:
 
         step = 0
         solved = prover.goal is None
-        while step < args.max_steps and not solved:
+        while not solved:
             # Extract inputs from current state
             p1, p2, p3, goal = extract_inputs_from_prover(prover, tokenizer.max_sentence_length)
 
@@ -177,7 +177,7 @@ def main() -> None:
             banned: set[str] = set()
             applied = False
 
-            while not applied and len(banned) < len(label_names):
+            while not applied and len(banned) < len(label_names) and step < args.max_steps:
                 ids, mask, seg = tokenizer.encode_four_fixed_blocks(p1, p2, p3, goal)
                 with torch.no_grad():
                     logits = model(
@@ -194,14 +194,17 @@ def main() -> None:
                     pred_label = id_to_label[pred_id]
 
                 ok = apply_tactic_from_label(prover, pred_label)
-                print(f"  Step {step+1}: {pred_label} -> {'applied' if ok else 'failed'}")
+                
+                # Count each tactic attempt as a step (both successful and failed)
+                step += 1
+                
+                print(f"  Step {step}: {pred_label} -> {'applied' if ok else 'failed'}")
                 current_premises_all = " | ".join([str(v) for v in getattr(prover, "variables", [])])
                 print(f"    premises = {current_premises_all}")
                 print(f"    goal     = {prover.goal}")
 
                 if ok:
                     applied = True
-                    step += 1
                 else:
                     banned.add(pred_label)
 
@@ -214,7 +217,7 @@ def main() -> None:
         if solved:
             print("  Result  : goal solved")
         else:
-            print("  Result  : not solved within step limit")
+            print(f"  Result  : not solved within {args.max_steps} step limit")
         print()
 
 

@@ -39,6 +39,7 @@ pip install -r requirements.txt
 ### テストファイル
 
 - **`test_example_train.py`** - Transformerモデルのトレーニングテスト用
+- **`test_evaluate_time.py`** - パフォーマンス評価とタイミング分析用
 
 ## 使用方法
 
@@ -71,7 +72,7 @@ python run_interaction.py [オプション]
   --difficulty DIFFICULTY 数式の難易度 0.0-1.0 (デフォルト: 0.5)
   --seed SEED             乱数シード (デフォルト: 7)
   --device DEVICE         デバイス選択 auto/cpu/cuda (デフォルト: auto)
-  --max_steps MAX_STEPS   1つの例あたりの最大戦略適用回数 (デフォルト: 5)
+  --max_steps MAX_STEPS   1つの例あたりの最大戦略適用回数（成功・失敗含む） (デフォルト: 5)
   --selftest              自己テストを実行して終了
 ```
 
@@ -90,6 +91,9 @@ python test_example_train.py
 
 # 数式生成のテスト
 python generate_prop.py --count 5 --difficulty 0.3
+
+# パフォーマンス評価とタイミング分析
+python test_evaluate_time.py --count 10 --max_interactions 5
 ```
 
 ## システムの動作
@@ -98,6 +102,38 @@ python generate_prop.py --count 5 --difficulty 0.3
 2. **トークン化**: `CharTokenizer`が文字レベルでトークン化
 3. **予測**: `TransformerClassifier`が次の証明戦略を予測
 4. **実行**: pyproverが実際の証明戦略を実行
+
+## パフォーマンス評価
+
+`test_evaluate_time.py`を使用して、システムのパフォーマンスを詳細に分析できます：
+
+### タイミング分析
+
+```bash
+# 基本的なパフォーマンス評価
+python test_evaluate_time.py
+
+# より詳細な分析
+python test_evaluate_time.py --count 20 --max_interactions 10 --warmup 3
+
+# GPU使用時のパフォーマンス比較
+python test_evaluate_time.py --device cuda --count 15
+```
+
+### 測定されるコンポーネント
+
+- **transformer_inference**: Transformerモデルの推論時間
+- **tactic_application**: pyproverの戦略実行時間
+- **state_extraction**: 証明状態からの入力抽出時間
+- **tokenization**: 入力のトークン化時間
+
+### パフォーマンスの最適化
+
+現在の分析結果では、Transformerの推論時間が全体の90%以上を占めるため、以下の最適化が効果的です：
+
+1. **モデルサイズの調整**: より小さなモデルアーキテクチャの使用
+2. **バッチ処理**: 複数の戦略を同時に予測
+3. **量子化**: INT8などの低精度演算の使用
 
 ## 証明戦略
 
