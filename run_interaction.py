@@ -136,7 +136,6 @@ def main() -> None:
         # Clear existing dataset file at start
         if os.path.exists(args.dataset_file):
             os.remove(args.dataset_file)
-            print(f"Cleared existing dataset file: {args.dataset_file}")
         
         data_collector = TrainingDataCollector(
             work_file_path=args.work_file,
@@ -178,8 +177,9 @@ def main() -> None:
                 goal_node = parse_tree.transform(prop_parser.parse(seed_goal))
             prover = Prover(goal_node)
 
-            print(f"Example {i+1}")
-            print(f"  Goal    : {seed_goal}")
+            if not args.collect_data:
+                print(f"Example {i+1}")
+                print(f"  Goal    : {seed_goal}")
 
             # Start data collection for this example
             if data_collector:
@@ -237,10 +237,11 @@ def main() -> None:
                     # Count each tactic attempt as a step (both successful and failed)
                     step += 1
                     
-                    print(f"  Step {step}: {pred_label} -> {'applied' if ok else 'failed'}")
-                    current_premises_all = " | ".join([str(v) for v in getattr(prover, "variables", [])])
-                    print(f"    premises = {current_premises_all}")
-                    print(f"    goal     = {prover.goal}")
+                    if not args.collect_data:
+                        print(f"  Step {step}: {pred_label} -> {'applied' if ok else 'failed'}")
+                        current_premises_all = " | ".join([str(v) for v in getattr(prover, "variables", [])])
+                        print(f"    premises = {current_premises_all}")
+                        print(f"    goal     = {prover.goal}")
 
                     if ok:
                         applied = True
@@ -248,7 +249,8 @@ def main() -> None:
                         banned.add(pred_label)
 
                 if not applied:
-                    print("  Stuck: no applicable tactic predicted")
+                    if not args.collect_data:
+                        print("  Stuck: no applicable tactic predicted")
                     break
 
                 solved = prover.goal is None
@@ -257,11 +259,12 @@ def main() -> None:
             if data_collector:
                 data_collector.finish_example(is_proved=solved)
 
-            if solved:
-                print("  Result  : goal solved")
-            else:
-                print(f"  Result  : not solved within {args.max_steps} step limit")
-            print()
+            if not args.collect_data:
+                if solved:
+                    print("  Result  : goal solved")
+                else:
+                    print(f"  Result  : not solved within {args.max_steps} step limit")
+                print()
             
     finally:
         # Cleanup data collector
