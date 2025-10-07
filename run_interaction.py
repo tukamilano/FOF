@@ -55,11 +55,21 @@ def apply_tactic_from_label(prover, label: str) -> bool:
         return not prover.add_dn()
     parts = label.split()
     if parts[0] == "apply" and len(parts) == 2 and parts[1].isdigit():
-        return not prover.apply(int(parts[1]))
+        idx = int(parts[1])
+        if idx >= len(prover.variables):
+            return False  # Index out of range, tactic fails
+        return not prover.apply(idx)
     if parts[0] == "destruct" and len(parts) == 2 and parts[1].isdigit():
-        return not prover.destruct(int(parts[1]))
+        idx = int(parts[1])
+        if idx >= len(prover.variables):
+            return False  # Index out of range, tactic fails
+        return not prover.destruct(idx)
     if parts[0] == "specialize" and len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
-        return not prover.specialize(int(parts[1]), int(parts[2]))
+        func_idx = int(parts[1])
+        domain_idx = int(parts[2])
+        if func_idx >= len(prover.variables) or domain_idx >= len(prover.variables):
+            return False  # Index out of range, tactic fails
+        return not prover.specialize(func_idx, domain_idx)
     return False
 
 
@@ -159,21 +169,16 @@ def main() -> None:
     try:
         for i in range(args.count):
             # Generate an initial state for the prover (we still use generator to seed it)
-            premises = filter_formulas(gen, max_len=50, require_tautology=False, limit=3)
-            goal_list = filter_formulas(gen, max_len=50, require_tautology=False, limit=1)
-            seed_p1, seed_p2, seed_p3 = premises
+            goal_list = filter_formulas(gen, max_len=50, require_tautology=True, limit=1)
             seed_goal = goal_list[0]
 
             # Pyprover parse and create state
             parse_tree = PropParseTree()
             with pushd(pyprover_dir):
                 goal_node = parse_tree.transform(prop_parser.parse(seed_goal))
-                p_nodes = [parse_tree.transform(prop_parser.parse(s)) for s in [seed_p1, seed_p2, seed_p3]]
             prover = Prover(goal_node)
-            prover.variables = p_nodes[:]  # seed premises as assumptions
 
             print(f"Example {i+1}")
-            print(f"  Premises: {seed_p1} | {seed_p2} | {seed_p3}")
             print(f"  Goal    : {seed_goal}")
 
             # Start data collection for this example
