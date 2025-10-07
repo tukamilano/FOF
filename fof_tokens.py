@@ -1,4 +1,4 @@
-input_token = ['a', 'b', 'c', '(', ')', '¬', '→', '∧', '∨', '⊤', '⊥']
+input_token = ['a', 'b', 'c', '(', ')', '→', '∧', '∨', '⊥']
 
 output = ["assumption", "intro", "split", "left", "right", "add_dn"]
 for i in range(3):

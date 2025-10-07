@@ -15,6 +15,8 @@ from transformer_classifier import (
     build_label_mappings,
 )
 from generate_prop import FormulaGenerator, filter_formulas
+from training_data_collector import TrainingDataCollector
+from state_encoder import encode_prover_state, encode_prover_state_for_transformer
 
 
 @contextlib.contextmanager
@@ -62,18 +64,8 @@ def apply_tactic_from_label(prover, label: str) -> bool:
 
 
 def extract_inputs_from_prover(prover, max_len: int) -> Tuple[str, str, str, str]:
-    # Take first three premises; ignore extras. If fewer than 3, pad with empty strings.
-    vars_as_str: List[str] = [str(v) for v in getattr(prover, "variables", [])]
-    p1_full = vars_as_str[0] if len(vars_as_str) > 0 else ""
-    p2_full = vars_as_str[1] if len(vars_as_str) > 1 else ""
-    p3_full = vars_as_str[2] if len(vars_as_str) > 2 else ""
-    goal_full = str(getattr(prover, "goal", "")) if getattr(prover, "goal", None) is not None else ""
-    # Truncate to tokenizer's max sentence length
-    p1 = p1_full[:max_len]
-    p2 = p2_full[:max_len]
-    p3 = p3_full[:max_len]
-    goal_str = goal_full[:max_len]
-    return p1, p2, p3, goal_str
+    """既存のTransformer用の形式でエンコード（後方互換性のため）"""
+    return encode_prover_state_for_transformer(prover, max_len)
 
 
 def main() -> None:
@@ -84,6 +76,9 @@ def main() -> None:
     parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"])
     parser.add_argument("--selftest", action="store_true", help="run intro/apply deterministic checks and exit")
     parser.add_argument("--max_steps", type=int, default=5, help="max number of tactic steps (attempts) per example, including both successful and failed attempts")
+    parser.add_argument("--collect_data", action="store_true", help="collect training data in JSON format")
+    parser.add_argument("--work_file", type=str, default="temp_work.json", help="temporary work file for data collection")
+    parser.add_argument("--dataset_file", type=str, default="training_data.json", help="dataset file for collected data")
     args = parser.parse_args()
 
     root_dir = os.path.dirname(__file__)
@@ -124,6 +119,19 @@ def main() -> None:
     # Build generator
     variables = [t for t in ["a", "b", "c"] if t in base_tokens] or ["a", "b", "c"]
     gen = FormulaGenerator(variables=variables, allow_const=False, difficulty=args.difficulty, seed=args.seed)
+    
+    # Initialize data collector if needed
+    data_collector = None
+    if args.collect_data:
+        # Clear existing dataset file at start
+        if os.path.exists(args.dataset_file):
+            os.remove(args.dataset_file)
+            print(f"Cleared existing dataset file: {args.dataset_file}")
+        
+        data_collector = TrainingDataCollector(
+            work_file_path=args.work_file,
+            dataset_file_path=args.dataset_file
+        )
 
     if args.selftest:
         # Deterministic intro test: goal (a → a), no premises
@@ -148,77 +156,116 @@ def main() -> None:
         print("[selftest:apply] apply ok:", ok_apply, " new goal:", prover_apply.goal)
         return
 
-    for i in range(args.count):
-        # Generate an initial state for the prover (we still use generator to seed it)
-        premises = filter_formulas(gen, max_len=50, require_tautology=False, limit=3)
-        goal_list = filter_formulas(gen, max_len=50, require_tautology=False, limit=1)
-        seed_p1, seed_p2, seed_p3 = premises
-        seed_goal = goal_list[0]
+    try:
+        for i in range(args.count):
+            # Generate an initial state for the prover (we still use generator to seed it)
+            premises = filter_formulas(gen, max_len=50, require_tautology=False, limit=3)
+            goal_list = filter_formulas(gen, max_len=50, require_tautology=False, limit=1)
+            seed_p1, seed_p2, seed_p3 = premises
+            seed_goal = goal_list[0]
 
-        # Pyprover parse and create state
-        parse_tree = PropParseTree()
-        with pushd(pyprover_dir):
-            goal_node = parse_tree.transform(prop_parser.parse(seed_goal))
-            p_nodes = [parse_tree.transform(prop_parser.parse(s)) for s in [seed_p1, seed_p2, seed_p3]]
-        prover = Prover(goal_node)
-        prover.variables = p_nodes[:]  # seed premises as assumptions
+            # Pyprover parse and create state
+            parse_tree = PropParseTree()
+            with pushd(pyprover_dir):
+                goal_node = parse_tree.transform(prop_parser.parse(seed_goal))
+                p_nodes = [parse_tree.transform(prop_parser.parse(s)) for s in [seed_p1, seed_p2, seed_p3]]
+            prover = Prover(goal_node)
+            prover.variables = p_nodes[:]  # seed premises as assumptions
 
-        print(f"Example {i+1}")
-        print(f"  Premises: {seed_p1} | {seed_p2} | {seed_p3}")
-        print(f"  Goal    : {seed_goal}")
+            print(f"Example {i+1}")
+            print(f"  Premises: {seed_p1} | {seed_p2} | {seed_p3}")
+            print(f"  Goal    : {seed_goal}")
 
-        step = 0
-        solved = prover.goal is None
-        while not solved:
-            # Extract inputs from current state
-            p1, p2, p3, goal = extract_inputs_from_prover(prover, tokenizer.max_sentence_length)
+            # Start data collection for this example
+            if data_collector:
+                initial_state = encode_prover_state(prover, max_len=None)  # 完全なデータを保存
+                data_collector.start_example(
+                    example_id=i,
+                    initial_premises=initial_state["premises"],
+                    initial_goal=initial_state["goal"]
+                )
 
-            # Maintain a banned set to avoid repeating failed predictions in this step
-            banned: set[str] = set()
-            applied = False
-
-            while not applied and len(banned) < len(label_names) and step < args.max_steps:
-                ids, mask, seg = tokenizer.encode_four_fixed_blocks(p1, p2, p3, goal)
-                with torch.no_grad():
-                    logits = model(
-                        ids.unsqueeze(0).to(device),
-                        mask.unsqueeze(0).to(device),
-                        seg.unsqueeze(0).to(device),
-                    )[0]
-                    if banned:
-                        mask_vec = torch.zeros_like(logits)
-                        for b in banned:
-                            mask_vec[label_to_id[b]] = float('-inf')
-                        logits = logits + mask_vec
-                    pred_id = int(torch.argmax(logits, dim=-1).item())
-                    pred_label = id_to_label[pred_id]
-
-                ok = apply_tactic_from_label(prover, pred_label)
-                
-                # Count each tactic attempt as a step (both successful and failed)
-                step += 1
-                
-                print(f"  Step {step}: {pred_label} -> {'applied' if ok else 'failed'}")
-                current_premises_all = " | ".join([str(v) for v in getattr(prover, "variables", [])])
-                print(f"    premises = {current_premises_all}")
-                print(f"    goal     = {prover.goal}")
-
-                if ok:
-                    applied = True
-                else:
-                    banned.add(pred_label)
-
-            if not applied:
-                print("  Stuck: no applicable tactic predicted")
-                break
-
+            step = 0
             solved = prover.goal is None
+            while not solved:
+                # Extract inputs from current state
+                p1, p2, p3, goal = extract_inputs_from_prover(prover, tokenizer.max_sentence_length)
 
-        if solved:
-            print("  Result  : goal solved")
-        else:
-            print(f"  Result  : not solved within {args.max_steps} step limit")
-        print()
+                # Maintain a banned set to avoid repeating failed predictions in this step
+                banned: set[str] = set()
+                applied = False
+
+                while not applied and len(banned) < len(label_names) and step < args.max_steps:
+                    ids, mask, seg = tokenizer.encode_four_fixed_blocks(p1, p2, p3, goal)
+                    with torch.no_grad():
+                        logits = model(
+                            ids.unsqueeze(0).to(device),
+                            mask.unsqueeze(0).to(device),
+                            seg.unsqueeze(0).to(device),
+                        )[0]
+                        if banned:
+                            mask_vec = torch.zeros_like(logits)
+                            for b in banned:
+                                mask_vec[label_to_id[b]] = float('-inf')
+                            logits = logits + mask_vec
+                        pred_id = int(torch.argmax(logits, dim=-1).item())
+                        pred_label = id_to_label[pred_id]
+
+                    # Record tactic application for data collection (BEFORE applying tactic)
+                    if data_collector:
+                        current_state = encode_prover_state(prover, max_len=None)  # 完全なデータを保存
+                        # 戦略適用前の状態を記録（tactic_applyは後で更新）
+                        data_collector.add_tactic_application(
+                            step=step + 1,  # stepを先にインクリメント
+                            premises=current_state["premises"],
+                            goal=current_state["goal"],
+                            tactic=pred_label,
+                            tactic_apply=False  # 仮の値、後で更新
+                        )
+                    
+                    ok = apply_tactic_from_label(prover, pred_label)
+                    
+                    # Update tactic_apply result after applying tactic
+                    if data_collector:
+                        data_collector.update_last_tactic_apply(ok)
+                    
+                    # Count each tactic attempt as a step (both successful and failed)
+                    step += 1
+                    
+                    print(f"  Step {step}: {pred_label} -> {'applied' if ok else 'failed'}")
+                    current_premises_all = " | ".join([str(v) for v in getattr(prover, "variables", [])])
+                    print(f"    premises = {current_premises_all}")
+                    print(f"    goal     = {prover.goal}")
+
+                    if ok:
+                        applied = True
+                    else:
+                        banned.add(pred_label)
+
+                if not applied:
+                    print("  Stuck: no applicable tactic predicted")
+                    break
+
+                solved = prover.goal is None
+
+            # Finish data collection for this example
+            if data_collector:
+                data_collector.finish_example(is_proved=solved)
+
+            if solved:
+                print("  Result  : goal solved")
+            else:
+                print(f"  Result  : not solved within {args.max_steps} step limit")
+            print()
+            
+    finally:
+        # Cleanup data collector
+        if data_collector:
+            data_collector.cleanup()
+            stats = data_collector.get_dataset_stats()
+            print(f"Data collection completed. Total records: {stats['total_records']}, "
+                  f"Proved examples: {stats['proved_examples']}, "
+                  f"Failed examples: {stats['failed_examples']}")
 
 
 if __name__ == "__main__":

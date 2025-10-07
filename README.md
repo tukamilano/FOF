@@ -74,6 +74,9 @@ python run_interaction.py [オプション]
   --device DEVICE         デバイス選択 auto/cpu/cuda (デフォルト: auto)
   --max_steps MAX_STEPS   1つの例あたりの最大戦略適用回数（成功・失敗含む） (デフォルト: 5)
   --selftest              自己テストを実行して終了
+  --collect_data          学習データをJSON形式で収集
+  --work_file FILE        作業用一時ファイル (デフォルト: temp_work.json)
+  --dataset_file FILE     データセットファイル (デフォルト: training_data.json)
 ```
 
 ### 3. 自己テスト
@@ -83,7 +86,17 @@ python run_interaction.py [オプション]
 python run_interaction.py --selftest
 ```
 
-### 4. テストファイルの実行
+### 4. 学習データ収集
+
+```bash
+# 学習データを収集（10例、最大5ステップ）
+python run_interaction.py --count 10 --collect_data --max_steps 5
+
+# カスタムファイル名でデータ収集
+python run_interaction.py --count 5 --collect_data --work_file my_work.json --dataset_file my_dataset.json
+```
+
+### 5. テストファイルの実行
 
 ```bash
 # Transformerモデルのトレーニングテスト
@@ -94,6 +107,9 @@ python generate_prop.py --count 5 --difficulty 0.3
 
 # パフォーマンス評価とタイミング分析
 python test_evaluate_time.py --count 10 --max_interactions 5
+
+# 学習データ収集機能のテスト
+python test_data_collection.py
 ```
 
 ## システムの動作
@@ -102,6 +118,38 @@ python test_evaluate_time.py --count 10 --max_interactions 5
 2. **トークン化**: `CharTokenizer`が文字レベルでトークン化
 3. **予測**: `TransformerClassifier`が次の証明戦略を予測
 4. **実行**: pyproverが実際の証明戦略を実行
+5. **データ収集**: 学習データをJSON形式で蓄積（`--collect_data`オプション時）
+
+## 学習データ収集
+
+### データ形式
+
+学習データは以下のJSON形式で保存されます：
+
+```json
+[
+  {
+    "premises": ["(a → b)", "(b → c)", "a"],
+    "goal": "c",
+    "tactic": "apply 0",
+    "tactic_apply": true,
+    "is_proved": true
+  }
+]
+```
+
+### フィールド説明
+
+- `premises`: 前提の配列（最大3つ、不足分は空文字列）
+- `goal`: 現在のゴール
+- `tactic`: 適用された戦略
+- `tactic_apply`: 戦略の適用が成功したかどうか
+- `is_proved`: その例全体で証明が成功したかどうか
+
+### ファイル管理
+
+- **作業ファイル**: 各例の進行状況を一時保存（`temp_work.json`）
+- **データセットファイル**: 完了した例の学習データを蓄積（`training_data.json`）
 
 ## パフォーマンス評価
 
