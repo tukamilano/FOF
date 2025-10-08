@@ -3,9 +3,14 @@
 """
 import json
 import os
+import sys
 from typing import Dict, List, Any, Optional
-from datetime import datetime
-from state_encoder import parse_tactic_string
+
+# プロジェクトルートをパスに追加
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, project_root)
+
+from src.core.state_encoder import parse_tactic_string
 
 
 class TrainingDataCollector:
@@ -14,12 +19,10 @@ class TrainingDataCollector:
     def __init__(self, 
                  work_file_path: str = "temp_work.json",
                  dataset_file_path: str = "training_data.json",
-                 filter_successful_only: bool = False,
-                 filter_tactic_success_only: bool = False):
+                 filter_successful_only: bool = False):
         self.work_file_path = work_file_path
         self.dataset_file_path = dataset_file_path
         self.filter_successful_only = filter_successful_only
-        self.filter_tactic_success_only = filter_tactic_success_only
         self.current_example = None
         self.total_examples_processed = 0
         self.proved_examples_count = 0
@@ -109,10 +112,6 @@ class TrainingDataCollector:
                 # 両方がtrueのレコードのみ追加
                 if record["tactic_apply"] and record["is_proved"]:
                     dataset.append(record)
-            elif self.filter_tactic_success_only:
-                # tactic_applyがtrueのレコードのみ追加
-                if record["tactic_apply"]:
-                    dataset.append(record)
             else:
                 # フィルタリングなし
                 dataset.append(record)
@@ -175,10 +174,6 @@ class TrainingDataCollector:
             successful_tactics = sum(1 for record in dataset if record["tactic_apply"] and record["is_proved"])
             stats["successful_tactics"] = successful_tactics
             stats["filtered_mode"] = "successful_only"
-        elif self.filter_tactic_success_only:
-            successful_tactics = sum(1 for record in dataset if record["tactic_apply"])
-            stats["successful_tactics"] = successful_tactics
-            stats["filtered_mode"] = "tactic_success_only"
         
         return stats
         

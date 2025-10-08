@@ -3,24 +3,29 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from typing import List, Tuple
+import json
+import hashlib
+from typing import List, Tuple, Dict, Any
+
+# プロジェクトルートをパスに追加
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, project_root)
 
 import torch
 
-from transformer_classifier import (
+from src.core.transformer_classifier import (
     load_tokens_and_labels_from_token_py,
     CharTokenizer,
     TransformerClassifier,
     build_hierarchical_label_mappings,
 )
-from generate_prop import FormulaGenerator, filter_formulas
-from training_data_collector import TrainingDataCollector
-from state_encoder import encode_prover_state, format_tactic_string
-from parameter import (
+from src.core.generate_prop import FormulaGenerator, filter_formulas
+from src.core.state_encoder import encode_prover_state, format_tactic_string, parse_tactic_string
+from src.core.parameter import (
     default_params, get_model_params, get_training_params, 
     get_generation_params, get_system_params, DeviceType, DataFilterType
 )
-from utils import pushd, import_pyprover
+from src.core.utils import pushd, import_pyprover
 
 
 def apply_tactic_from_label(prover, label) -> bool:
@@ -66,10 +71,123 @@ def apply_tactic_from_label(prover, label) -> bool:
     return False
 
 
-def extract_inputs_from_prover(prover) -> Tuple[List[str], str]:
-    """proverの状態をエンコード（制限なし）"""
-    state = encode_prover_state(prover)
-    return state["premises"], state["goal"]
+def record_hash(premises: List[str], goal: str, tactic: str) -> str:
+    """データレコードの重複チェック用ハッシュを生成"""
+    record_str = f"{'|'.join(premises)}|{goal}|{tactic}"
+    return hashlib.md5(record_str.encode()).hexdigest()
+
+
+class StructuredDataCollector:
+    """run_interaction.py用の新しい構造化データコレクター"""
+    
+    def __init__(self, dataset_file_path: str = "training_data.json", filter_successful_only: bool = False):
+        self.dataset_file_path = dataset_file_path
+        self.filter_successful_only = filter_successful_only
+        self.examples = []
+        self.current_example_steps = []
+        self.example_id = 0
+        self.original_goal = ""
+        
+    def start_example(self, example_id: int, initial_premises: List[str], initial_goal: str):
+        """新しい例の開始"""
+        self.example_id = example_id
+        self.original_goal = initial_goal
+        self.current_example_steps = []
+        
+    def add_tactic_application(self, step: int, premises: List[str], goal: str, tactic: str, tactic_apply: bool):
+        """戦略適用の記録"""
+        # 戦略文字列を構造化形式に変換
+        structured_tactic = parse_tactic_string(tactic)
+        
+        # レコードハッシュを計算
+        record_hash_val = record_hash(premises, goal, tactic)
+        
+        step_data = {
+            "step_index": step,
+            "premises": premises,
+            "goal": goal,
+            "tactic": structured_tactic,
+            "tactic_apply": tactic_apply,
+            "state_hash": record_hash_val
+        }
+        
+        self.current_example_steps.append(step_data)
+        
+    def update_last_tactic_apply(self, success: bool):
+        """最後の戦略適用結果を更新"""
+        if self.current_example_steps:
+            self.current_example_steps[-1]["tactic_apply"] = success
+            
+    def finish_example(self, is_proved: bool):
+        """例の終了処理"""
+        if self.current_example_steps:
+            # フィルタリング適用
+            if self.filter_successful_only:
+                # 成功した戦略のみをフィルタリング
+                filtered_steps = [step for step in self.current_example_steps if step["tactic_apply"]]
+                # 証明が完了していない場合は例全体をスキップ
+                if not is_proved or not filtered_steps:
+                    self.current_example_steps = []
+                    return
+                self.current_example_steps = filtered_steps
+            
+            # 戦略シーケンスを作成
+            tactic_sequence = []
+            for step in self.current_example_steps:
+                tactic = step.get('tactic', {})
+                main = tactic.get('main', '')
+                arg1 = tactic.get('arg1')
+                
+                if main:
+                    if arg1:
+                        tactic_sequence.append(f"{main} {arg1}")
+                    else:
+                        tactic_sequence.append(main)
+            
+            # 例のサマリーを作成
+            summary = None
+            if is_proved:
+                summary = {
+                    "tactic_sequence": tactic_sequence,
+                    "total_steps": len(self.current_example_steps)
+                }
+            
+            # 例を作成
+            example = {
+                "example_id": f"ex_{self.example_id + 1:04d}",
+                "meta": {
+                    "goal_original": self.original_goal,
+                    "is_proved": is_proved
+                },
+                "steps": self.current_example_steps,
+                "summary": summary
+            }
+            
+            self.examples.append(example)
+            self.current_example_steps = []
+    
+    def save_data(self):
+        """収集したデータを新しい形式でJSONファイルに保存"""
+        with open(self.dataset_file_path, 'w', encoding='utf-8') as f:
+            json.dump(self.examples, f, ensure_ascii=False, indent=2)
+    
+    def get_stats(self) -> Dict[str, int]:
+        """収集したデータの統計情報を取得"""
+        total_records = sum(len(example["steps"]) for example in self.examples)
+        successful_tactics = sum(
+            sum(1 for step in example["steps"] if step["tactic_apply"]) 
+            for example in self.examples
+        )
+        proved_records = sum(
+            sum(1 for step in example["steps"] if example["meta"]["is_proved"]) 
+            for example in self.examples
+        )
+        
+        return {
+            "total_records": total_records,
+            "successful_tactics": successful_tactics,
+            "proved_records": proved_records
+        }
 
 
 def main() -> None:
@@ -112,8 +230,8 @@ def main() -> None:
     if args.filter_successful_only:
         default_params.update_training_params(filter_type=DataFilterType.SUCCESSFUL_ONLY)
 
-    root_dir = os.path.dirname(__file__)
-    token_py_path = os.path.join(root_dir, "fof_tokens.py")
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    token_py_path = os.path.join(root_dir, "src", "core", "fof_tokens.py")
     pyprover_dir = os.path.join(root_dir, "pyprover")
     
     # システムパラメータを更新
@@ -135,7 +253,7 @@ def main() -> None:
     tokenizer = CharTokenizer(base_tokens=base_tokens)
     
     # 階層分類用のラベルマッピングを取得
-    from parameter import get_hierarchical_labels
+    from src.core.parameter import get_hierarchical_labels
     hierarchical_labels = get_hierarchical_labels()
     main_to_id, arg1_to_id, arg2_to_id, id_to_main, id_to_arg1, id_to_arg2 = build_hierarchical_label_mappings(
         hierarchical_labels.main_tactics,
@@ -183,11 +301,11 @@ def main() -> None:
         if os.path.exists(train_params.dataset_file):
             os.remove(train_params.dataset_file)
         
+        # フィルタリングフラグを取得
         filter_flags = default_params.get_filter_flags()
-        data_collector = TrainingDataCollector(
-            work_file_path=train_params.work_file,
+        data_collector = StructuredDataCollector(
             dataset_file_path=train_params.dataset_file,
-            filter_successful_only=filter_flags["filter_successful_only"]
+            filter_successful_only=filter_flags.get("filter_successful_only", False)
         )
 
     if args.selftest:
@@ -234,7 +352,7 @@ def main() -> None:
 
             # Start data collection for this example
             if data_collector:
-                initial_state = encode_prover_state(prover)  # 完全なデータを保存（制限なし）
+                initial_state = encode_prover_state(prover)
                 data_collector.start_example(
                     example_id=i,
                     initial_premises=initial_state["premises"],
@@ -244,9 +362,10 @@ def main() -> None:
             step = 0
             solved = prover.goal is None
             while not solved:
-                # Extract inputs from current state (no length restrictions)
-                premises, goal = extract_inputs_from_prover(prover)
-
+                # Extract current state for tokenization
+                current_state = encode_prover_state(prover)
+                premises, goal = current_state["premises"], current_state["goal"]
+                
                 # Maintain a banned set to avoid repeating failed predictions in this step
                 banned: set[str] = set()
                 applied = False
@@ -320,14 +439,12 @@ def main() -> None:
 
                     # Record tactic application for data collection (BEFORE applying tactic)
                     if data_collector:
-                        current_state = encode_prover_state(prover)  # 完全なデータを保存（制限なし）
-                        # 戦略適用前の状態を記録（tactic_applyは後で更新）
                         data_collector.add_tactic_application(
-                            step=step + 1,  # stepを先にインクリメント
-                            premises=current_state["premises"],
-                            goal=current_state["goal"],
+                            step=step,
+                            premises=premises,
+                            goal=goal,
                             tactic=pred_label,
-                            tactic_apply=False  # 仮の値、後で更新
+                            tactic_apply=False  # Will be updated after applying tactic
                         )
                     
                     ok = apply_tactic_from_label(prover, pred_label)
@@ -336,7 +453,6 @@ def main() -> None:
                     if data_collector:
                         data_collector.update_last_tactic_apply(ok)
                     
-                    # Count each tactic attempt as a step (both successful and failed)
                     step += 1
                     
                     if not train_params.collect_data:
@@ -369,24 +485,13 @@ def main() -> None:
                 print()
             
     finally:
-        # Cleanup data collector
         if data_collector:
-            data_collector.cleanup()
-            stats = data_collector.get_dataset_stats()
-            if stats.get('filtered_mode') == "successful_only":
-                print(f"Data collection completed (successful tactics + proved only). "
-                      f"Examples: {stats['total_examples']} (proved: {stats['proved_examples']}, failed: {stats['failed_examples']}), "
-                      f"Records: {stats['total_records']}, "
-                      f"Successful tactics: {stats['successful_tactics']}")
-            elif stats.get('filtered_mode') == "tactic_success_only":
-                print(f"Data collection completed (successful tactics only). "
-                      f"Examples: {stats['total_examples']} (proved: {stats['proved_examples']}, failed: {stats['failed_examples']}), "
-                      f"Records: {stats['total_records']}, "
-                      f"Successful tactics: {stats['successful_tactics']}")
-            else:
-                print(f"Data collection completed. "
-                      f"Examples: {stats['total_examples']} (proved: {stats['proved_examples']}, failed: {stats['failed_examples']}), "
-                      f"Records: {stats['total_records']}")
+            data_collector.save_data()
+            stats = data_collector.get_stats()
+            print(f"Data collection completed. "
+                  f"Records: {stats['total_records']}, "
+                  f"Successful tactics: {stats['successful_tactics']}, "
+                  f"Proved records: {stats['proved_records']}")
 
 
 if __name__ == "__main__":

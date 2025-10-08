@@ -8,15 +8,19 @@ import os
 import sys
 from typing import List, Tuple, Dict, Any
 
+# プロジェクトルートをパスに追加
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, project_root)
+
 import torch
 
-from transformer_classifier import (
+from src.core.transformer_classifier import (
     load_tokens_and_labels_from_token_py,
     CharTokenizer,
     TransformerClassifier,
 )
-from state_encoder import encode_prover_state, format_tactic_string
-from parameter import (
+from src.core.state_encoder import encode_prover_state, format_tactic_string, parse_tactic_string
+from src.core.parameter import (
     default_params, get_model_params, get_generation_params, 
     get_system_params, DeviceType
 )
@@ -208,8 +212,8 @@ def main():
     print(f"Loaded model from {args.model_path}")
     
     # トークナイザーを作成
-    root_dir = os.path.dirname(__file__)
-    token_py_path = os.path.join(root_dir, "fof_tokens.py")
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    token_py_path = os.path.join(root_dir, "src", "core", "fof_tokens.py")
     base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
     tokenizer = CharTokenizer(base_tokens=base_tokens)
     

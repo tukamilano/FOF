@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
 
 # Load input/output tokens
-from transformer_classifier import load_tokens_and_labels_from_token_py
+from .transformer_classifier import load_tokens_and_labels_from_token_py
 
 
 # ----- AST definitions -----

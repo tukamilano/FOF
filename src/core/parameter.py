@@ -36,6 +36,10 @@ class ModelParameters:
     num_arg1_classes: int = 0  # 第1引数のクラス数（動的に設定）
     num_arg2_classes: int = 0  # 第2引数のクラス数（動的に設定）
     
+    # トークン設定
+    add_tactic_tokens: bool = True  # tactic用トークンを追加するか
+    num_tactic_tokens: int = 50  # tactic用トークンの数
+    
     # シーケンス長設定
     max_seq_len: int = 128
     
@@ -46,12 +50,6 @@ class ModelParameters:
     dim_feedforward: int = 256
     dropout: float = 0.1
     
-    # 位置エンコーディング
-    max_position_len: int = 512
-    positional_dropout: float = 0.1
-    
-    # セグメントエンコーディング
-    max_segments: int = 100  # 前提の最大数に対応
 
 
 @dataclass
@@ -120,14 +118,18 @@ class HierarchicalLabels:
     main_tactics: List[str] = None  # 主タクティクのリスト
     arg1_values: List[str] = None   # 第1引数の値のリスト
     arg2_values: List[str] = None   # 第2引数の値のリスト
+    num_tactic_tokens: int = 50     # tactic用トークンの数
     
     def __post_init__(self):
         if self.main_tactics is None:
-            # デフォルトの主タクティク
-            self.main_tactics = [
+            # デフォルトの主タクティク（既存9個 + 新規tactic用）
+            existing_tactics = [
                 "assumption", "intro", "split", "left", "right", "add_dn", 
                 "apply", "destruct", "specialize"
             ]
+            # 新規tactic用のプレースホルダー（初期は未使用）
+            new_tactic_placeholders = [f"TACTIC_{i}" for i in range(self.num_tactic_tokens)]
+            self.main_tactics = existing_tactics + new_tactic_placeholders
         if self.arg1_values is None:
             # デフォルトの第1引数（数値）
             self.arg1_values = ["0", "1", "2", "3", "4", "5"]
@@ -170,6 +172,21 @@ class ParameterManager:
         self.system = SystemParameters()
         self.special_tokens = SpecialTokens()
         self.hierarchical_labels = HierarchicalLabels()
+        
+        # パラメータ間の同期
+        self._sync_parameters()
+    
+    def _sync_parameters(self) -> None:
+        """パラメータ間の同期を行う"""
+        # ModelParametersのnum_tactic_tokensをHierarchicalLabelsに同期
+        self.hierarchical_labels.num_tactic_tokens = self.model.num_tactic_tokens
+        # main_tacticsを再生成
+        existing_tactics = [
+            "assumption", "intro", "split", "left", "right", "add_dn", 
+            "apply", "destruct", "specialize"
+        ]
+        new_tactic_placeholders = [f"TACTIC_{i}" for i in range(self.model.num_tactic_tokens)]
+        self.hierarchical_labels.main_tactics = existing_tactics + new_tactic_placeholders
     
     def update_model_params(self, **kwargs) -> None:
         """モデルパラメータを更新"""
@@ -178,6 +195,9 @@ class ParameterManager:
                 setattr(self.model, key, value)
             else:
                 raise ValueError(f"Unknown model parameter: {key}")
+        
+        # パラメータ更新後に同期
+        self._sync_parameters()
     
     def update_training_params(self, **kwargs) -> None:
         """学習パラメータを更新"""
@@ -308,6 +328,11 @@ def update_parameters(**kwargs) -> None:
             default_params.update_system_params(**params)
         else:
             raise ValueError(f"Unknown parameter category: {category}")
+
+
+def update_model_params(**kwargs) -> None:
+    """モデルパラメータを更新（グローバル関数）"""
+    default_params.update_model_params(**kwargs)
 
 
 # よく使用される設定のプリセット

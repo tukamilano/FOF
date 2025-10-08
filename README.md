@@ -26,17 +26,44 @@ pip install -r requirements.txt
 - PyTorch
 - その他の依存関係は `requirements.txt` を参照
 
-## ファイル構成
+## プロジェクト構造
 
-### メインファイル
-
-- **`run_interaction.py`** - メインの実行ファイル。数式生成、Transformer予測、証明実行の統合ワークフロー
-- **`auto_data_collector.py`** - auto_classical()を使用したデータ収集システム（Transformer不要）
-- **`transformer_classifier.py`** - Transformerモデルとトークナイザーの実装（制限なしの新しい形式）
-- **`state_encoder.py`** - 証明状態のエンコーディング（制限なし）
-- **`generate_prop.py`** - 命題論理式の生成器
-- **`fof_tokens.py`** - 入力トークンと出力ラベルの定義（[EOS]トークン追加）
-- **`pyprover/`** - 命題論理証明器ライブラリ
+```
+FOF/
+├── src/                          # メインソースコード
+│   ├── interaction/              # インタラクション（オンライン学習）
+│   │   └── run_interaction.py    # メインの実行ファイル。数式生成、Transformer予測、証明実行の統合ワークフロー
+│   ├── data_generation/          # 事前学習データ生成
+│   │   ├── auto_data_collector.py    # auto_classical()を使用したデータ収集システム
+│   │   └── training_data_collector.py # 学習データ収集用のJSONファイル管理クラス
+│   ├── training/                 # 学習関連
+│   │   ├── train_hierarchical.py     # 階層分類対応の学習スクリプト
+│   │   └── inference_hierarchical.py # 階層分類対応の推論スクリプト
+│   ├── compression/              # 圧縮関連
+│   │   ├── create_compressed_training_data.py # 圧縮されたタクティクで新しいtraining_data.jsonを作成
+│   │   └── extract_tactics.py        # BPEアルゴリズムでタクティクシーケンスを圧縮
+│   └── core/                     # コア機能（共通）
+│       ├── transformer_classifier.py # Transformerモデルとトークナイザーの実装
+│       ├── state_encoder.py         # 証明状態のエンコーディング
+│       ├── generate_prop.py         # 命題論理式の生成器
+│       ├── parameter.py             # ハイパーパラメータ管理
+│       ├── utils.py                 # 共通ユーティリティ関数
+│       └── fof_tokens.py            # 入力トークンと出力ラベルの定義
+├── tests/                        # テストファイル
+│   ├── test_parameter_sync.py    # パラメータ同期テスト
+│   ├── test_tactic_tokens.py     # タクティクトークンテスト
+│   └── test_integration.py       # 統合テスト
+├── examples/                     # 使用例
+│   └── example_parameter_usage.py # parameter.pyの使用例
+├── data/                         # データファイル
+│   ├── training_data.json
+│   ├── training_data_compressed.json
+│   └── tactic_compression_*.json
+├── models/                       # 学習済みモデル
+│   └── hierarchical_model.pth
+├── pyprover/                     # pyprover（既存のまま）
+└── README.md
+```
 
 ## 使用方法
 
@@ -46,30 +73,27 @@ pip install -r requirements.txt
 # 仮想環境を有効化
 source .venv/bin/activate
 
-# 基本的な実行（3つの例を生成）
-python run_interaction.py
+# 基本的な実行（selftest）
+python src/interaction/run_interaction.py --selftest
 
 # より多くの例を生成
-python run_interaction.py --count 10
+python src/interaction/run_interaction.py --count 10
 
 # 難易度を調整
-python run_interaction.py --difficulty 0.7
+python src/interaction/run_interaction.py --difficulty 0.7
 
 # 最大ステップ数を設定
-python run_interaction.py --max_steps 10
+python src/interaction/run_interaction.py --max_steps 10
 ```
 
 ### 2. auto_classical()ベースのデータ収集（推奨）
 
 ```bash
 # 基本的なデータ収集（Transformer不要）
-python auto_data_collector.py --count 10
-
-# より多くのデータを収集
-python auto_data_collector.py --count 50
+python src/data_generation/auto_data_collector.py --count 10
 
 # 探索の深さを調整
-python auto_data_collector.py --count 10 --max_depth 10
+python src/data_generation/auto_data_collector.py --count 10 --max_depth 10
 ```
 
 ### 3. コマンドラインオプション
@@ -153,14 +177,36 @@ python run_interaction.py --count 10 --collect_data --max_steps 5 --filter_succe
 # 基本的なデータ収集（すべてのレコードを保存）
 python auto_data_collector.py --count 10
 
-# より多くのデータを収集
-python auto_data_collector.py --count 50
-
 # カスタムファイル名でデータ収集
 python auto_data_collector.py --count 5 --dataset_file my_dataset.json
 ```
 
-### 7. テストファイルの実行
+### 7. データ圧縮の実行
+
+#### タクティクシーケンスの圧縮
+
+```bash
+# 基本的なBPE圧縮（デフォルト200回のマージ）
+python extract_tactics.py
+
+# カスタムマージ回数で圧縮
+python extract_tactics.py 100
+
+# 圧縮結果の確認
+ls -la tactic_compression_bpe_analysis.json
+```
+
+#### 圧縮された学習データの作成
+
+```bash
+# 圧縮されたタクティクで新しいtraining_data.jsonを作成
+python create_compressed_training_data.py
+
+# 圧縮結果の確認
+ls -la training_data_compressed_bpe.json
+```
+
+### 8. テストファイルの実行
 
 ```bash
 
@@ -189,6 +235,29 @@ Transformerへの入力は以下の形式でエンコードされます：
 [CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] Premise₃ [SEP] ... [EOS]
 ```
 
+
+## データ圧縮システム
+
+### 概要
+
+このシステムは、BPE（Byte Pair Encoding）アルゴリズムを使用してタクティクシーケンスを圧縮し、より効率的な学習データを作成します。圧縮により、冗長なタクティクの組み合わせを単一のトークンに統合し、モデルの学習効率を向上させます。
+
+### 圧縮プロセス
+
+1. **タクティク抽出**: `training_data.json`からタクティクシーケンスを抽出
+2. **BPE適用**: 最も頻繁に出現するタクティクペアを繰り返しマージ
+3. **圧縮データ生成**: 圧縮されたタクティクで新しい学習データを作成
+
+### 圧縮ファイル
+
+- **`tactic_compression_bpe_analysis.json`** - BPE圧縮の分析結果とマッピング情報
+- **`training_data_compressed_bpe.json`** - 圧縮されたタクティクで作成された学習データ
+
+### 圧縮効果
+
+- タクティクシーケンスの長さを大幅に短縮
+- 頻出するタクティクの組み合わせを単一トークンに統合
+- モデルの学習効率と推論速度の向上
 
 ## 学習データ収集
 

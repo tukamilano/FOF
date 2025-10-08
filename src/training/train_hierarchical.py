@@ -9,19 +9,23 @@ import os
 import sys
 from typing import List, Tuple, Dict, Any
 
+# プロジェクトルートをパスに追加
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, project_root)
+
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 
-from transformer_classifier import (
+from src.core.transformer_classifier import (
     load_tokens_and_labels_from_token_py,
     CharTokenizer,
     TransformerClassifier,
     build_hierarchical_label_mappings,
     hierarchical_collate,
 )
-from state_encoder import parse_tactic_string
-from parameter import (
+from src.core.state_encoder import parse_tactic_string
+from src.core.parameter import (
     default_params, get_model_params, get_training_params, 
     get_system_params, get_hierarchical_labels, DeviceType
 )
@@ -208,8 +212,8 @@ def main():
     print(f"Using device: {device}")
     
     # トークンとラベルを読み込み
-    root_dir = os.path.dirname(__file__)
-    token_py_path = os.path.join(root_dir, "fof_tokens.py")
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    token_py_path = os.path.join(root_dir, "src", "core", "fof_tokens.py")
     base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
     
     # 階層分類用のラベルマッピングを構築
@@ -223,8 +227,12 @@ def main():
     print(f"Arg1 values: {len(id_to_arg1)} classes")
     print(f"Arg2 values: {len(id_to_arg2)} classes")
     
-    # トークナイザーを作成
-    tokenizer = CharTokenizer(base_tokens=base_tokens)
+    # トークナイザーを作成（tactic用トークンを追加）
+    tokenizer = CharTokenizer(
+        base_tokens=base_tokens,
+        add_tactic_tokens=model_params.add_tactic_tokens,
+        num_tactic_tokens=model_params.num_tactic_tokens
+    )
     
     # データセットを作成
     dataset = HierarchicalTacticDataset(

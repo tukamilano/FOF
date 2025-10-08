@@ -40,12 +40,19 @@ class CharTokenizer:
         self,
         base_tokens: List[str],
         add_special_tokens: bool = True,
+        add_tactic_tokens: bool = True,
+        num_tactic_tokens: int = 50,
     ) -> None:
 
         vocab: List[str] = []
         if add_special_tokens:
             vocab.extend([SPECIAL_PAD, SPECIAL_CLS, SPECIAL_SEP, SPECIAL_UNK, SPECIAL_EOS])
         vocab.extend(base_tokens)
+        
+        # tactic用トークンを追加
+        if add_tactic_tokens:
+            tactic_tokens = [f"[TACTIC_{i}]" for i in range(num_tactic_tokens)]
+            vocab.extend(tactic_tokens)
 
         self.token_to_id: Dict[str, int] = {tok: i for i, tok in enumerate(vocab)}
         self.id_to_token: List[str] = vocab
@@ -55,10 +62,32 @@ class CharTokenizer:
         self.sep_id = self.token_to_id[SPECIAL_SEP]
         self.unk_id = self.token_to_id[SPECIAL_UNK]
         self.eos_id = self.token_to_id[SPECIAL_EOS]
+        
+        # tactic用トークンのID範囲を記録
+        if add_tactic_tokens:
+            self.tactic_token_start_id = len([SPECIAL_PAD, SPECIAL_CLS, SPECIAL_SEP, SPECIAL_UNK, SPECIAL_EOS]) + len(base_tokens)
+            self.tactic_token_end_id = self.tactic_token_start_id + num_tactic_tokens
+        else:
+            self.tactic_token_start_id = None
+            self.tactic_token_end_id = None
 
     @property
     def vocab_size(self) -> int:
         return len(self.id_to_token)
+    
+    def is_tactic_token(self, token_id: int) -> bool:
+        """指定されたトークンIDがtactic用トークンかどうかを判定"""
+        if self.tactic_token_start_id is None:
+            return False
+        return self.tactic_token_start_id <= token_id < self.tactic_token_end_id
+    
+    def get_tactic_token_id(self, tactic_index: int) -> int:
+        """tactic用トークンのインデックス（0-49）から実際のトークンIDを取得"""
+        if self.tactic_token_start_id is None:
+            raise ValueError("Tactic tokens are not enabled")
+        if not (0 <= tactic_index < (self.tactic_token_end_id - self.tactic_token_start_id)):
+            raise ValueError(f"Tactic index {tactic_index} is out of range")
+        return self.tactic_token_start_id + tactic_index
 
     def _encode_sentence(self, s: str, max_length: int = None) -> List[int]:
         # Treat each character as a token; ignore whitespace
@@ -253,13 +282,6 @@ def build_hierarchical_label_mappings(
     id_to_arg2 = arg2_values.copy()
     
     return main_to_id, arg1_to_id, arg2_to_id, id_to_main, id_to_arg1, id_to_arg2
-
-
-def simple_collate(batch: List[Tuple[torch.Tensor, torch.Tensor, int]]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    input_ids = torch.stack([b[0] for b in batch], dim=0)
-    attention_mask = torch.stack([b[1] for b in batch], dim=0)
-    labels = torch.tensor([b[2] for b in batch], dtype=torch.long)
-    return input_ids, attention_mask, labels
 
 
 def hierarchical_collate(batch: List[Tuple[torch.Tensor, torch.Tensor, int, int, int]]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:

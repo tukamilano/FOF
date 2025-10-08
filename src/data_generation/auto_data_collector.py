@@ -9,14 +9,17 @@ import time
 from typing import List, Tuple, Dict, Any, Optional
 from copy import deepcopy
 
-from generate_prop import FormulaGenerator, filter_formulas
-from training_data_collector import TrainingDataCollector
-from state_encoder import encode_prover_state, parse_tactic_string
-from parameter import (
+# プロジェクトルートをパスに追加
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, project_root)
+
+from src.core.generate_prop import FormulaGenerator, filter_formulas
+from src.core.state_encoder import encode_prover_state, parse_tactic_string
+from src.core.parameter import (
     default_params, get_generation_params, get_training_params, 
     get_system_params, DeviceType, DataFilterType
 )
-from utils import pushd, import_pyprover
+from src.core.utils import pushd, import_pyprover
 
 
 def apply_tactic_from_label(prover, label: str) -> bool:
@@ -277,7 +280,7 @@ def main() -> None:
     )
     
 
-    root_dir = os.path.dirname(__file__)
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     pyprover_dir = os.path.join(root_dir, "pyprover")
     
     # システムパラメータを更新
