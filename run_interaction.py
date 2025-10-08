@@ -90,7 +90,6 @@ def main() -> None:
     parser.add_argument("--work_file", type=str, default=train_params.work_file, help="temporary work file for data collection")
     parser.add_argument("--dataset_file", type=str, default=train_params.dataset_file, help="dataset file for collected data")
     parser.add_argument("--filter_successful_only", action="store_true", help="only store records where both tactic_apply and is_proved are true")
-    parser.add_argument("--filter_tactic_success_only", action="store_true", help="only store records where tactic_apply is true (regardless of is_proved)")
     args = parser.parse_args()
 
     # パラメータを更新
@@ -112,8 +111,6 @@ def main() -> None:
     # フィルタリング設定を更新
     if args.filter_successful_only:
         default_params.update_training_params(filter_type=DataFilterType.SUCCESSFUL_ONLY)
-    elif args.filter_tactic_success_only:
-        default_params.update_training_params(filter_type=DataFilterType.TACTIC_SUCCESS_ONLY)
 
     root_dir = os.path.dirname(__file__)
     token_py_path = os.path.join(root_dir, "fof_tokens.py")
@@ -190,8 +187,7 @@ def main() -> None:
         data_collector = TrainingDataCollector(
             work_file_path=train_params.work_file,
             dataset_file_path=train_params.dataset_file,
-            filter_successful_only=filter_flags["filter_successful_only"],
-            filter_tactic_success_only=filter_flags["filter_tactic_success_only"]
+            filter_successful_only=filter_flags["filter_successful_only"]
         )
 
     if args.selftest:

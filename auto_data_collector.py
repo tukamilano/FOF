@@ -67,16 +67,101 @@ def record_hash(premises: List[str], goal: str, tactic: str) -> str:
     return hashlib.md5(record_str.encode()).hexdigest()
 
 
+
+
+def group_steps_into_proofs(steps: List[Dict]) -> List[List[Dict]]:
+    """Group individual steps into complete proof sequences."""
+    proofs = []
+    current_proof = []
+    
+    for step in steps:
+        if not step.get('premises', []):
+            if current_proof:
+                proofs.append(current_proof)
+            current_proof = [step]
+        else:
+            current_proof.append(step)
+    
+    if current_proof:
+        proofs.append(current_proof)
+    
+    return proofs
+
+
+def create_tactic_sequence(steps: List[Dict]) -> List[str]:
+    """Create a sequence of tactic names from steps."""
+    sequence = []
+    for step in steps:
+        tactic = step.get('tactic', {})
+        main = tactic.get('main', '')
+        arg1 = tactic.get('arg1')
+        
+        if main:
+            if arg1:
+                sequence.append(f"{main} {arg1}")
+            else:
+                sequence.append(main)
+    
+    return sequence
+
+
+def transform_to_new_format(steps: List[Dict]) -> List[Dict]:
+    """Transform flat steps to new structured format."""
+    proof_groups = group_steps_into_proofs(steps)
+    examples = []
+    
+    for i, proof_steps in enumerate(proof_groups):
+        if not proof_steps:
+            continue
+            
+        example_id = f"ex_{i+1:04d}"
+        original_goal = proof_steps[0]['goal']
+        is_proved = proof_steps[-1].get('is_proved', False)
+        
+        # Transform steps
+        transformed_steps = []
+        for j, step in enumerate(proof_steps):
+            transformed_steps.append({
+                "step_index": j,
+                "premises": step.get('premises', []),
+                "goal": step['goal'],
+                "tactic": step['tactic'],
+                "tactic_apply": step['tactic_apply'],
+                "state_hash": step.get('record_hash', '')
+            })
+        
+        # Create summary if proof was completed
+        summary = None
+        if is_proved:
+            tactic_sequence = create_tactic_sequence(proof_steps)
+            summary = {
+                "tactic_sequence": tactic_sequence,
+                "total_steps": len(proof_steps)
+            }
+        
+        example = {
+            "example_id": example_id,
+            "meta": {
+                "goal_original": original_goal,
+                "is_proved": is_proved
+            },
+            "steps": transformed_steps,
+            "summary": summary
+        }
+        
+        examples.append(example)
+    
+    return examples
+
+
 class AutoDataCollector:
     """auto_classical()で証明を探索し、データを収集するクラス"""
     
     def __init__(self, 
                  dataset_file_path: str = "training_data.json",
-                 max_depth: int = 8,
-                 filter_tactic_success_only: bool = False):
+                 max_depth: int = 8):
         self.dataset_file_path = dataset_file_path
         self.max_depth = max_depth
-        self.filter_tactic_success_only = filter_tactic_success_only
         self.collected_data = []
         self.record_hashes = set()  # 重複排除用
         
@@ -119,11 +204,8 @@ class AutoDataCollector:
                         "record_hash": record_hash_val
                     }
                     
-                    # フィルタリング条件をチェック
+                    # すべてのステップを記録
                     should_add = True
-                    if self.filter_tactic_success_only:
-                        # 成功したテクティクのみ
-                        should_add = success
                     
                     if should_add:
                         self.collected_data.append(record)
@@ -149,9 +231,12 @@ class AutoDataCollector:
     
     
     def save_data(self):
-        """収集したデータをJSONファイルに保存"""
+        """収集したデータをJSONファイルに保存（新しい形式）"""
+        # Transform to new format
+        transformed_data = transform_to_new_format(self.collected_data)
+        
         with open(self.dataset_file_path, 'w', encoding='utf-8') as f:
-            json.dump(self.collected_data, f, ensure_ascii=False, indent=2)
+            json.dump(transformed_data, f, ensure_ascii=False, indent=2)
     
     def get_stats(self) -> Dict[str, int]:
         """収集したデータの統計情報を取得"""
@@ -178,7 +263,6 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=gen_params.seed, help="random seed")
     parser.add_argument("--max_depth", type=int, default=gen_params.max_depth, help="maximum auto_classical search depth")
     parser.add_argument("--dataset_file", type=str, default=train_params.dataset_file, help="output dataset file")
-    parser.add_argument("--filter_tactic_success_only", action="store_true", help="only store successful tactics")
     args = parser.parse_args()
 
     # パラメータを更新
@@ -192,9 +276,6 @@ def main() -> None:
         dataset_file=args.dataset_file
     )
     
-    # フィルタリング設定を更新
-    if args.filter_tactic_success_only:
-        default_params.update_training_params(filter_type=DataFilterType.TACTIC_SUCCESS_ONLY)
 
     root_dir = os.path.dirname(__file__)
     pyprover_dir = os.path.join(root_dir, "pyprover")
@@ -222,8 +303,7 @@ def main() -> None:
     # Initialize data collector
     data_collector = AutoDataCollector(
         dataset_file_path=train_params.dataset_file,
-        max_depth=gen_params.max_depth,
-        filter_tactic_success_only=args.filter_tactic_success_only
+        max_depth=gen_params.max_depth
     )
 
     print(f"Starting auto_classical() data collection for {gen_params.count} formulas...")

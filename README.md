@@ -65,11 +65,8 @@ python run_interaction.py --max_steps 10
 # 基本的なデータ収集（Transformer不要）
 python auto_data_collector.py --count 10
 
-# 成功したテクティクのみを保存
-python auto_data_collector.py --count 10 --filter_tactic_success_only
-
 # より多くのデータを収集
-python auto_data_collector.py --count 50 --filter_tactic_success_only
+python auto_data_collector.py --count 50
 
 # 探索の深さを調整
 python auto_data_collector.py --count 10 --max_depth 10
@@ -92,7 +89,6 @@ python run_interaction.py [オプション]
   --collect_data          学習データをJSON形式で収集
   --work_file FILE        作業用一時ファイル (デフォルト: temp_work.json)
   --dataset_file FILE     データセットファイル (デフォルト: training_data.json)
-  --filter_tactic_success_only  成功した戦略のみを保存 (tactic_apply=true)
   --filter_successful_only      成功した戦略かつ証明完了のみを保存 (tactic_apply=true かつ is_proved=true)
 ```
 
@@ -107,7 +103,6 @@ python auto_data_collector.py [オプション]
   --seed SEED                   乱数シード (デフォルト: 7)
   --max_depth MAX_DEPTH         auto_classical()の最大探索深さ (デフォルト: 8)
   --dataset_file FILE           出力データセットファイル (デフォルト: training_data.json)
-  --filter_tactic_success_only  成功したテクティクのみを保存 (tactic_apply=true)
 ```
 
 ### 4. 自己テスト
@@ -148,9 +143,6 @@ print('Success: Unlimited premises format works!')
 # 基本的なデータ収集（すべてのレコードを保存）
 python run_interaction.py --count 10 --collect_data --max_steps 5
 
-# 成功した戦略のみを保存
-python run_interaction.py --count 10 --collect_data --max_steps 5 --filter_tactic_success_only
-
 # 成功した戦略かつ証明完了のみを保存
 python run_interaction.py --count 10 --collect_data --max_steps 5 --filter_successful_only
 ```
@@ -161,11 +153,8 @@ python run_interaction.py --count 10 --collect_data --max_steps 5 --filter_succe
 # 基本的なデータ収集（すべてのレコードを保存）
 python auto_data_collector.py --count 10
 
-# 成功したテクティクのみを保存（推奨）
-python auto_data_collector.py --count 10 --filter_tactic_success_only
-
 # より多くのデータを収集
-python auto_data_collector.py --count 50 --filter_tactic_success_only
+python auto_data_collector.py --count 50
 
 # カスタムファイル名でデータ収集
 python auto_data_collector.py --count 5 --dataset_file my_dataset.json
@@ -264,15 +253,7 @@ python run_interaction.py --collect_data --count 10
 - すべてのレコード（成功・失敗問わず）を保存
 - 統計: `Examples: 10 (proved: 0, failed: 10), Records: 50`
 
-#### 2. 成功した戦略のみ（`--filter_tactic_success_only`）
-```bash
-python run_interaction.py --collect_data --count 10 --filter_tactic_success_only
-```
-- `tactic_apply: true`のレコードのみを保存
-- 証明の完了に関係なく、成功した戦略のデータを収集
-- 統計: `Examples: 10 (proved: 0, failed: 10), Records: 15, Successful tactics: 15`
-
-#### 3. 成功した戦略かつ証明完了のみ（`--filter_successful_only`）
+#### 2. 成功した戦略かつ証明完了のみ（`--filter_successful_only`）
 ```bash
 python run_interaction.py --collect_data --count 10 --filter_successful_only
 ```
@@ -280,7 +261,7 @@ python run_interaction.py --collect_data --count 10 --filter_successful_only
 - 最も厳しい条件で、完全に成功した例のみを収集
 - 統計: `Examples: 10 (proved: 0, failed: 10), Records: 0, Successful tactics: 0`
 
-**注意**: 現在の設定では証明が完了する例が少ないため、`--filter_successful_only`オプションでは0件になる可能性があります。`--filter_tactic_success_only`オプションの使用を推奨します。
+**注意**: 現在の設定では証明が完了する例が少ないため、`--filter_successful_only`オプションでは0件になる可能性があります。基本的なデータ収集（フィルタなし）の使用を推奨します。
 
 
 ## パフォーマンス評価
@@ -320,30 +301,7 @@ python test_evaluate_time.py --device cuda --count 15
 - `destruct N` - 前提Nの分解
 - `specialize N M` - 前提NをMで特殊化
 
-## データ収集の比較
-
-### Transformerベース vs auto_classical()ベース
-
-| 特徴 | Transformerベース | auto_classical()ベース |
-|------|------------------|----------------------|
-| **依存関係** | PyTorch、Transformerモデル | pyproverのみ |
-| **速度** | モデル推論が必要 | 高速（最適化済み） |
-| **データ品質** | 予測に依存 | 確実な証明パス |
-| **設定** | 複雑（モデル、デバイス等） | シンプル |
-| **推奨用途** | 研究・実験 | 実用的なデータ収集 |
-
-### 推奨される使用方法
-
-- **研究・実験**: `run_interaction.py`（Transformerベース）
-- **実用的なデータ収集**: `auto_data_collector.py`（auto_classical()ベース）
-
 ## 開発
-
-### 新しい戦略の追加
-
-1. `fof_tokens.py`の`output`リストに戦略名を追加
-2. `run_interaction.py`の`apply_tactic_from_label`関数に実装を追加
-3. `auto_data_collector.py`の`apply_tactic_from_label`関数にも同様の実装を追加
 
 ### モデルの改善
 

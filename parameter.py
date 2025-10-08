@@ -21,7 +21,6 @@ class DataFilterType(Enum):
     """データフィルタリングの列挙型"""
     ALL = "all"
     SUCCESSFUL_ONLY = "successful_only"
-    TACTIC_SUCCESS_ONLY = "tactic_success_only"
 
 
 @dataclass
@@ -38,7 +37,7 @@ class ModelParameters:
     num_arg2_classes: int = 0  # 第2引数のクラス数（動的に設定）
     
     # シーケンス長設定
-    max_seq_len: int = 512
+    max_seq_len: int = 128
     
     # Transformerアーキテクチャ
     d_model: int = 128
@@ -131,10 +130,10 @@ class HierarchicalLabels:
             ]
         if self.arg1_values is None:
             # デフォルトの第1引数（数値）
-            self.arg1_values = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+            self.arg1_values = ["0", "1", "2", "3", "4", "5"]
         if self.arg2_values is None:
             # デフォルトの第2引数（数値）
-            self.arg2_values = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+            self.arg2_values = ["0", "1", "2", "3", "4", "5"]
     
     def get_main_to_id(self) -> Dict[str, int]:
         """主タクティクの文字列からIDへのマッピング"""
@@ -242,14 +241,12 @@ class ParameterManager:
         """データフィルタリングフラグを取得"""
         if isinstance(self.training.filter_type, DataFilterType):
             return {
-                "filter_successful_only": self.training.filter_type == DataFilterType.SUCCESSFUL_ONLY,
-                "filter_tactic_success_only": self.training.filter_type == DataFilterType.TACTIC_SUCCESS_ONLY
+                "filter_successful_only": self.training.filter_type == DataFilterType.SUCCESSFUL_ONLY
             }
         else:
             # 文字列の場合は比較
             return {
-                "filter_successful_only": self.training.filter_type == "successful_only",
-                "filter_tactic_success_only": self.training.filter_type == "tactic_success_only"
+                "filter_successful_only": self.training.filter_type == "successful_only"
             }
     
     def to_dict(self) -> Dict[str, Any]:
