@@ -224,3 +224,36 @@ logs/
 # Temporary files
 tmp/
 temp/
+
+# FOF Project specific files
+# Training data and datasets
+training_data.json
+temp_work.json
+*.json.bak
+
+# PPO model files
+ppo_models/
+ppo_logs/
+
+# Generated data files
+auto_data_*.json
+dataset_*.json
+work_*.json
+
+# Model checkpoints and weights
+checkpoints/
+models/
+weights/
+
+# Temporary output files
+output/
+results/
+
+# pyprover subdirectory virtual environment
+pyprover/.venv/
+pyprover/venv/
+pyprover/env/
+
+# Empty or temporary files
+train.py
+=2.0
