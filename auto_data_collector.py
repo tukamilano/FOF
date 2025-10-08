@@ -12,7 +12,11 @@ from copy import deepcopy
 
 from generate_prop import FormulaGenerator, filter_formulas
 from training_data_collector import TrainingDataCollector
-from state_encoder import encode_prover_state
+from state_encoder import encode_prover_state, parse_tactic_string
+from parameter import (
+    default_params, get_generation_params, get_training_params, 
+    get_system_params, DeviceType, DataFilterType
+)
 
 
 @contextlib.contextmanager
@@ -98,7 +102,7 @@ class AutoDataCollector:
         
     def collect_data_for_formula(self, prover, example_id: int) -> Dict[str, Any]:
         """単一の式に対してauto_classical()で証明を探索し、データを収集"""
-        initial_state = encode_prover_state(prover, max_len=None)
+        initial_state = encode_prover_state(prover)
         start_time = time.time()
         
         # pyproverのauto_classical()メソッドで証明を試行
@@ -113,7 +117,7 @@ class AutoDataCollector:
                 if current_prover.goal is None:
                     break
                     
-                current_state = encode_prover_state(current_prover, max_len=None)
+                current_state = encode_prover_state(current_prover)
                 
                 # データレコードのハッシュを計算
                 record_hash_val = record_hash(current_state["premises"], current_state["goal"], tactic)
@@ -129,7 +133,7 @@ class AutoDataCollector:
                     record = {
                         "premises": current_state["premises"],
                         "goal": current_state["goal"],
-                        "tactic": tactic,
+                        "tactic": parse_tactic_string(tactic),  # 構造化されたtactic形式に変換
                         "tactic_apply": success,
                         "is_proved": True,  # このexampleが解けたので常にtrue
                         "record_hash": record_hash_val
@@ -183,17 +187,43 @@ class AutoDataCollector:
 
 
 def main() -> None:
+    # パラメータを初期化
+    gen_params = get_generation_params()
+    train_params = get_training_params()
+    system_params = get_system_params()
+    
     parser = argparse.ArgumentParser(description="auto_classical() based proof discovery and data collection")
-    parser.add_argument("--count", type=int, default=10, help="number of formulas to process")
-    parser.add_argument("--difficulty", type=float, default=0.7, help="formula generation difficulty")
-    parser.add_argument("--seed", type=int, default=7, help="random seed")
-    parser.add_argument("--max_depth", type=int, default=8, help="maximum auto_classical search depth")
-    parser.add_argument("--dataset_file", type=str, default="training_data.json", help="output dataset file")
+    parser.add_argument("--count", type=int, default=gen_params.count, help="number of formulas to process")
+    parser.add_argument("--difficulty", type=float, default=gen_params.difficulty, help="formula generation difficulty")
+    parser.add_argument("--seed", type=int, default=gen_params.seed, help="random seed")
+    parser.add_argument("--max_depth", type=int, default=gen_params.max_depth, help="maximum auto_classical search depth")
+    parser.add_argument("--dataset_file", type=str, default=train_params.dataset_file, help="output dataset file")
     parser.add_argument("--filter_tactic_success_only", action="store_true", help="only store successful tactics")
     args = parser.parse_args()
 
+    # パラメータを更新
+    default_params.update_generation_params(
+        count=args.count,
+        difficulty=args.difficulty,
+        seed=args.seed,
+        max_depth=args.max_depth
+    )
+    default_params.update_training_params(
+        dataset_file=args.dataset_file
+    )
+    
+    # フィルタリング設定を更新
+    if args.filter_tactic_success_only:
+        default_params.update_training_params(filter_type=DataFilterType.TACTIC_SUCCESS_ONLY)
+
     root_dir = os.path.dirname(__file__)
     pyprover_dir = os.path.join(root_dir, "pyprover")
+    
+    # システムパラメータを更新
+    default_params.update_system_params(
+        root_dir=root_dir,
+        pyprover_dir=pyprover_dir
+    )
 
     # Import pyprover
     proposition_mod, prover_mod = import_pyprover(pyprover_dir)
@@ -202,26 +232,30 @@ def main() -> None:
     Prover = prover_mod.Prover
 
     # Build generator
-    gen = FormulaGenerator(variables=["a", "b", "c"], allow_const=False, 
-                         difficulty=args.difficulty, seed=args.seed)
+    gen = FormulaGenerator(
+        variables=gen_params.variables, 
+        allow_const=gen_params.allow_const, 
+        difficulty=gen_params.difficulty, 
+        seed=gen_params.seed
+    )
     
     # Initialize data collector
     data_collector = AutoDataCollector(
-        dataset_file_path=args.dataset_file,
-        max_depth=args.max_depth,
+        dataset_file_path=train_params.dataset_file,
+        max_depth=gen_params.max_depth,
         filter_tactic_success_only=args.filter_tactic_success_only
     )
 
-    print(f"Starting auto_classical() data collection for {args.count} formulas...")
-    print(f"Max depth: {args.max_depth}")
-    print(f"Output file: {args.dataset_file}")
+    print(f"Starting auto_classical() data collection for {gen_params.count} formulas...")
+    print(f"Max depth: {gen_params.max_depth}")
+    print(f"Output file: {train_params.dataset_file}")
     
     try:
-        for i in range(args.count):
-            print(f"\nProcessing formula {i+1}/{args.count}...")
+        for i in range(gen_params.count):
+            print(f"\nProcessing formula {i+1}/{gen_params.count}...")
             
             # Generate formula
-            goal_list = filter_formulas(gen, max_len=50, require_tautology=True, limit=1)
+            goal_list = filter_formulas(gen, max_len=gen_params.max_len, require_tautology=True, limit=1)
             if not goal_list:
                 print(f"Warning: No valid formulas generated for example {i+1}, skipping...")
                 continue

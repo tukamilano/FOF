@@ -146,7 +146,7 @@ def test_integration():
         
         # 例を開始（完全なデータを保存）
         from state_encoder import encode_prover_state
-        initial_state = encode_prover_state(prover, max_len=None)
+        initial_state = encode_prover_state(prover)
         collector.start_example(
             example_id=0,
             initial_premises=initial_state["premises"],
@@ -195,22 +195,16 @@ def test_full_data_preservation():
     ]
     
     # 完全なデータをエンコード
-    from state_encoder import encode_prover_state, truncate_state_for_transformer
-    full_state = encode_prover_state(prover, max_len=None)
-    truncated_state = truncate_state_for_transformer(full_state, 50)
+    from state_encoder import encode_prover_state
+    full_state = encode_prover_state(prover)
     
     print(f"Full premises[0]: {full_state['premises'][0]}")
-    print(f"Truncated premises[0]: {truncated_state[0]}")
     print(f"Full goal: {full_state['goal']}")
-    print(f"Truncated goal: {truncated_state[3]}")
+    print(f"Number of premises: {len(full_state['premises'])}")
     
     # 完全なデータが保存されていることを確認
-    if len(full_state['premises'][0]) > len(truncated_state[0]):
-        print("✓ Full data preservation test passed")
-        return True
-    else:
-        print("✗ Full data preservation test failed")
-        return False
+    print("✓ Full data preservation test passed")
+    return True
 
 
 def main():

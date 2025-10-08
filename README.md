@@ -2,32 +2,6 @@
 
 このプロジェクトは、Transformerモデルを使用して命題論理の定理証明を自動化するシステムです。pyproverライブラリと組み合わせて、数式生成から証明戦略の予測まで一貫したワークフローを提供します。
 
-## 主な特徴
-
-- **制限なしの前提**: 前提の数と長さに制限なし
-- **新しい入力形式**: `[CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] ... [EOS]`
-- **シンプルなコード**: 古い3-premise制限を削除し、コードを大幅に簡素化
-- **柔軟なエンコーディング**: 任意の数の前提を処理可能
-
-## 最新の変更点（v2.0）
-
-### 削除された制限
-- ❌ 3-premise制限を完全に削除
-- ❌ 50文字の文長制限を削除
-- ❌ 古い固定ブロック形式を削除
-
-### 新しい機能
-- ✅ `[EOS]`トークンの追加
-- ✅ 制限なしの`encode_prover_state()`関数
-- ✅ シンプルな`CharTokenizer.encode()`メソッド
-- ✅ 柔軟なセグメントID割り当て（0=special, 1=goal, 2+=premises）
-
-### コードの簡素化
-- 古い3-premise制限の関数をすべて削除
-- `max_sentence_length`パラメータを削除
-- 複雑なエンコーディング関数を統合
-- より直感的なAPI設計
-
 ## 環境設定
 
 ### 仮想環境の作成と有効化
@@ -50,8 +24,6 @@ pip install -r requirements.txt
 
 - Python 3.8+
 - PyTorch
-- stable-baselines3 (PPO強化学習)
-- gym (強化学習環境)
 - その他の依存関係は `requirements.txt` を参照
 
 ## ファイル構成
@@ -60,7 +32,6 @@ pip install -r requirements.txt
 
 - **`run_interaction.py`** - メインの実行ファイル。数式生成、Transformer予測、証明実行の統合ワークフロー
 - **`auto_data_collector.py`** - auto_classical()を使用したデータ収集システム（Transformer不要）
-- **`ppo_trainer.py`** - PPO強化学習によるTransformerモデルのバッチ学習システム
 - **`transformer_classifier.py`** - Transformerモデルとトークナイザーの実装（制限なしの新しい形式）
 - **`state_encoder.py`** - 証明状態のエンコーディング（制限なし）
 - **`generate_prop.py`** - 命題論理式の生成器
@@ -205,26 +176,7 @@ python auto_data_collector.py --count 50 --filter_tactic_success_only
 python auto_data_collector.py --count 5 --dataset_file my_dataset.json
 ```
 
-### 7. PPO強化学習によるバッチ学習
-
-```bash
-# 基本的なPPO学習（10000ステップ、バッチサイズ32）
-python ppo_trainer.py --total_timesteps 10000 --batch_size 32
-
-# 短時間テスト（100ステップ、バッチサイズ8）
-python ppo_trainer.py --total_timesteps 100 --batch_size 8 --max_steps 3
-
-# 学習の再開
-python ppo_trainer.py --resume_from ppo_models/ppo_model_5000
-
-# 学習済みモデルの評価
-python ppo_trainer.py --evaluate ppo_models/ppo_model_final --eval_episodes 100
-
-# カスタム設定での学習
-python ppo_trainer.py --total_timesteps 50000 --batch_size 64 --learning_rate 1e-4 --difficulty 0.7
-```
-
-### 8. テストファイルの実行
+### 7. テストファイルの実行
 
 ```bash
 # Transformerモデルのトレーニングテスト
@@ -259,17 +211,6 @@ Transformerへの入力は以下の形式でエンコードされます：
 [CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] Premise₃ [SEP] ... [EOS]
 ```
 
-- **制限なし**: 前提の数と長さに制限なし
-- **柔軟性**: 任意の数の前提を処理可能
-- **シンプル**: 古い3-premise制限を完全に削除
-
-### PPO強化学習ワークフロー（ppo_trainer.py）
-
-1. **環境設定**: Gym環境として証明問題を定義
-2. **バッチ生成**: 各バッチで新しい問題を生成（メモリ効率的）
-3. **PPO学習**: stable-baselines3を使用した強化学習
-4. **報酬計算**: 戦略成功かつ証明完了時のみ報酬1.0
-5. **モデル保存**: 定期的なチェックポイント保存と学習再開機能
 
 ## 学習データ収集
 
@@ -282,7 +223,11 @@ Transformerへの入力は以下の形式でエンコードされます：
   {
     "premises": ["(a → b)", "(b → c)", "(c → d)", "a"],
     "goal": "d",
-    "tactic": "apply 0",
+    "tactic": {
+      "main": "apply",
+      "arg1": "0",
+      "arg2": null
+    },
     "tactic_apply": true,
     "is_proved": true
   }
@@ -293,9 +238,26 @@ Transformerへの入力は以下の形式でエンコードされます：
 
 - `premises`: 前提の配列（制限なし、任意の数）
 - `goal`: 現在のゴール
-- `tactic`: 適用された戦略
+- `tactic`: 構造化された戦略オブジェクト
+  - `main`: 戦略の種類（"apply", "intro", "split"など）
+  - `arg1`: 第1引数（インデックスやパラメータ）
+  - `arg2`: 第2引数（specialize戦略などで使用）
 - `tactic_apply`: 戦略の適用が成功したかどうか
 - `is_proved`: その例全体で証明が成功したかどうか
+
+### 戦略の種類
+
+| 戦略 | main | arg1 | arg2 | 説明 |
+|------|------|------|------|------|
+| `assumption` | "assumption" | null | null | 前提の直接適用 |
+| `intro` | "intro" | null | null | 含意導入 |
+| `split` | "split" | null | null | 連言の分解 |
+| `left` | "left" | null | null | 選言の左側選択 |
+| `right` | "right" | null | null | 選言の右側選択 |
+| `add_dn` | "add_dn" | null | null | 二重否定の追加 |
+| `apply N` | "apply" | "N" | null | 前提Nの適用 |
+| `destruct N` | "destruct" | "N" | null | 前提Nの分解 |
+| `specialize N M` | "specialize" | "N" | "M" | 前提NをMで特殊化 |
 
 ### ファイル管理
 
@@ -331,32 +293,6 @@ python run_interaction.py --collect_data --count 10 --filter_successful_only
 
 **注意**: 現在の設定では証明が完了する例が少ないため、`--filter_successful_only`オプションでは0件になる可能性があります。`--filter_tactic_success_only`オプションの使用を推奨します。
 
-## PPO強化学習の詳細
-
-### 報酬設計
-
-PPO学習では以下の報酬設計を使用：
-
-```python
-def calculate_reward(tactic_apply: bool, is_proved: bool) -> float:
-    if tactic_apply and is_proved:
-        return 1.0  # 完全成功のみ報酬
-    else:
-        return 0.0  # その他は無報酬
-```
-
-### バッチ学習の特徴
-
-- **メモリ効率**: 各バッチで新しい問題を生成し、使用後は破棄
-- **バッチサイズ**: デフォルト32（小型Transformerに最適化）
-- **学習再開**: 任意のチェックポイントから学習を再開可能
-- **進捗ログ**: リアルタイムの学習進捗と統計情報
-
-### モデル保存
-
-- **チェックポイント**: `ppo_models/ppo_model_{timesteps}`で定期保存
-- **最終モデル**: `ppo_models/ppo_model_final`で最終保存
-- **学習再開**: `--resume_from`オプションで任意のチェックポイントから再開
 
 ## パフォーマンス評価
 
@@ -419,27 +355,18 @@ python test_evaluate_time.py --device cuda --count 15
 1. `fof_tokens.py`の`output`リストに戦略名を追加
 2. `run_interaction.py`の`apply_tactic_from_label`関数に実装を追加
 3. `auto_data_collector.py`の`apply_tactic_from_label`関数にも同様の実装を追加
-4. `ppo_trainer.py`の`apply_tactic_from_label`関数にも同様の実装を追加
 
 ### モデルの改善
 
 - `transformer_classifier.py`でモデルアーキテクチャを調整（制限なしの新しい形式）
 - `state_encoder.py`でエンコーディング方法を調整
 - `test_example_train.py`でトレーニングデータを拡張
-- `ppo_trainer.py`でPPOハイパーパラメータを調整
 
 ### 新しい入力形式のカスタマイズ
 
 - `transformer_classifier.py`の`encode()`メソッドで入力形式を調整
 - `state_encoder.py`の`encode_prover_state()`で状態エンコーディングを調整
 - セグメントIDの割り当て（0=special, 1=goal, 2+=premises）を変更可能
-
-### PPO学習の調整
-
-- **バッチサイズ**: `--batch_size`で調整（デフォルト32）
-- **学習率**: `--learning_rate`で調整（デフォルト3e-4）
-- **難易度**: `--difficulty`で問題の難易度を調整（デフォルト0.3）
-- **最大ステップ**: `--max_steps`でエピソードの最大ステップ数を調整（デフォルト5）
 
 ## トラブルシューティング
 
@@ -466,21 +393,8 @@ pip install -r requirements.txt --force-reinstall
 ```bash
 # CPUのみで実行
 python run_interaction.py --device cpu
-python ppo_trainer.py --device cpu
 ```
 
-### PPO学習時の問題
-
-```bash
-# 短時間テストで動作確認
-python ppo_trainer.py --total_timesteps 100 --batch_size 4
-
-# 学習の再開
-python ppo_trainer.py --resume_from ppo_models/ppo_model_1000
-
-# モデルの評価
-python ppo_trainer.py --evaluate ppo_models/ppo_model_final --eval_episodes 10
-```
 
 ## ライセンス
 

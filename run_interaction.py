@@ -13,10 +13,15 @@ from transformer_classifier import (
     CharTokenizer,
     TransformerClassifier,
     build_label_mappings,
+    build_hierarchical_label_mappings,
 )
 from generate_prop import FormulaGenerator, filter_formulas
 from training_data_collector import TrainingDataCollector
-from state_encoder import encode_prover_state
+from state_encoder import encode_prover_state, format_tactic_string
+from parameter import (
+    default_params, get_model_params, get_training_params, 
+    get_generation_params, get_system_params, DeviceType, DataFilterType
+)
 
 
 @contextlib.contextmanager
@@ -39,21 +44,30 @@ def import_pyprover(pyprover_dir: str):
     return proposition_mod, prover_mod
 
 
-def apply_tactic_from_label(prover, label: str) -> bool:
+def apply_tactic_from_label(prover, label) -> bool:
     # Returns True if tactic succeeded, False if failed
-    if label == "assumption":
+    # label can be either a string or a structured tactic dict
+    
+    # Convert structured tactic to string if needed
+    if isinstance(label, dict):
+        tactic_str = format_tactic_string(label)
+    else:
+        tactic_str = label
+    
+    if tactic_str == "assumption":
         return not prover.assumption()
-    if label == "intro":
+    if tactic_str == "intro":
         return not prover.intro()
-    if label == "split":
+    if tactic_str == "split":
         return not prover.split()
-    if label == "left":
+    if tactic_str == "left":
         return not prover.left()
-    if label == "right":
+    if tactic_str == "right":
         return not prover.right()
-    if label == "add_dn":
+    if tactic_str == "add_dn":
         return not prover.add_dn()
-    parts = label.split()
+    
+    parts = tactic_str.split()
     if parts[0] == "apply" and len(parts) == 2 and parts[1].isdigit():
         idx = int(parts[1])
         if idx >= len(prover.variables):
@@ -80,46 +94,98 @@ def extract_inputs_from_prover(prover) -> Tuple[List[str], str]:
 
 
 def main() -> None:
+    # パラメータを初期化
+    gen_params = get_generation_params()
+    train_params = get_training_params()
+    model_params = get_model_params()
+    system_params = get_system_params()
+    
     parser = argparse.ArgumentParser(description="Generate formulas, run Transformer, apply tactic in pyprover")
-    parser.add_argument("--count", type=int, default=3, help="number of interactions to run")
-    parser.add_argument("--difficulty", type=float, default=0.3)
-    parser.add_argument("--seed", type=int, default=7)
-    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"])
+    parser.add_argument("--count", type=int, default=gen_params.count, help="number of interactions to run")
+    parser.add_argument("--difficulty", type=float, default=gen_params.difficulty)
+    parser.add_argument("--seed", type=int, default=gen_params.seed)
+    parser.add_argument("--device", type=str, default=system_params.device.value, choices=[e.value for e in DeviceType])
     parser.add_argument("--selftest", action="store_true", help="run intro/apply deterministic checks and exit")
-    parser.add_argument("--max_steps", type=int, default=5, help="max number of tactic steps (attempts) per example, including both successful and failed attempts")
-    parser.add_argument("--collect_data", action="store_true", help="collect training data in JSON format")
-    parser.add_argument("--work_file", type=str, default="temp_work.json", help="temporary work file for data collection")
-    parser.add_argument("--dataset_file", type=str, default="training_data.json", help="dataset file for collected data")
+    parser.add_argument("--max_steps", type=int, default=gen_params.max_steps, help="max number of tactic steps (attempts) per example, including both successful and failed attempts")
+    parser.add_argument("--collect_data", action="store_true", default=train_params.collect_data, help="collect training data in JSON format")
+    parser.add_argument("--work_file", type=str, default=train_params.work_file, help="temporary work file for data collection")
+    parser.add_argument("--dataset_file", type=str, default=train_params.dataset_file, help="dataset file for collected data")
     parser.add_argument("--filter_successful_only", action="store_true", help="only store records where both tactic_apply and is_proved are true")
     parser.add_argument("--filter_tactic_success_only", action="store_true", help="only store records where tactic_apply is true (regardless of is_proved)")
     args = parser.parse_args()
 
+    # パラメータを更新
+    default_params.update_generation_params(
+        count=args.count,
+        difficulty=args.difficulty,
+        seed=args.seed,
+        max_steps=args.max_steps
+    )
+    default_params.update_training_params(
+        collect_data=args.collect_data,
+        work_file=args.work_file,
+        dataset_file=args.dataset_file
+    )
+    default_params.update_system_params(
+        device=DeviceType(args.device)
+    )
+    
+    # フィルタリング設定を更新
+    if args.filter_successful_only:
+        default_params.update_training_params(filter_type=DataFilterType.SUCCESSFUL_ONLY)
+    elif args.filter_tactic_success_only:
+        default_params.update_training_params(filter_type=DataFilterType.TACTIC_SUCCESS_ONLY)
+
     root_dir = os.path.dirname(__file__)
     token_py_path = os.path.join(root_dir, "fof_tokens.py")
     pyprover_dir = os.path.join(root_dir, "pyprover")
+    
+    # システムパラメータを更新
+    default_params.update_system_params(
+        root_dir=root_dir,
+        token_py_path=token_py_path,
+        pyprover_dir=pyprover_dir
+    )
 
     base_tokens, label_names = load_tokens_and_labels_from_token_py(token_py_path)
     label_to_id, id_to_label = build_label_mappings(label_names)
 
-    # Build tokenizer and model
-    tokenizer = CharTokenizer(base_tokens=base_tokens)
-    max_seq_len = 512  # Use a fixed max sequence length
-    model = TransformerClassifier(
-        vocab_size=tokenizer.vocab_size,
+    # モデルパラメータを更新
+    default_params.update_model_params(
+        vocab_size=len(base_tokens) + 5,  # base_tokens + special tokens
         num_classes=len(label_names),
-        pad_id=tokenizer.pad_id,
-        max_seq_len=max_seq_len,
-        d_model=128,
-        nhead=4,
-        num_layers=2,
-        dim_feedforward=256,
-        dropout=0.1,
+        pad_id=0  # 特殊トークンの最初がPAD
     )
 
-    if args.device == "auto":
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    else:
-        device = torch.device(args.device)
+    # Build tokenizer and model
+    tokenizer = CharTokenizer(base_tokens=base_tokens)
+    
+    # 階層分類用のラベルマッピングを取得
+    from parameter import get_hierarchical_labels
+    hierarchical_labels = get_hierarchical_labels()
+    main_to_id, arg1_to_id, arg2_to_id, id_to_main, id_to_arg1, id_to_arg2 = build_hierarchical_label_mappings(
+        hierarchical_labels.main_tactics,
+        hierarchical_labels.arg1_values,
+        hierarchical_labels.arg2_values
+    )
+    
+    model = TransformerClassifier(
+        vocab_size=tokenizer.vocab_size,
+        num_classes=len(label_names),  # 従来のラベル数（互換性のため）
+        pad_id=tokenizer.pad_id,
+        max_seq_len=model_params.max_seq_len,
+        d_model=model_params.d_model,
+        nhead=model_params.nhead,
+        num_layers=model_params.num_layers,
+        dim_feedforward=model_params.dim_feedforward,
+        dropout=model_params.dropout,
+        use_hierarchical_classification=True,  # 階層分類モデルを使用
+        num_main_classes=len(id_to_main),
+        num_arg1_classes=len(id_to_arg1),
+        num_arg2_classes=len(id_to_arg2),
+    )
+
+    device = torch.device(default_params.get_device())
     model.to(device)
     model.eval()
 
@@ -130,21 +196,27 @@ def main() -> None:
     Prover = prover_mod.Prover
 
     # Build generator
-    variables = [t for t in ["a", "b", "c"] if t in base_tokens] or ["a", "b", "c"]
-    gen = FormulaGenerator(variables=variables, allow_const=False, difficulty=args.difficulty, seed=args.seed)
+    variables = [t for t in gen_params.variables if t in base_tokens] or gen_params.variables
+    gen = FormulaGenerator(
+        variables=variables, 
+        allow_const=gen_params.allow_const, 
+        difficulty=gen_params.difficulty, 
+        seed=gen_params.seed
+    )
     
     # Initialize data collector if needed
     data_collector = None
-    if args.collect_data:
+    if train_params.collect_data:
         # Clear existing dataset file at start
-        if os.path.exists(args.dataset_file):
-            os.remove(args.dataset_file)
+        if os.path.exists(train_params.dataset_file):
+            os.remove(train_params.dataset_file)
         
+        filter_flags = default_params.get_filter_flags()
         data_collector = TrainingDataCollector(
-            work_file_path=args.work_file,
-            dataset_file_path=args.dataset_file,
-            filter_successful_only=args.filter_successful_only,
-            filter_tactic_success_only=args.filter_tactic_success_only
+            work_file_path=train_params.work_file,
+            dataset_file_path=train_params.dataset_file,
+            filter_successful_only=filter_flags["filter_successful_only"],
+            filter_tactic_success_only=filter_flags["filter_tactic_success_only"]
         )
 
     if args.selftest:
@@ -171,9 +243,9 @@ def main() -> None:
         return
 
     try:
-        for i in range(args.count):
+        for i in range(gen_params.count):
             # Generate an initial state for the prover (we still use generator to seed it)
-            goal_list = filter_formulas(gen, max_len=50, require_tautology=True, limit=1)
+            goal_list = filter_formulas(gen, max_len=gen_params.max_len, require_tautology=True, limit=1)
             if not goal_list:
                 print(f"Warning: No valid formulas generated for example {i+1}, skipping...")
                 continue
@@ -185,7 +257,7 @@ def main() -> None:
                 goal_node = parse_tree.transform(prop_parser.parse(seed_goal))
             prover = Prover(goal_node)
 
-            if not args.collect_data:
+            if not train_params.collect_data:
                 print(f"Example {i+1}")
                 print(f"  Goal    : {seed_goal}")
 
@@ -208,21 +280,72 @@ def main() -> None:
                 banned: set[str] = set()
                 applied = False
 
-                while not applied and len(banned) < len(label_names) and step < args.max_steps:
-                    ids, mask, seg = tokenizer.encode(goal, premises, max_seq_len)
+                while not applied and len(banned) < len(label_names) and step < gen_params.max_steps:
+                    ids, mask, seg = tokenizer.encode(goal, premises, model_params.max_seq_len)
                     with torch.no_grad():
-                        logits = model(
+                        outputs = model(
                             ids.unsqueeze(0).to(device),
                             mask.unsqueeze(0).to(device),
                             seg.unsqueeze(0).to(device),
-                        )[0]
-                        if banned:
-                            mask_vec = torch.zeros_like(logits)
-                            for b in banned:
-                                mask_vec[label_to_id[b]] = float('-inf')
-                            logits = logits + mask_vec
-                        pred_id = int(torch.argmax(logits, dim=-1).item())
-                        pred_label = id_to_label[pred_id]
+                        )
+                        
+                        # 階層分類モデル
+                        if isinstance(outputs, tuple):
+                            # 階層分類モデル
+                            main_logits, arg1_logits, arg2_logits = outputs
+                            
+                            # 禁止されたタクティクをマスキング
+                            if banned:
+                                # 禁止されたタクティクの主タクティクをマスキング
+                                for banned_tactic in banned:
+                                    if banned_tactic in ['assumption', 'intro', 'split', 'left', 'right', 'add_dn']:
+                                        # 引数なしのタクティク
+                                        if banned_tactic in main_to_id:
+                                            main_logits[0, main_to_id[banned_tactic]] = float('-inf')
+                                    elif banned_tactic.startswith('apply ') or banned_tactic.startswith('destruct '):
+                                        # apply/destruct タクティク
+                                        if 'apply' in main_to_id:
+                                            main_logits[0, main_to_id['apply']] = float('-inf')
+                                        if 'destruct' in main_to_id:
+                                            main_logits[0, main_to_id['destruct']] = float('-inf')
+                                    elif banned_tactic.startswith('specialize '):
+                                        # specialize タクティク
+                                        if 'specialize' in main_to_id:
+                                            main_logits[0, main_to_id['specialize']] = float('-inf')
+                            
+                            # 主タクティクを予測
+                            main_pred_id = int(torch.argmax(main_logits, dim=-1).item())
+                            main_tactic = id_to_main[main_pred_id]
+                            
+                            # 引数を予測
+                            arg1_pred_id = int(torch.argmax(arg1_logits, dim=-1).item())
+                            arg1_value = id_to_arg1[arg1_pred_id]
+                            arg2_pred_id = int(torch.argmax(arg2_logits, dim=-1).item())
+                            arg2_value = id_to_arg2[arg2_pred_id]
+                            
+                            # タクティク文字列を構築
+                            if main_tactic in ['assumption', 'intro', 'split', 'left', 'right', 'add_dn']:
+                                pred_label = main_tactic
+                            elif main_tactic in ['apply', 'destruct']:
+                                pred_label = f"{main_tactic} {arg1_value}"
+                            elif main_tactic == 'specialize':
+                                pred_label = f"{main_tactic} {arg1_value} {arg2_value}"
+                            else:
+                                pred_label = main_tactic
+                                
+                        else:
+                            # 従来の単一出力モデル（フォールバック）
+                            logits = outputs
+                            if banned:
+                                mask_vec = torch.zeros_like(logits)
+                                for b in banned:
+                                    if b in label_to_id:
+                                        idx = label_to_id[b]
+                                        if idx < logits.size(-1):
+                                            mask_vec[0, idx] = float('-inf')
+                                logits = logits + mask_vec
+                            pred_id = int(torch.argmax(logits, dim=-1).item())
+                            pred_label = id_to_label[pred_id]
 
                     # Record tactic application for data collection (BEFORE applying tactic)
                     if data_collector:
@@ -245,7 +368,7 @@ def main() -> None:
                     # Count each tactic attempt as a step (both successful and failed)
                     step += 1
                     
-                    if not args.collect_data:
+                    if not train_params.collect_data:
                         print(f"  Step {step}: {pred_label} -> {'applied' if ok else 'failed'}")
                         current_premises_all = " | ".join([str(v) for v in getattr(prover, "variables", [])])
                         print(f"    premises = {current_premises_all}")
@@ -257,7 +380,7 @@ def main() -> None:
                         banned.add(pred_label)
 
                 if not applied:
-                    if not args.collect_data:
+                    if not train_params.collect_data:
                         print("  Stuck: no applicable tactic predicted")
                     break
 
@@ -267,11 +390,11 @@ def main() -> None:
             if data_collector:
                 data_collector.finish_example(is_proved=solved)
 
-            if not args.collect_data:
+            if not train_params.collect_data:
                 if solved:
                     print("  Result  : goal solved")
                 else:
-                    print(f"  Result  : not solved within {args.max_steps} step limit")
+                    print(f"  Result  : not solved within {gen_params.max_steps} step limit")
                 print()
             
     finally:

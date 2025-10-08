@@ -164,16 +164,23 @@ class TransformerClassifier(nn.Module):
     def __init__(
         self,
         vocab_size: int,
-        num_classes: int,
-        pad_id: int,
-        max_seq_len: int,
+        num_classes: int = 0,  # 階層分類では使用しない
+        pad_id: int = 0,
+        max_seq_len: int = 512,
         d_model: int = 128,
         nhead: int = 4,
         num_layers: int = 2,
         dim_feedforward: int = 256,
         dropout: float = 0.1,
+        # 階層分類用のパラメータ
+        use_hierarchical_classification: bool = True,
+        num_main_classes: int = 0,
+        num_arg1_classes: int = 0,
+        num_arg2_classes: int = 0,
     ) -> None:
         super().__init__()
+        self.use_hierarchical_classification = use_hierarchical_classification
+        
         self.embedding = nn.Embedding(vocab_size, d_model, padding_idx=pad_id)
         # Segment embeddings: 0=special([CLS]/[SEP]/[PAD]/[EOS]), 1=goal, 2+=premises
         # Support up to 100 segments to handle variable number of premises
@@ -190,15 +197,23 @@ class TransformerClassifier(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.norm = nn.LayerNorm(d_model)
-        self.head = nn.Linear(d_model, num_classes)
         self.dropout = nn.Dropout(dropout)
+        
+        if self.use_hierarchical_classification:
+            # 階層分類用の3つのヘッド
+            self.head_main = nn.Linear(d_model, num_main_classes)
+            self.head_arg1 = nn.Linear(d_model, num_arg1_classes)
+            self.head_arg2 = nn.Linear(d_model, num_arg2_classes)
+        else:
+            # 従来の単一出力ヘッド
+            self.head = nn.Linear(d_model, num_classes)
 
     def forward(
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         segment_ids: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
+    ) -> torch.Tensor | Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # input_ids: (batch, seq_len)
         # attention_mask: (batch, seq_len) where 1=keep, 0=pad
         # segment_ids: (batch, seq_len) in {0..4}
@@ -216,8 +231,18 @@ class TransformerClassifier(nn.Module):
 
         # Use first token ([CLS]) representation
         cls_repr = x[:, 0, :]
-        logits = self.head(self.dropout(cls_repr))
-        return logits
+        cls_repr_dropout = self.dropout(cls_repr)
+        
+        if self.use_hierarchical_classification:
+            # 階層分類：3つのヘッドから出力
+            main_logits = self.head_main(cls_repr_dropout)
+            arg1_logits = self.head_arg1(cls_repr_dropout)
+            arg2_logits = self.head_arg2(cls_repr_dropout)
+            return main_logits, arg1_logits, arg2_logits
+        else:
+            # 従来の単一出力
+            logits = self.head(cls_repr_dropout)
+            return logits
 
 
 def build_label_mappings(labels: List[str]) -> Tuple[Dict[str, int], List[str]]:
@@ -226,10 +251,50 @@ def build_label_mappings(labels: List[str]) -> Tuple[Dict[str, int], List[str]]:
     return label_to_id, id_to_label
 
 
+def build_hierarchical_label_mappings(
+    main_tactics: List[str], 
+    arg1_values: List[str], 
+    arg2_values: List[str]
+) -> Tuple[Dict[str, int], Dict[str, int], Dict[str, int], List[str], List[str], List[str]]:
+    """
+    階層分類用のラベルマッピングを構築
+    
+    Returns:
+        (main_to_id, arg1_to_id, arg2_to_id, id_to_main, id_to_arg1, id_to_arg2)
+    """
+    main_to_id = {tactic: i for i, tactic in enumerate(main_tactics)}
+    arg1_to_id = {arg: i for i, arg in enumerate(arg1_values)}
+    arg2_to_id = {arg: i for i, arg in enumerate(arg2_values)}
+    
+    id_to_main = main_tactics.copy()
+    id_to_arg1 = arg1_values.copy()
+    id_to_arg2 = arg2_values.copy()
+    
+    return main_to_id, arg1_to_id, arg2_to_id, id_to_main, id_to_arg1, id_to_arg2
+
+
 def simple_collate(batch: List[Tuple[torch.Tensor, torch.Tensor, int]]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     input_ids = torch.stack([b[0] for b in batch], dim=0)
     attention_mask = torch.stack([b[1] for b in batch], dim=0)
     labels = torch.tensor([b[2] for b in batch], dtype=torch.long)
     return input_ids, attention_mask, labels
+
+
+def hierarchical_collate(batch: List[Tuple[torch.Tensor, torch.Tensor, int, int, int]]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    階層分類用のcollate関数
+    
+    Args:
+        batch: [(input_ids, attention_mask, main_label, arg1_label, arg2_label), ...]
+    
+    Returns:
+        (input_ids, attention_mask, main_labels, arg1_labels, arg2_labels)
+    """
+    input_ids = torch.stack([b[0] for b in batch], dim=0)
+    attention_mask = torch.stack([b[1] for b in batch], dim=0)
+    main_labels = torch.tensor([b[2] for b in batch], dtype=torch.long)
+    arg1_labels = torch.tensor([b[3] for b in batch], dtype=torch.long)
+    arg2_labels = torch.tensor([b[4] for b in batch], dtype=torch.long)
+    return input_ids, attention_mask, main_labels, arg1_labels, arg2_labels
 
 

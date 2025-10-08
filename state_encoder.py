@@ -2,7 +2,7 @@
 推論時と学習時で一貫した状態エンコードを行うモジュール
 前提の数と長さに制限なし
 """
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 
 
 def encode_prover_state(prover) -> Dict[str, List[str]]:
@@ -27,5 +27,69 @@ def encode_prover_state(prover) -> Dict[str, List[str]]:
         "premises": premises,
         "goal": goal
     }
+
+
+def parse_tactic_string(tactic_str: str) -> Dict[str, Any]:
+    """
+    文字列形式のtacticを構造化されたJSON形式に変換する
+    
+    Args:
+        tactic_str: 文字列形式のtactic（例: "apply 0", "specialize 1 2", "add_dn"）
+        
+    Returns:
+        構造化されたtactic辞書
+    """
+    parts = tactic_str.split()
+    
+    if len(parts) == 1:
+        # 引数なしのtactic
+        return {
+            "main": parts[0],
+            "arg1": None,
+            "arg2": None
+        }
+    elif len(parts) == 2:
+        # 引数1つのtactic
+        return {
+            "main": parts[0],
+            "arg1": parts[1],
+            "arg2": None
+        }
+    elif len(parts) == 3:
+        # 引数2つのtactic
+        return {
+            "main": parts[0],
+            "arg1": parts[1],
+            "arg2": parts[2]
+        }
+    else:
+        # 予期しない形式
+        return {
+            "main": tactic_str,
+            "arg1": None,
+            "arg2": None
+        }
+
+
+def format_tactic_string(tactic_dict: Dict[str, Any]) -> str:
+    """
+    構造化されたtactic辞書を文字列形式に変換する
+    
+    Args:
+        tactic_dict: 構造化されたtactic辞書
+        
+    Returns:
+        文字列形式のtactic
+    """
+    main = tactic_dict["main"]
+    arg1 = tactic_dict["arg1"]
+    arg2 = tactic_dict["arg2"]
+    
+    if arg1 is None:
+        return main
+    elif arg2 is None:
+        return f"{main} {arg1}"
+    else:
+        return f"{main} {arg1} {arg2}"
 
 

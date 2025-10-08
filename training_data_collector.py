@@ -5,6 +5,7 @@ import json
 import os
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+from state_encoder import parse_tactic_string
 
 
 class TrainingDataCollector:
@@ -50,7 +51,7 @@ class TrainingDataCollector:
             "step": step,
             "premises": premises,
             "goal": goal,
-            "tactic": tactic,
+            "tactic": parse_tactic_string(tactic),  # 構造化されたtactic形式に変換
             "tactic_apply": tactic_apply
         }
         

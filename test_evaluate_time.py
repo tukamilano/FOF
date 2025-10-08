@@ -16,6 +16,10 @@ from transformer_classifier import (
     build_label_mappings,
 )
 from generate_prop import FormulaGenerator, filter_formulas
+from parameter import (
+    default_params, get_model_params, get_training_params, 
+    get_generation_params, get_system_params, DeviceType, DataFilterType
+)
 
 
 @contextlib.contextmanager
@@ -249,51 +253,76 @@ def evaluate_timing(
 
 
 def main() -> None:
+    # パラメータを初期化
+    gen_params = get_generation_params()
+    train_params = get_training_params()
+    model_params = get_model_params()
+    system_params = get_system_params()
+    
     parser = argparse.ArgumentParser(description="Evaluate timing of transformer + pyprover loop")
-    parser.add_argument("--count", type=int, default=10, help="number of examples to test")
-    parser.add_argument("--difficulty", type=float, default=0.5)
-    parser.add_argument("--seed", type=int, default=7)
-    parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"])
-    parser.add_argument("--max_interactions", type=int, default=5, help="max number of tactic steps (attempts) per example, including both successful and failed attempts")
-    parser.add_argument("--warmup", type=int, default=2, help="number of warmup iterations to exclude from timing")
+    parser.add_argument("--count", type=int, default=gen_params.count, help="number of examples to test")
+    parser.add_argument("--difficulty", type=float, default=gen_params.difficulty)
+    parser.add_argument("--seed", type=int, default=gen_params.seed)
+    parser.add_argument("--device", type=str, default=system_params.device.value, choices=[e.value for e in DeviceType])
+    parser.add_argument("--max_interactions", type=int, default=train_params.max_interactions, help="max number of tactic steps (attempts) per example, including both successful and failed attempts")
+    parser.add_argument("--warmup", type=int, default=train_params.warmup_iterations, help="number of warmup iterations to exclude from timing")
     args = parser.parse_args()
+
+    # パラメータを更新
+    default_params.update_generation_params(
+        count=args.count,
+        difficulty=args.difficulty,
+        seed=args.seed
+    )
+    default_params.update_training_params(
+        max_interactions=args.max_interactions,
+        warmup_iterations=args.warmup
+    )
+    default_params.update_system_params(
+        device=DeviceType(args.device)
+    )
 
     root_dir = os.path.dirname(__file__)
     token_py_path = os.path.join(root_dir, "fof_tokens.py")
     pyprover_dir = os.path.join(root_dir, "pyprover")
+    
+    # システムパラメータを更新
+    default_params.update_system_params(
+        root_dir=root_dir,
+        token_py_path=token_py_path,
+        pyprover_dir=pyprover_dir
+    )
 
     # Load tokens and labels
     base_tokens, label_names = load_tokens_and_labels_from_token_py(token_py_path)
     label_to_id, id_to_label = build_label_mappings(label_names)
 
+    # モデルパラメータを更新
+    default_params.update_model_params(
+        vocab_size=len(base_tokens) + 5,  # base_tokens + special tokens
+        num_classes=len(label_names),
+        pad_id=0  # 特殊トークンの最初がPAD
+    )
+
     # Build tokenizer and model
-    tokenizer = CharTokenizer(base_tokens=base_tokens, max_sentence_length=50)
+    tokenizer = CharTokenizer(base_tokens=base_tokens, max_sentence_length=model_params.max_sentence_length)
     max_seq_len = 1 + 4 * (tokenizer.max_sentence_length + 1)
     model = TransformerClassifier(
         vocab_size=tokenizer.vocab_size,
         num_classes=len(label_names),
         pad_id=tokenizer.pad_id,
         max_seq_len=max_seq_len,
-        d_model=128,
-        nhead=4,
-        num_layers=2,
-        dim_feedforward=256,
-        dropout=0.1,
+        d_model=model_params.d_model,
+        nhead=model_params.nhead,
+        num_layers=model_params.num_layers,
+        dim_feedforward=model_params.dim_feedforward,
+        dropout=model_params.dropout,
     )
 
-    if args.device == "auto":
-        if torch.cuda.is_available():
-            try:
-                # Test if CUDA actually works
-                test_tensor = torch.tensor([1.0]).cuda()
-                device = torch.device("cuda")
-            except (AssertionError, RuntimeError):
-                print("CUDA is not available or not properly configured, falling back to CPU")
-                device = torch.device("cpu")
-        else:
-            device = torch.device("cpu")
-    else:
-        device = torch.device(args.device)
+    device = torch.device(default_params.get_device())
+    if device.type == "cuda" and not torch.cuda.is_available():
+        print("CUDA is not available or not properly configured, falling back to CPU")
+        device = torch.device("cpu")
     
     print(f"Using device: {device}")
     model.to(device)
@@ -306,27 +335,32 @@ def main() -> None:
     Prover = prover_mod.Prover
 
     # Build generator
-    variables = [t for t in ["a", "b", "c"] if t in base_tokens] or ["a", "b", "c"]
-    gen = FormulaGenerator(variables=variables, allow_const=False, difficulty=args.difficulty, seed=args.seed)
+    variables = [t for t in gen_params.variables if t in base_tokens] or gen_params.variables
+    gen = FormulaGenerator(
+        variables=variables, 
+        allow_const=gen_params.allow_const, 
+        difficulty=gen_params.difficulty, 
+        seed=gen_params.seed
+    )
 
     # Initialize profiler
     profiler = TimingProfiler()
 
-    print(f"Evaluating timing for {args.count} examples with {args.warmup} warmup iterations")
+    print(f"Evaluating timing for {gen_params.count} examples with {train_params.warmup_iterations} warmup iterations")
     print(f"Device: {device}")
     if device.type == 'cuda':
         print(f"CUDA device: {torch.cuda.get_device_name(device)}")
         print(f"CUDA memory: {torch.cuda.get_device_properties(device).total_memory / 1024**3:.1f} GB")
-    print(f"Max tactic steps per example: {args.max_interactions}")
+    print(f"Max tactic steps per example: {train_params.max_interactions}")
     print("-" * 60)
 
     solved_count = 0
     total_examples = 0
 
-    for i in range(args.count + args.warmup):
+    for i in range(gen_params.count + train_params.warmup_iterations):
         # Generate an initial state for the prover
-        premises = filter_formulas(gen, max_len=50, require_tautology=False, limit=3)
-        goal_list = filter_formulas(gen, max_len=50, require_tautology=False, limit=1)
+        premises = filter_formulas(gen, max_len=gen_params.max_len, require_tautology=False, limit=3)
+        goal_list = filter_formulas(gen, max_len=gen_params.max_len, require_tautology=False, limit=1)
         seed_p1, seed_p2, seed_p3 = premises
         seed_goal = goal_list[0]
 
@@ -338,7 +372,7 @@ def main() -> None:
         prover = Prover(goal_node)
         prover.variables = p_nodes[:]
 
-        is_warmup = i < args.warmup
+        is_warmup = i < train_params.warmup_iterations
         if not is_warmup:
             total_examples += 1
             print(f"Example {total_examples}")
@@ -348,13 +382,13 @@ def main() -> None:
         # Run timing evaluation
         solved, tactic_sequence, iterations = evaluate_timing(
             model, tokenizer, device, prover, 
-            label_to_id, id_to_label, args.max_interactions, 
+            label_to_id, id_to_label, train_params.max_interactions, 
             profiler if not is_warmup else None
         )
 
         if not is_warmup:
             # Display step and tactic information
-            print(f"  Steps completed: {iterations}/{args.max_interactions}")
+            print(f"  Steps completed: {iterations}/{train_params.max_interactions}")
             
             # Display tactic sequence
             if tactic_sequence:
