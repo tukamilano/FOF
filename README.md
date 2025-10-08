@@ -38,11 +38,6 @@ pip install -r requirements.txt
 - **`fof_tokens.py`** - 入力トークンと出力ラベルの定義（[EOS]トークン追加）
 - **`pyprover/`** - 命題論理証明器ライブラリ
 
-### テストファイル
-
-- **`test_example_train.py`** - Transformerモデルのトレーニングテスト用
-- **`test_evaluate_time.py`** - パフォーマンス評価とタイミング分析用
-
 ## 使用方法
 
 ### 1. Transformerベースの実行（従来の方法）
@@ -179,17 +174,11 @@ python auto_data_collector.py --count 5 --dataset_file my_dataset.json
 ### 7. テストファイルの実行
 
 ```bash
-# Transformerモデルのトレーニングテスト
-python test_example_train.py
 
 # 数式生成のテスト
 python generate_prop.py --count 5 --difficulty 0.3
 
-# パフォーマンス評価とタイミング分析
-python test_evaluate_time.py --count 10 --max_interactions 5
 
-# 学習データ収集機能のテスト
-python test_data_collection.py
 ```
 
 ## システムの動作
@@ -360,7 +349,6 @@ python test_evaluate_time.py --device cuda --count 15
 
 - `transformer_classifier.py`でモデルアーキテクチャを調整（制限なしの新しい形式）
 - `state_encoder.py`でエンコーディング方法を調整
-- `test_example_train.py`でトレーニングデータを拡張
 
 ### 新しい入力形式のカスタマイズ
 

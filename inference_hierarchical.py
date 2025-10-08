@@ -47,7 +47,6 @@ def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[Tran
         num_layers=model_params['num_layers'],
         dim_feedforward=model_params['dim_feedforward'],
         dropout=model_params['dropout'],
-        use_hierarchical_classification=True,
         num_main_classes=num_main_classes,
         num_arg1_classes=num_arg1_classes,
         num_arg2_classes=num_arg2_classes,

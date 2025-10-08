@@ -272,7 +272,6 @@ def main():
         num_layers=model_params.num_layers,
         dim_feedforward=model_params.dim_feedforward,
         dropout=model_params.dropout,
-        use_hierarchical_classification=True,
         num_main_classes=len(id_to_main),
         num_arg1_classes=len(id_to_arg1),
         num_arg2_classes=len(id_to_arg2),

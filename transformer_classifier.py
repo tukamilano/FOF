@@ -164,7 +164,6 @@ class TransformerClassifier(nn.Module):
     def __init__(
         self,
         vocab_size: int,
-        num_classes: int = 0,  # 階層分類では使用しない
         pad_id: int = 0,
         max_seq_len: int = 512,
         d_model: int = 128,
@@ -173,13 +172,11 @@ class TransformerClassifier(nn.Module):
         dim_feedforward: int = 256,
         dropout: float = 0.1,
         # 階層分類用のパラメータ
-        use_hierarchical_classification: bool = True,
         num_main_classes: int = 0,
         num_arg1_classes: int = 0,
         num_arg2_classes: int = 0,
     ) -> None:
         super().__init__()
-        self.use_hierarchical_classification = use_hierarchical_classification
         
         self.embedding = nn.Embedding(vocab_size, d_model, padding_idx=pad_id)
         # Segment embeddings: 0=special([CLS]/[SEP]/[PAD]/[EOS]), 1=goal, 2+=premises
@@ -199,21 +196,17 @@ class TransformerClassifier(nn.Module):
         self.norm = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
         
-        if self.use_hierarchical_classification:
-            # 階層分類用の3つのヘッド
-            self.head_main = nn.Linear(d_model, num_main_classes)
-            self.head_arg1 = nn.Linear(d_model, num_arg1_classes)
-            self.head_arg2 = nn.Linear(d_model, num_arg2_classes)
-        else:
-            # 従来の単一出力ヘッド
-            self.head = nn.Linear(d_model, num_classes)
+        # 階層分類用の3つのヘッド
+        self.head_main = nn.Linear(d_model, num_main_classes)
+        self.head_arg1 = nn.Linear(d_model, num_arg1_classes)
+        self.head_arg2 = nn.Linear(d_model, num_arg2_classes)
 
     def forward(
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         segment_ids: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor | Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # input_ids: (batch, seq_len)
         # attention_mask: (batch, seq_len) where 1=keep, 0=pad
         # segment_ids: (batch, seq_len) in {0..4}
@@ -233,22 +226,11 @@ class TransformerClassifier(nn.Module):
         cls_repr = x[:, 0, :]
         cls_repr_dropout = self.dropout(cls_repr)
         
-        if self.use_hierarchical_classification:
-            # 階層分類：3つのヘッドから出力
-            main_logits = self.head_main(cls_repr_dropout)
-            arg1_logits = self.head_arg1(cls_repr_dropout)
-            arg2_logits = self.head_arg2(cls_repr_dropout)
-            return main_logits, arg1_logits, arg2_logits
-        else:
-            # 従来の単一出力
-            logits = self.head(cls_repr_dropout)
-            return logits
-
-
-def build_label_mappings(labels: List[str]) -> Tuple[Dict[str, int], List[str]]:
-    label_to_id = {label: i for i, label in enumerate(labels)}
-    id_to_label = list(labels)
-    return label_to_id, id_to_label
+        # 階層分類：3つのヘッドから出力
+        main_logits = self.head_main(cls_repr_dropout)
+        arg1_logits = self.head_arg1(cls_repr_dropout)
+        arg2_logits = self.head_arg2(cls_repr_dropout)
+        return main_logits, arg1_logits, arg2_logits
 
 
 def build_hierarchical_label_mappings(

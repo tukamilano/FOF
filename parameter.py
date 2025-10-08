@@ -29,7 +29,6 @@ class ModelParameters:
     """Transformerモデルのハイパーパラメータ"""
     # 基本設定
     vocab_size: int = 0  # 動的に設定される
-    num_classes: int = 0  # 動的に設定される（階層分類では使用しない）
     pad_id: int = 0  # 動的に設定される
     
     # 階層分類設定
@@ -40,7 +39,6 @@ class ModelParameters:
     
     # シーケンス長設定
     max_seq_len: int = 512
-    max_sentence_length: int = 50  # CharTokenizer用
     
     # Transformerアーキテクチャ
     d_model: int = 128

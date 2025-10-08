@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import contextlib
 import os
 import sys
 from typing import List, Tuple
@@ -12,7 +11,6 @@ from transformer_classifier import (
     load_tokens_and_labels_from_token_py,
     CharTokenizer,
     TransformerClassifier,
-    build_label_mappings,
     build_hierarchical_label_mappings,
 )
 from generate_prop import FormulaGenerator, filter_formulas
@@ -22,26 +20,7 @@ from parameter import (
     default_params, get_model_params, get_training_params, 
     get_generation_params, get_system_params, DeviceType, DataFilterType
 )
-
-
-@contextlib.contextmanager
-def pushd(path: str):
-    prev = os.getcwd()
-    os.chdir(path)
-    try:
-        yield
-    finally:
-        os.chdir(prev)
-
-
-def import_pyprover(pyprover_dir: str):
-    with pushd(pyprover_dir):
-        if pyprover_dir not in sys.path:
-            sys.path.insert(0, pyprover_dir)
-        # Local imports after chdir so that proposition.py can open its grammar
-        import proposition as proposition_mod  # type: ignore
-        import prover as prover_mod  # type: ignore
-    return proposition_mod, prover_mod
+from utils import pushd, import_pyprover
 
 
 def apply_tactic_from_label(prover, label) -> bool:
@@ -148,12 +127,10 @@ def main() -> None:
     )
 
     base_tokens, label_names = load_tokens_and_labels_from_token_py(token_py_path)
-    label_to_id, id_to_label = build_label_mappings(label_names)
 
     # モデルパラメータを更新
     default_params.update_model_params(
         vocab_size=len(base_tokens) + 5,  # base_tokens + special tokens
-        num_classes=len(label_names),
         pad_id=0  # 特殊トークンの最初がPAD
     )
 
@@ -171,7 +148,6 @@ def main() -> None:
     
     model = TransformerClassifier(
         vocab_size=tokenizer.vocab_size,
-        num_classes=len(label_names),  # 従来のラベル数（互換性のため）
         pad_id=tokenizer.pad_id,
         max_seq_len=model_params.max_seq_len,
         d_model=model_params.d_model,
@@ -179,7 +155,6 @@ def main() -> None:
         num_layers=model_params.num_layers,
         dim_feedforward=model_params.dim_feedforward,
         dropout=model_params.dropout,
-        use_hierarchical_classification=True,  # 階層分類モデルを使用
         num_main_classes=len(id_to_main),
         num_arg1_classes=len(id_to_arg1),
         num_arg2_classes=len(id_to_arg2),
@@ -334,18 +309,18 @@ def main() -> None:
                                 pred_label = main_tactic
                                 
                         else:
-                            # 従来の単一出力モデル（フォールバック）
-                            logits = outputs
+                            # 階層分類モデル
+                            main_logits, arg1_logits, arg2_logits = outputs
                             if banned:
-                                mask_vec = torch.zeros_like(logits)
+                                mask_vec = torch.zeros_like(main_logits)
                                 for b in banned:
-                                    if b in label_to_id:
-                                        idx = label_to_id[b]
-                                        if idx < logits.size(-1):
+                                    if b in main_to_id:
+                                        idx = main_to_id[b]
+                                        if idx < main_logits.size(-1):
                                             mask_vec[0, idx] = float('-inf')
-                                logits = logits + mask_vec
-                            pred_id = int(torch.argmax(logits, dim=-1).item())
-                            pred_label = id_to_label[pred_id]
+                                main_logits = main_logits + mask_vec
+                            pred_id = int(torch.argmax(main_logits, dim=-1).item())
+                            pred_label = id_to_main[pred_id]
 
                     # Record tactic application for data collection (BEFORE applying tactic)
                     if data_collector:
