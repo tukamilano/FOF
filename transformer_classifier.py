@@ -14,6 +14,7 @@ SPECIAL_PAD = "[PAD]"
 SPECIAL_CLS = "[CLS]"
 SPECIAL_SEP = "[SEP]"
 SPECIAL_UNK = "[UNK]"
+SPECIAL_EOS = "[EOS]"
 
 
 def _load_module_from_path(module_name: str, file_path: str) -> types.ModuleType:
@@ -39,13 +40,11 @@ class CharTokenizer:
         self,
         base_tokens: List[str],
         add_special_tokens: bool = True,
-        max_sentence_length: int = 50,
     ) -> None:
-        self.max_sentence_length = max_sentence_length
 
         vocab: List[str] = []
         if add_special_tokens:
-            vocab.extend([SPECIAL_PAD, SPECIAL_CLS, SPECIAL_SEP, SPECIAL_UNK])
+            vocab.extend([SPECIAL_PAD, SPECIAL_CLS, SPECIAL_SEP, SPECIAL_UNK, SPECIAL_EOS])
         vocab.extend(base_tokens)
 
         self.token_to_id: Dict[str, int] = {tok: i for i, tok in enumerate(vocab)}
@@ -55,151 +54,89 @@ class CharTokenizer:
         self.cls_id = self.token_to_id[SPECIAL_CLS]
         self.sep_id = self.token_to_id[SPECIAL_SEP]
         self.unk_id = self.token_to_id[SPECIAL_UNK]
-
-        # Default max total length for 3-sentence inputs to keep backward compatibility
-        # [CLS] + s1 + [SEP] + s2 + [SEP] + s3 + [SEP]
-        self.max_total_length = 1 + 3 * self.max_sentence_length + 3
+        self.eos_id = self.token_to_id[SPECIAL_EOS]
 
     @property
     def vocab_size(self) -> int:
         return len(self.id_to_token)
 
-    def _encode_sentence(self, s: str) -> List[int]:
+    def _encode_sentence(self, s: str, max_length: int = None) -> List[int]:
         # Treat each character as a token; ignore whitespace
         tokens: List[int] = []
         for ch in s:
             if ch.isspace():
                 continue
             tokens.append(self.token_to_id.get(ch, self.unk_id))
-            if len(tokens) >= self.max_sentence_length:
+            if max_length is not None and len(tokens) >= max_length:
                 break
         return tokens
 
-    def encode_three(
+
+
+
+
+    def encode(
         self,
-        s1: str,
-        s2: str,
-        s3: str,
-        pad_to_max: bool = True,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        return self.encode_n([s1, s2, s3], pad_to_max=pad_to_max)
-
-    def encode_four(
-        self,
-        s1: str,
-        s2: str,
-        s3: str,
-        s4: str,
-        pad_to_max: bool = True,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        return self.encode_n([s1, s2, s3, s4], pad_to_max=pad_to_max)
-
-    def encode_n(
-        self,
-        sentences: List[str],
-        pad_to_max: bool = True,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        # Build sequence: [CLS] s1 [SEP] s2 [SEP] ... sN [SEP]
-        seq: List[int] = [self.cls_id]
-        for idx, s in enumerate(sentences):
-            seq.extend(self._encode_sentence(s))
-            seq.append(self.sep_id)
-
-        # Compute a per-call max length so we can support variable N without changing model setup
-        max_total = 1 + len(sentences) * (self.max_sentence_length + 1)
-
-        if pad_to_max:
-            if len(seq) > max_total:
-                seq = seq[: max_total]
-            attn_mask = [1] * len(seq) + [0] * (max_total - len(seq))
-            seq = seq + [self.pad_id] * (max_total - len(seq))
-        else:
-            attn_mask = [1] * len(seq)
-
-        input_ids = torch.tensor(seq, dtype=torch.long)
-        attention_mask = torch.tensor(attn_mask, dtype=torch.long)
-        return input_ids, attention_mask
-
-    def encode_four_fixed_blocks(
-        self,
-        s1: str,
-        s2: str,
-        s3: str,
-        s4: str,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # Fixed layout with per-sentence right padding to max_sentence_length
-        # Sequence: [CLS] s1(<=L,pad) [SEP] s2 [SEP] s3 [SEP] s4 [SEP]
-        L = self.max_sentence_length
-        sentences = [s1, s2, s3, s4]
-        blocks: List[List[int]] = []
-        masks: List[List[int]] = []
-        segs: List[List[int]] = []
-
-        for seg_idx, s in enumerate(sentences, start=1):
-            toks = self._encode_sentence(s)
-            if len(toks) < L:
-                pad = [self.pad_id] * (L - len(toks))
-                mask = [1] * len(toks) + [0] * len(pad)
-                toks = toks + pad
-            else:
-                mask = [1] * L
-                toks = toks[:L]
-            blocks.append(toks)
-            masks.append(mask)
-            segs.append([seg_idx] * L)
-
-        seq: List[int] = [self.cls_id]
-        attn_mask: List[int] = [1]
-        seg_ids: List[int] = [0]  # 0 for special tokens
-        for i in range(4):
-            seq.extend(blocks[i])
-            attn_mask.extend(masks[i])
-            seg_ids.extend(segs[i])
-            seq.append(self.sep_id)
-            attn_mask.append(1)
-            seg_ids.append(0)
-
-        input_ids = torch.tensor(seq, dtype=torch.long)
-        attention_mask = torch.tensor(attn_mask, dtype=torch.long)
-        segment_ids = torch.tensor(seg_ids, dtype=torch.long)
-        return input_ids, attention_mask, segment_ids
-
-    def encode_variable_premises(
-        self,
-        premises: List[str],
         goal: str,
+        premises: List[str],
+        max_seq_len: int = 512,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        可変数の前提とゴールをエンコードする
-        既存のモデルとの互換性のため、最大3つの前提を使用し、残りは無視する
+        エンコード: [CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] ... [EOS]
+        前提の数と長さに制限なし
         
         Args:
-            premises: 前提のリスト
             goal: ゴール文字列
+            premises: 前提のリスト（任意の数）
+            max_seq_len: 最大シーケンス長
             
         Returns:
             (input_ids, attention_mask, segment_ids)
         """
-        # 既存のモデルとの互換性のため、最大3つの前提のみを使用
-        # 残りの前提は無視する（または連結する）
-        max_premises = 3
-        if len(premises) > max_premises:
-            # 最初の3つの前提のみを使用
-            selected_premises = premises[:max_premises]
+        # シーケンスを構築: [CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] ... [EOS]
+        seq: List[int] = [self.cls_id]
+        attn_mask: List[int] = [1]
+        seg_ids: List[int] = [0]  # 0 for special tokens
+        
+        # Goalを追加
+        goal_tokens = self._encode_sentence(goal)
+        seq.extend(goal_tokens)
+        attn_mask.extend([1] * len(goal_tokens))
+        seg_ids.extend([1] * len(goal_tokens))  # 1 for goal
+        seq.append(self.sep_id)
+        attn_mask.append(1)
+        seg_ids.append(0)  # 0 for special tokens
+        
+        # 各前提を追加
+        for i, premise in enumerate(premises):
+            premise_tokens = self._encode_sentence(premise)
+            seq.extend(premise_tokens)
+            attn_mask.extend([1] * len(premise_tokens))
+            seg_ids.extend([2 + i] * len(premise_tokens))  # 2+ for premises
+            seq.append(self.sep_id)
+            attn_mask.append(1)
+            seg_ids.append(0)  # 0 for special tokens
+        
+        # [EOS]を追加
+        seq.append(self.eos_id)
+        attn_mask.append(1)
+        seg_ids.append(0)  # 0 for special tokens
+        
+        # パディング
+        if len(seq) > max_seq_len:
+            seq = seq[:max_seq_len]
+            attn_mask = attn_mask[:max_seq_len]
+            seg_ids = seg_ids[:max_seq_len]
         else:
-            selected_premises = premises
+            pad_len = max_seq_len - len(seq)
+            seq.extend([self.pad_id] * pad_len)
+            attn_mask.extend([0] * pad_len)
+            seg_ids.extend([0] * pad_len)
         
-        # 不足分を空文字列で埋める
-        while len(selected_premises) < max_premises:
-            selected_premises.append("")
-        
-        # 既存の4ブロック形式を使用
-        return self.encode_four_fixed_blocks(
-            selected_premises[0],
-            selected_premises[1], 
-            selected_premises[2],
-            goal
-        )
+        input_ids = torch.tensor(seq, dtype=torch.long)
+        attention_mask = torch.tensor(attn_mask, dtype=torch.long)
+        segment_ids = torch.tensor(seg_ids, dtype=torch.long)
+        return input_ids, attention_mask, segment_ids
 
 
 class SinusoidalPositionalEncoding(nn.Module):
@@ -238,8 +175,9 @@ class TransformerClassifier(nn.Module):
     ) -> None:
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, d_model, padding_idx=pad_id)
-        # Segment embeddings: 0=special([CLS]/[SEP]/[PAD]), 1=premise1, 2=premise2, 3=premise3, 4=goal
-        self.segment_embedding = nn.Embedding(5, d_model)
+        # Segment embeddings: 0=special([CLS]/[SEP]/[PAD]/[EOS]), 1=goal, 2+=premises
+        # Support up to 100 segments to handle variable number of premises
+        self.segment_embedding = nn.Embedding(100, d_model)
         self.positional_encoding = SinusoidalPositionalEncoding(d_model, max_len=max_seq_len, dropout=dropout)
 
         encoder_layer = nn.TransformerEncoderLayer(

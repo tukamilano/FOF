@@ -16,7 +16,7 @@ from transformer_classifier import (
 )
 from generate_prop import FormulaGenerator, filter_formulas
 from training_data_collector import TrainingDataCollector
-from state_encoder import encode_prover_state, encode_prover_state_for_transformer
+from state_encoder import encode_prover_state
 
 
 @contextlib.contextmanager
@@ -73,14 +73,9 @@ def apply_tactic_from_label(prover, label: str) -> bool:
     return False
 
 
-def extract_inputs_from_prover(prover, max_len: int) -> Tuple[str, str, str, str]:
-    """既存のTransformer用の形式でエンコード（後方互換性のため）"""
-    return encode_prover_state_for_transformer(prover, max_len)
-
-
-def extract_variable_inputs_from_prover(prover, max_len: int) -> Tuple[List[str], str]:
-    """可変数の前提を使用する新しい形式でエンコード"""
-    state = encode_prover_state(prover, max_len)
+def extract_inputs_from_prover(prover) -> Tuple[List[str], str]:
+    """proverの状態をエンコード（制限なし）"""
+    state = encode_prover_state(prover)
     return state["premises"], state["goal"]
 
 
@@ -107,8 +102,8 @@ def main() -> None:
     label_to_id, id_to_label = build_label_mappings(label_names)
 
     # Build tokenizer and model
-    tokenizer = CharTokenizer(base_tokens=base_tokens, max_sentence_length=50)
-    max_seq_len = 1 + 4 * (tokenizer.max_sentence_length + 1)
+    tokenizer = CharTokenizer(base_tokens=base_tokens)
+    max_seq_len = 512  # Use a fixed max sequence length
     model = TransformerClassifier(
         vocab_size=tokenizer.vocab_size,
         num_classes=len(label_names),
@@ -196,7 +191,7 @@ def main() -> None:
 
             # Start data collection for this example
             if data_collector:
-                initial_state = encode_prover_state(prover, max_len=None)  # 完全なデータを保存
+                initial_state = encode_prover_state(prover)  # 完全なデータを保存（制限なし）
                 data_collector.start_example(
                     example_id=i,
                     initial_premises=initial_state["premises"],
@@ -206,15 +201,15 @@ def main() -> None:
             step = 0
             solved = prover.goal is None
             while not solved:
-                # Extract inputs from current state using variable premises
-                premises, goal = extract_variable_inputs_from_prover(prover, tokenizer.max_sentence_length)
+                # Extract inputs from current state (no length restrictions)
+                premises, goal = extract_inputs_from_prover(prover)
 
                 # Maintain a banned set to avoid repeating failed predictions in this step
                 banned: set[str] = set()
                 applied = False
 
                 while not applied and len(banned) < len(label_names) and step < args.max_steps:
-                    ids, mask, seg = tokenizer.encode_variable_premises(premises, goal)
+                    ids, mask, seg = tokenizer.encode(goal, premises, max_seq_len)
                     with torch.no_grad():
                         logits = model(
                             ids.unsqueeze(0).to(device),
@@ -231,7 +226,7 @@ def main() -> None:
 
                     # Record tactic application for data collection (BEFORE applying tactic)
                     if data_collector:
-                        current_state = encode_prover_state(prover, max_len=None)  # 完全なデータを保存
+                        current_state = encode_prover_state(prover)  # 完全なデータを保存（制限なし）
                         # 戦略適用前の状態を記録（tactic_applyは後で更新）
                         data_collector.add_tactic_application(
                             step=step + 1,  # stepを先にインクリメント

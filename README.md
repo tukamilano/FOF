@@ -2,6 +2,32 @@
 
 このプロジェクトは、Transformerモデルを使用して命題論理の定理証明を自動化するシステムです。pyproverライブラリと組み合わせて、数式生成から証明戦略の予測まで一貫したワークフローを提供します。
 
+## 主な特徴
+
+- **制限なしの前提**: 前提の数と長さに制限なし
+- **新しい入力形式**: `[CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] ... [EOS]`
+- **シンプルなコード**: 古い3-premise制限を削除し、コードを大幅に簡素化
+- **柔軟なエンコーディング**: 任意の数の前提を処理可能
+
+## 最新の変更点（v2.0）
+
+### 削除された制限
+- ❌ 3-premise制限を完全に削除
+- ❌ 50文字の文長制限を削除
+- ❌ 古い固定ブロック形式を削除
+
+### 新しい機能
+- ✅ `[EOS]`トークンの追加
+- ✅ 制限なしの`encode_prover_state()`関数
+- ✅ シンプルな`CharTokenizer.encode()`メソッド
+- ✅ 柔軟なセグメントID割り当て（0=special, 1=goal, 2+=premises）
+
+### コードの簡素化
+- 古い3-premise制限の関数をすべて削除
+- `max_sentence_length`パラメータを削除
+- 複雑なエンコーディング関数を統合
+- より直感的なAPI設計
+
 ## 環境設定
 
 ### 仮想環境の作成と有効化
@@ -35,9 +61,10 @@ pip install -r requirements.txt
 - **`run_interaction.py`** - メインの実行ファイル。数式生成、Transformer予測、証明実行の統合ワークフロー
 - **`auto_data_collector.py`** - auto_classical()を使用したデータ収集システム（Transformer不要）
 - **`ppo_trainer.py`** - PPO強化学習によるTransformerモデルのバッチ学習システム
-- **`transformer_classifier.py`** - Transformerモデルとトークナイザーの実装
+- **`transformer_classifier.py`** - Transformerモデルとトークナイザーの実装（制限なしの新しい形式）
+- **`state_encoder.py`** - 証明状態のエンコーディング（制限なし）
 - **`generate_prop.py`** - 命題論理式の生成器
-- **`fof_tokens.py`** - 入力トークンと出力ラベルの定義
+- **`fof_tokens.py`** - 入力トークンと出力ラベルの定義（[EOS]トークン追加）
 - **`pyprover/`** - 命題論理証明器ライブラリ
 
 ### テストファイル
@@ -124,7 +151,30 @@ python auto_data_collector.py [オプション]
 python run_interaction.py --selftest
 ```
 
-### 5. 学習データ収集
+### 5. 新しい形式のテスト
+
+```bash
+# 新しい制限なし形式のテスト
+python -c "
+from transformer_classifier import CharTokenizer
+from fof_tokens import input_token
+
+# 制限なしの前提でテスト
+tokenizer = CharTokenizer(base_tokens=input_token)
+goal = 'a'
+premises = ['(a→b)', '(b→c)', '(c→d)', '(d→e)', '(e→f)']  # 5つの前提
+
+# 新しい形式でエンコード
+ids, mask, seg = tokenizer.encode(goal, premises, max_seq_len=512)
+print(f'Goal: {goal}')
+print(f'Premises: {premises}')
+print(f'Number of premises: {len(premises)}')
+print(f'Input format: [CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] ... [EOS]')
+print('Success: Unlimited premises format works!')
+"
+```
+
+### 6. 学習データ収集
 
 #### Transformerベースのデータ収集（従来の方法）
 
@@ -155,7 +205,7 @@ python auto_data_collector.py --count 50 --filter_tactic_success_only
 python auto_data_collector.py --count 5 --dataset_file my_dataset.json
 ```
 
-### 5. PPO強化学習によるバッチ学習
+### 7. PPO強化学習によるバッチ学習
 
 ```bash
 # 基本的なPPO学習（10000ステップ、バッチサイズ32）
@@ -174,7 +224,7 @@ python ppo_trainer.py --evaluate ppo_models/ppo_model_final --eval_episodes 100
 python ppo_trainer.py --total_timesteps 50000 --batch_size 64 --learning_rate 1e-4 --difficulty 0.7
 ```
 
-### 6. テストファイルの実行
+### 8. テストファイルの実行
 
 ```bash
 # Transformerモデルのトレーニングテスト
@@ -195,10 +245,23 @@ python test_data_collection.py
 ### 基本的なワークフロー（run_interaction.py）
 
 1. **数式生成**: `FormulaGenerator`が命題論理式を生成
-2. **トークン化**: `CharTokenizer`が文字レベルでトークン化
-3. **予測**: `TransformerClassifier`が次の証明戦略を予測
-4. **実行**: pyproverが実際の証明戦略を実行
-5. **データ収集**: 学習データをJSON形式で蓄積（`--collect_data`オプション時）
+2. **状態エンコーディング**: `encode_prover_state()`が制限なしで前提とゴールをエンコード
+3. **トークン化**: `CharTokenizer.encode()`が新しい形式`[CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] ... [EOS]`でトークン化
+4. **予測**: `TransformerClassifier`が次の証明戦略を予測
+5. **実行**: pyproverが実際の証明戦略を実行
+6. **データ収集**: 学習データをJSON形式で蓄積（`--collect_data`オプション時）
+
+### 新しい入力形式
+
+Transformerへの入力は以下の形式でエンコードされます：
+
+```
+[CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] Premise₃ [SEP] ... [EOS]
+```
+
+- **制限なし**: 前提の数と長さに制限なし
+- **柔軟性**: 任意の数の前提を処理可能
+- **シンプル**: 古い3-premise制限を完全に削除
 
 ### PPO強化学習ワークフロー（ppo_trainer.py）
 
@@ -217,8 +280,8 @@ python test_data_collection.py
 ```json
 [
   {
-    "premises": ["(a → b)", "(b → c)", "a"],
-    "goal": "c",
+    "premises": ["(a → b)", "(b → c)", "(c → d)", "a"],
+    "goal": "d",
     "tactic": "apply 0",
     "tactic_apply": true,
     "is_proved": true
@@ -228,7 +291,7 @@ python test_data_collection.py
 
 ### フィールド説明
 
-- `premises`: 前提の配列（最大3つ、不足分は空文字列）
+- `premises`: 前提の配列（制限なし、任意の数）
 - `goal`: 現在のゴール
 - `tactic`: 適用された戦略
 - `tactic_apply`: 戦略の適用が成功したかどうか
@@ -360,9 +423,16 @@ python test_evaluate_time.py --device cuda --count 15
 
 ### モデルの改善
 
-- `transformer_classifier.py`でモデルアーキテクチャを調整
+- `transformer_classifier.py`でモデルアーキテクチャを調整（制限なしの新しい形式）
+- `state_encoder.py`でエンコーディング方法を調整
 - `test_example_train.py`でトレーニングデータを拡張
 - `ppo_trainer.py`でPPOハイパーパラメータを調整
+
+### 新しい入力形式のカスタマイズ
+
+- `transformer_classifier.py`の`encode()`メソッドで入力形式を調整
+- `state_encoder.py`の`encode_prover_state()`で状態エンコーディングを調整
+- セグメントIDの割り当て（0=special, 1=goal, 2+=premises）を変更可能
 
 ### PPO学習の調整
 
