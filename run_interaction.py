@@ -78,10 +78,16 @@ def extract_inputs_from_prover(prover, max_len: int) -> Tuple[str, str, str, str
     return encode_prover_state_for_transformer(prover, max_len)
 
 
+def extract_variable_inputs_from_prover(prover, max_len: int) -> Tuple[List[str], str]:
+    """可変数の前提を使用する新しい形式でエンコード"""
+    state = encode_prover_state(prover, max_len)
+    return state["premises"], state["goal"]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate formulas, run Transformer, apply tactic in pyprover")
     parser.add_argument("--count", type=int, default=3, help="number of interactions to run")
-    parser.add_argument("--difficulty", type=float, default=0.5)
+    parser.add_argument("--difficulty", type=float, default=0.3)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"])
     parser.add_argument("--selftest", action="store_true", help="run intro/apply deterministic checks and exit")
@@ -89,6 +95,8 @@ def main() -> None:
     parser.add_argument("--collect_data", action="store_true", help="collect training data in JSON format")
     parser.add_argument("--work_file", type=str, default="temp_work.json", help="temporary work file for data collection")
     parser.add_argument("--dataset_file", type=str, default="training_data.json", help="dataset file for collected data")
+    parser.add_argument("--filter_successful_only", action="store_true", help="only store records where both tactic_apply and is_proved are true")
+    parser.add_argument("--filter_tactic_success_only", action="store_true", help="only store records where tactic_apply is true (regardless of is_proved)")
     args = parser.parse_args()
 
     root_dir = os.path.dirname(__file__)
@@ -139,7 +147,9 @@ def main() -> None:
         
         data_collector = TrainingDataCollector(
             work_file_path=args.work_file,
-            dataset_file_path=args.dataset_file
+            dataset_file_path=args.dataset_file,
+            filter_successful_only=args.filter_successful_only,
+            filter_tactic_success_only=args.filter_tactic_success_only
         )
 
     if args.selftest:
@@ -169,6 +179,9 @@ def main() -> None:
         for i in range(args.count):
             # Generate an initial state for the prover (we still use generator to seed it)
             goal_list = filter_formulas(gen, max_len=50, require_tautology=True, limit=1)
+            if not goal_list:
+                print(f"Warning: No valid formulas generated for example {i+1}, skipping...")
+                continue
             seed_goal = goal_list[0]
 
             # Pyprover parse and create state
@@ -193,15 +206,15 @@ def main() -> None:
             step = 0
             solved = prover.goal is None
             while not solved:
-                # Extract inputs from current state
-                p1, p2, p3, goal = extract_inputs_from_prover(prover, tokenizer.max_sentence_length)
+                # Extract inputs from current state using variable premises
+                premises, goal = extract_variable_inputs_from_prover(prover, tokenizer.max_sentence_length)
 
                 # Maintain a banned set to avoid repeating failed predictions in this step
                 banned: set[str] = set()
                 applied = False
 
                 while not applied and len(banned) < len(label_names) and step < args.max_steps:
-                    ids, mask, seg = tokenizer.encode_four_fixed_blocks(p1, p2, p3, goal)
+                    ids, mask, seg = tokenizer.encode_variable_premises(premises, goal)
                     with torch.no_grad():
                         logits = model(
                             ids.unsqueeze(0).to(device),
@@ -271,9 +284,20 @@ def main() -> None:
         if data_collector:
             data_collector.cleanup()
             stats = data_collector.get_dataset_stats()
-            print(f"Data collection completed. Total records: {stats['total_records']}, "
-                  f"Proved examples: {stats['proved_examples']}, "
-                  f"Failed examples: {stats['failed_examples']}")
+            if stats.get('filtered_mode') == "successful_only":
+                print(f"Data collection completed (successful tactics + proved only). "
+                      f"Examples: {stats['total_examples']} (proved: {stats['proved_examples']}, failed: {stats['failed_examples']}), "
+                      f"Records: {stats['total_records']}, "
+                      f"Successful tactics: {stats['successful_tactics']}")
+            elif stats.get('filtered_mode') == "tactic_success_only":
+                print(f"Data collection completed (successful tactics only). "
+                      f"Examples: {stats['total_examples']} (proved: {stats['proved_examples']}, failed: {stats['failed_examples']}), "
+                      f"Records: {stats['total_records']}, "
+                      f"Successful tactics: {stats['successful_tactics']}")
+            else:
+                print(f"Data collection completed. "
+                      f"Examples: {stats['total_examples']} (proved: {stats['proved_examples']}, failed: {stats['failed_examples']}), "
+                      f"Records: {stats['total_records']}")
 
 
 if __name__ == "__main__":

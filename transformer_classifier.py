@@ -164,6 +164,43 @@ class CharTokenizer:
         segment_ids = torch.tensor(seg_ids, dtype=torch.long)
         return input_ids, attention_mask, segment_ids
 
+    def encode_variable_premises(
+        self,
+        premises: List[str],
+        goal: str,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        可変数の前提とゴールをエンコードする
+        既存のモデルとの互換性のため、最大3つの前提を使用し、残りは無視する
+        
+        Args:
+            premises: 前提のリスト
+            goal: ゴール文字列
+            
+        Returns:
+            (input_ids, attention_mask, segment_ids)
+        """
+        # 既存のモデルとの互換性のため、最大3つの前提のみを使用
+        # 残りの前提は無視する（または連結する）
+        max_premises = 3
+        if len(premises) > max_premises:
+            # 最初の3つの前提のみを使用
+            selected_premises = premises[:max_premises]
+        else:
+            selected_premises = premises
+        
+        # 不足分を空文字列で埋める
+        while len(selected_premises) < max_premises:
+            selected_premises.append("")
+        
+        # 既存の4ブロック形式を使用
+        return self.encode_four_fixed_blocks(
+            selected_premises[0],
+            selected_premises[1], 
+            selected_premises[2],
+            goal
+        )
+
 
 class SinusoidalPositionalEncoding(nn.Module):
     def __init__(self, d_model: int, max_len: int = 512, dropout: float = 0.1) -> None:

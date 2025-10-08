@@ -13,15 +13,11 @@ def encode_prover_state(prover, max_len: int = None) -> Dict[str, List[str]]:
         max_len: 各文字列の最大長（Noneの場合は切り詰めない）
         
     Returns:
-        {"premises": [str, str, str], "goal": str} の形式
+        {"premises": [str, ...], "goal": str} の形式（premisesの数は実際の数に応じて変動）
     """
-    # 前提を取得（最初の3つまで）
+    # 前提を取得（すべての前提を使用）
     vars_as_str = [str(v) for v in getattr(prover, "variables", [])]
-    premises = vars_as_str[:3]  # 最初の3つ
-    
-    # 3つ未満の場合は空文字列で埋める
-    while len(premises) < 3:
-        premises.append("")
+    premises = vars_as_str  # すべての前提を使用
     
     # ゴールを取得
     goal = str(getattr(prover, "goal", "")) if getattr(prover, "goal", None) is not None else ""

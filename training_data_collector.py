@@ -12,10 +12,16 @@ class TrainingDataCollector:
     
     def __init__(self, 
                  work_file_path: str = "temp_work.json",
-                 dataset_file_path: str = "training_data.json"):
+                 dataset_file_path: str = "training_data.json",
+                 filter_successful_only: bool = False,
+                 filter_tactic_success_only: bool = False):
         self.work_file_path = work_file_path
         self.dataset_file_path = dataset_file_path
+        self.filter_successful_only = filter_successful_only
+        self.filter_tactic_success_only = filter_tactic_success_only
         self.current_example = None
+        self.total_examples_processed = 0
+        self.proved_examples_count = 0
         
     def start_example(self, example_id: int, initial_premises: List[str], initial_goal: str):
         """新しい例を開始する"""
@@ -67,6 +73,11 @@ class TrainingDataCollector:
         # is_provedを確定
         self.current_example["is_proved"] = is_proved
         
+        # 例の統計を更新（フィルタリングに関係なく）
+        self.total_examples_processed += 1
+        if is_proved:
+            self.proved_examples_count += 1
+        
         # 各戦略適用を個別レコードとしてデータセットに追加
         self._add_to_dataset()
         
@@ -91,7 +102,19 @@ class TrainingDataCollector:
                 "tactic_apply": tactic_data["tactic_apply"],
                 "is_proved": self.current_example["is_proved"]
             }
-            dataset.append(record)
+            
+            # フィルタリングオプションに応じてレコードを追加
+            if self.filter_successful_only:
+                # 両方がtrueのレコードのみ追加
+                if record["tactic_apply"] and record["is_proved"]:
+                    dataset.append(record)
+            elif self.filter_tactic_success_only:
+                # tactic_applyがtrueのレコードのみ追加
+                if record["tactic_apply"]:
+                    dataset.append(record)
+            else:
+                # フィルタリングなし
+                dataset.append(record)
             
         # データセットを保存
         self._save_dataset(dataset)
@@ -126,18 +149,37 @@ class TrainingDataCollector:
     def get_dataset_stats(self) -> Dict[str, int]:
         """データセットの統計情報を取得する"""
         dataset = self._load_dataset()
-        if not dataset:
-            return {"total_records": 0, "proved_examples": 0, "failed_examples": 0}
+        if not dataset and self.total_examples_processed == 0:
+            return {
+                "total_examples": 0,
+                "total_records": 0, 
+                "proved_examples": 0, 
+                "failed_examples": 0
+            }
             
         total_records = len(dataset)
-        proved_examples = sum(1 for record in dataset if record["is_proved"])
-        failed_examples = total_records - proved_examples
+        total_examples = self.total_examples_processed
+        proved_examples = self.proved_examples_count
+        failed_examples = total_examples - proved_examples
         
-        return {
+        stats = {
+            "total_examples": total_examples,
             "total_records": total_records,
             "proved_examples": proved_examples,
             "failed_examples": failed_examples
         }
+        
+        # フィルタリングが有効な場合、追加の統計情報を提供
+        if self.filter_successful_only:
+            successful_tactics = sum(1 for record in dataset if record["tactic_apply"] and record["is_proved"])
+            stats["successful_tactics"] = successful_tactics
+            stats["filtered_mode"] = "successful_only"
+        elif self.filter_tactic_success_only:
+            successful_tactics = sum(1 for record in dataset if record["tactic_apply"])
+            stats["successful_tactics"] = successful_tactics
+            stats["filtered_mode"] = "tactic_success_only"
+        
+        return stats
         
     def cleanup(self):
         """作業ファイルをクリアする（終了時）"""
