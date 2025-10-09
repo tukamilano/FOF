@@ -11,6 +11,7 @@ from typing import List, Tuple, Dict, Any, Optional
 from copy import deepcopy
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
+import subprocess
 
 # プロジェクトルートをパスに追加
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -279,7 +280,9 @@ class ParallelDataCollector:
                  max_depth: int = 8,
                  num_workers: int = None,
                  examples_per_file: int = 10000,
-                 buffer_size: int = 1000):
+                 buffer_size: int = 1000,
+                 gcs_bucket: str = None,
+                 gcs_prefix: str = ""):
         self.dataset_file_path = dataset_file_path
         self.max_depth = max_depth
         # Default to CPU count, but allow override via num_workers parameter
@@ -294,6 +297,10 @@ class ParallelDataCollector:
         self.total_collected_steps = 0  # Track total steps across all files
         self.total_successful_tactics = 0  # Track total successful tactics
         self.total_proved_records = 0  # Track total proved records
+        
+        # GCS settings
+        self.gcs_bucket = gcs_bucket
+        self.gcs_prefix = gcs_prefix
         
     def collect_data_parallel_streaming(self, gen, gen_params, pyprover_dir: str) -> List[Dict]:
         """Collect data using streaming approach - generate and process formulas in batches"""
@@ -397,6 +404,30 @@ class ParallelDataCollector:
         base_name = os.path.basename(self.dataset_file_path).replace('.json', '')
         return os.path.join(generated_dir, f"{base_name}_{self.current_file_index:05d}.json")
     
+    def upload_file_to_gcs(self, local_file_path: str, gcs_filename: str) -> bool:
+        """Upload a local file to GCS bucket using gcloud command"""
+        if not self.gcs_bucket:
+            return False
+        
+        try:
+            # Construct GCS path
+            gcs_path = f"gs://{self.gcs_bucket}/{self.gcs_prefix}{gcs_filename}"
+            
+            # Use gcloud command to upload
+            result = subprocess.run([
+                'gcloud', 'storage', 'cp', local_file_path, gcs_path
+            ], capture_output=True, text=True, check=True)
+            
+            print(f"✓ Uploaded {gcs_filename} to {gcs_path}")
+            return True
+            
+        except subprocess.CalledProcessError as e:
+            print(f"✗ Failed to upload {gcs_filename} to GCS: {e.stderr}")
+            return False
+        except Exception as e:
+            print(f"✗ Failed to upload {gcs_filename} to GCS: {e}")
+            return False
+    
     def clear_generated_data(self):
         """Clear existing generated_data directory"""
         generated_dir = "generated_data"
@@ -405,9 +436,12 @@ class ParallelDataCollector:
             shutil.rmtree(generated_dir)
             print(f"✓ Cleared existing {generated_dir}/ directory")
         os.makedirs(generated_dir, exist_ok=True)
+        
+        if self.gcs_bucket:
+            print(f"✓ Will upload completed files to: gs://{self.gcs_bucket}/{self.gcs_prefix}")
     
     def save_current_data(self):
-        """Save current collected data to a file"""
+        """Save current collected data to local file and optionally upload to GCS"""
         if not self.all_collected_steps:
             return
             
@@ -415,7 +449,27 @@ class ParallelDataCollector:
         transformed_data = transform_to_new_format(self.all_collected_steps)
         num_examples = len(transformed_data)
         
+        # Update global statistics
+        self.total_collected_steps += len(self.all_collected_steps)
+        self.total_successful_tactics += sum(1 for record in self.all_collected_steps if record["tactic_apply"])
+        self.total_proved_records += sum(1 for record in self.all_collected_steps if record["is_proved"])
+        
+        # Always save to local file first
+        local_file_path = self._save_to_local_file(transformed_data)
+        
+        # Upload to GCS if configured
+        if self.gcs_bucket and local_file_path:
+            gcs_filename = f"training_data_{self.current_file_index:05d}.json"
+            self.upload_file_to_gcs(local_file_path, gcs_filename)
+        
+        # Reset buffer
+        self.all_collected_steps = []
+        self.steps_in_current_file = 0
+    
+    def _save_to_local_file(self, transformed_data: List[Dict]) -> str:
+        """Save data to local file and return the file path"""
         filename = self.get_current_filename()
+        num_examples = len(transformed_data)
         
         # Check if current file exists and has space
         if os.path.exists(filename):
@@ -442,19 +496,12 @@ class ParallelDataCollector:
         # Update tracking
         self.examples_in_current_file = len(existing_data)
         
-        # Update global statistics
-        self.total_collected_steps += len(self.all_collected_steps)
-        self.total_successful_tactics += sum(1 for record in self.all_collected_steps if record["tactic_apply"])
-        self.total_proved_records += sum(1 for record in self.all_collected_steps if record["is_proved"])
-        
         if len(existing_data) == num_examples:
             print(f"✓ Created new file with {num_examples} examples: {filename}")
         else:
             print(f"✓ Appended {num_examples} examples to {filename} (total: {len(existing_data)})")
         
-        # Reset buffer
-        self.all_collected_steps = []
-        self.steps_in_current_file = 0
+        return filename
     
     def add_steps_and_check_save(self, new_steps: List[Dict]):
         """Add new steps and save if we've reached the file limit"""
@@ -510,13 +557,17 @@ def main() -> None:
     parser.add_argument("--difficulty", type=float, default=gen_params.difficulty, help="formula generation difficulty")
     parser.add_argument("--seed", type=int, default=gen_params.seed, help="random seed")
     parser.add_argument("--max_depth", type=int, default=gen_params.max_depth, help="maximum auto_classical search depth")
-    parser.add_argument("--dataset_file", type=str, default=train_params.dataset_file, help="output dataset file")
+    parser.add_argument("--dataset_file", type=str, default=train_params.dataset_file, help="base name for output files (e.g., training_data)")
     parser.add_argument("--workers", type=int, default=None, 
                        help="number of parallel workers (default: min(cpu_count, 8). Use more for powerful systems, fewer for memory-constrained systems)")
     parser.add_argument("--examples_per_file", type=int, default=10000,
                        help="number of examples per output file (default: 10000)")
     parser.add_argument("--buffer_size", type=int, default=1000,
                        help="buffer size for writing data (default: 1000, smaller = more frequent writes)")
+    parser.add_argument("--gcs_bucket", type=str, default=None,
+                       help="GCS bucket name for direct upload (e.g., fof-data-20251009-milano)")
+    parser.add_argument("--gcs_prefix", type=str, default="",
+                       help="GCS prefix for uploaded files (e.g., training_data/)")
     args = parser.parse_args()
 
     # パラメータを更新
@@ -559,7 +610,9 @@ def main() -> None:
         max_depth=gen_params.max_depth,
         num_workers=args.workers,
         examples_per_file=args.examples_per_file,
-        buffer_size=args.buffer_size
+        buffer_size=args.buffer_size,
+        gcs_bucket=args.gcs_bucket,
+        gcs_prefix=args.gcs_prefix
     )
 
     print(f"Starting parallel auto_classical() data collection for {gen_params.count} formulas...")
@@ -567,7 +620,12 @@ def main() -> None:
     print(f"Workers: {data_collector.num_workers}")
     print(f"Examples per file: {args.examples_per_file}")
     print(f"Buffer size: {args.buffer_size}")
-    print(f"Output files: generated_data/{os.path.basename(train_params.dataset_file).replace('.json', '')}_XXXXX.json")
+    
+    base_name = os.path.basename(train_params.dataset_file).replace('.json', '')
+    if args.gcs_bucket:
+        print(f"Output: gs://{args.gcs_bucket}/{args.gcs_prefix}{base_name}_XXXXX.json")
+    else:
+        print(f"Output files: generated_data/{base_name}_XXXXX.json")
     
     # Clear existing generated data
     data_collector.clear_generated_data()
@@ -587,7 +645,10 @@ def main() -> None:
         print(f"Successful tactics: {stats['successful_tactics']}")
         print(f"Proved records: {stats['proved_records']}")
         print(f"Unique tactics used: {stats['unique_tactics']}")
-        print(f"Data saved to: generated_data/ directory")
+        if args.gcs_bucket:
+            print(f"Data saved to: gs://{args.gcs_bucket}/{args.gcs_prefix}")
+        else:
+            print(f"Data saved to: generated_data/ directory")
 
     finally:
         # Calculate total time

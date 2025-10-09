@@ -151,8 +151,12 @@ python src/data_generation/auto_data_parallel_collector.py [オプション]
   --difficulty DIFFICULTY       式生成の難易度 0.0-1.0 (デフォルト: 0.7)
   --seed SEED                   乱数シード (デフォルト: 7)
   --max_depth MAX_DEPTH         auto_classical()の最大探索深さ (デフォルト: 8)
-  --dataset_file FILE           出力データセットファイル (デフォルト: training_data.json)
+  --dataset_file FILE           出力データセットファイルのベース名 (デフォルト: training_data)
   --workers WORKERS             並列ワーカー数 (デフォルト: min(cpu_count, 8))
+  --examples_per_file COUNT     ファイルあたりの例数 (デフォルト: 10000)
+  --buffer_size SIZE            書き込みバッファサイズ (デフォルト: 1000)
+  --gcs_bucket BUCKET           GCSバケット名 (例: fof-data-20251009-milano)
+  --gcs_prefix PREFIX           GCSプレフィックス (例: generated_data/)
 ```
 
 ### 4. 自己テスト
@@ -210,17 +214,29 @@ python src/data_generation/auto_data_collector.py --count 10
 python src/data_generation/auto_data_collector.py --count 5 --dataset_file data/my_dataset.json
 ```
 
-#### 並列データ収集（高速処理）
+#### 並列データ収集（本番環境推奨）
 
 ```bash
-# 高速並列モード（証明発見のみ）
+# 本番環境での大規模データ収集（GCS直接アップロード）
+python src/data_generation/auto_data_parallel_collector.py \
+  --count 1000 \
+  --examples_per_file 100 \
+  --workers 2 \
+  --gcs_bucket fof-data-20251009-milano \
+  --gcs_prefix generated_data/ \
+  --dataset_file training_data
+
+# 中規模データ収集（ローカル保存）
 python src/data_generation/auto_data_parallel_collector.py --count 100 --workers 4
 
-# カスタムワーカー数での並列処理
-python src/data_generation/auto_data_parallel_collector.py --count 50 --workers 2
-
-# カスタム設定での並列処理
-python src/data_generation/auto_data_parallel_collector.py --count 200 --max_depth 10 --workers 8 --dataset_file data/parallel_dataset.json
+# 高難易度・深い探索での並列処理
+python src/data_generation/auto_data_parallel_collector.py \
+  --count 200 \
+  --difficulty 0.9 \
+  --max_depth 12 \
+  --workers 8 \
+  --examples_per_file 50 \
+  --dataset_file high_difficulty_data
 ```
 
 ### 7. データ圧縮の実行
@@ -374,98 +390,126 @@ python src/interaction/run_interaction.py --collect_data --count 10 --filter_suc
 
 **注意**: 現在の設定では証明が完了する例が少ないため、`--filter_successful_only`オプションでは0件になる可能性があります。基本的なデータ収集（フィルタなし）の使用を推奨します。
 
-## 並列データ収集システム
+## 並列データ収集システム（本番環境対応）
 
 ### 概要
 
-`auto_data_parallel_collector.py`は、マルチプロセシングを使用して大規模なデータ収集を高速化するシステムです。CPUコアを活用して複数の数式を並列処理し、従来のシーケンシャル処理と比較して大幅な処理時間短縮を実現します。
+`auto_data_parallel_collector.py`は、本番環境での大規模データ収集に最適化されたシステムです。ストリーミング処理、GCS直接アップロード、ファイル分割管理により、効率的でスケーラブルなデータ収集を実現します。
 
 ### 主要機能
 
-#### 1. 並列処理
-- **高速処理**: 証明発見のみに焦点を当てた高速並列処理
-- **メモリ効率**: ワーカー数制限によるメモリ使用量の最適化
+#### 1. ストリーミング処理
+- **メモリ効率**: バッチ処理によるメモリ使用量の最適化
+- **リアルタイム保存**: バッファサイズに達した時点で即座にファイル保存
+- **継続処理**: 大規模データセットでも安定した処理継続
 
-#### 2. ワーカー管理
-- **自動ワーカー数決定**: `min(cpu_count, 8)`でメモリ使用量を制限
-- **カスタムワーカー数**: `--workers`オプションで手動設定
+#### 2. ファイル管理
+- **自動分割**: `examples_per_file`でファイルサイズを制御
+- **連番管理**: `training_data_00001.json`形式で自動ファイル名生成
+- **バッファ制御**: `buffer_size`で書き込み頻度を調整
+
+#### 3. GCS統合
+- **直接アップロード**: ローカル保存と同時にGCSへ自動アップロード
+- **gcloud連携**: `gcloud storage cp`コマンドによる効率的なアップロード
+- **エラーハンドリング**: アップロード失敗時の適切なエラー処理
+
+#### 4. 並列処理
+- **ワーカー管理**: `min(cpu_count, 8)`でメモリ使用量を制限
 - **プロセスプール**: `ProcessPoolExecutor`による効率的な並列実行
+- **進捗表示**: `tqdm`によるリアルタイム進捗と統計表示
 
-#### 3. 進捗表示
-- **リアルタイム進捗**: `tqdm`によるプログレスバー
-- **成功統計**: リアルタイムでの証明成功数表示
-- **エラーハンドリング**: 個別プロセスのエラーを適切に処理
+### 本番環境ワークフロー
 
-### 処理フロー
-
-1. **数式生成**: 指定された数の数式を事前生成
-2. **並列処理**: 各ワーカープロセスで数式を並列処理
-3. **証明発見**: `auto_classical()`を使用して証明パスを発見
-4. **結果集約**: 全プロセスの結果を統合して保存
+1. **初期化**: 生成データディレクトリのクリアとGCS設定確認
+2. **ストリーミング生成**: バッチ単位で数式を生成・処理
+3. **並列証明**: 各ワーカーで`auto_classical()`による証明発見
+4. **リアルタイム保存**: バッファサイズに達した時点でファイル保存
+5. **GCSアップロード**: 保存完了と同時にGCSへ自動アップロード
+6. **統計収集**: 処理完了時に詳細統計を表示
 
 ### 出力形式
 
+#### ファイル構造
+```
+generated_data/
+├── training_data_00001.json  # 例数: 100 (examples_per_file)
+├── training_data_00002.json  # 例数: 100
+├── training_data_00003.json  # 例数: 100
+└── ...
+```
+
+#### データ形式（新しい構造化形式）
 ```json
 [
   {
-    "example_id": 0,
-    "formula": "(a → b) → (b → c) → (a → c)",
-    "proof_found": true,
-    "proof_path": ["intro", "intro", "apply 0", "apply 1"],
-    "total_steps": 4,
-    "time_taken": 0.123,
-    "worker_id": 12345
+    "example_id": "ex_0001",
+    "meta": {
+      "goal_original": "(a → b) → (b → c) → (a → c)",
+      "is_proved": true
+    },
+    "steps": [
+      {
+        "step_index": 0,
+        "premises": [],
+        "goal": "(a → b) → (b → c) → (a → c)",
+        "tactic": {"main": "intro", "arg1": null, "arg2": null},
+        "tactic_apply": true,
+        "state_hash": "abc123..."
+      }
+    ],
+    "summary": {
+      "tactic_sequence": ["intro", "intro", "apply 0", "apply 1"],
+      "total_steps": 4
+    }
   }
 ]
 ```
 
-### パフォーマンス特性
-
-#### メモリ使用量
-- **ワーカー制限**: デフォルトで最大8ワーカー（メモリ保護）
-- **プロセス分離**: 各ワーカーが独立したメモリ空間で動作
-- **ガベージコレクション**: プロセス終了時の自動メモリ解放
-
-#### 処理速度
-- **並列効率**: CPUコア数に比例した処理速度向上
-- **I/O最適化**: バッチ処理による効率的なファイル操作
-- **エラー耐性**: 個別プロセスの失敗が全体に影響しない
-
 ### 使用例
 
-#### 大規模データ収集
+#### 本番環境での大規模データ収集
 ```bash
-# 1000個の数式を8ワーカーで並列処理
-python src/data_generation/auto_data_parallel_collector.py --count 1000 --workers 8
+# 1000個の数式をGCSに直接アップロード（本番環境推奨）
+python src/data_generation/auto_data_parallel_collector.py \
+  --count 1000 \
+  --examples_per_file 100 \
+  --workers 2 \
+  --gcs_bucket fof-data-20251009-milano \
+  --gcs_prefix generated_data/ \
+  --dataset_file training_data
 ```
 
-#### 中規模データ収集
+#### 中規模データ収集（ローカル保存）
 ```bash
-# 50個の数式を4ワーカーで並列処理
-python src/data_generation/auto_data_parallel_collector.py --count 50 --workers 4
-```
-
-#### カスタム設定
-```bash
-# 高難易度、深い探索、カスタム出力ファイル
+# 500個の数式をローカルに保存
 python src/data_generation/auto_data_parallel_collector.py \
   --count 500 \
+  --workers 4 \
+  --examples_per_file 50
+```
+
+#### 高難易度・深い探索
+```bash
+# 高難易度、深い探索、カスタム設定
+python src/data_generation/auto_data_parallel_collector.py \
+  --count 200 \
   --difficulty 0.9 \
   --max_depth 12 \
   --workers 6 \
-  --dataset_file data/high_difficulty_dataset.json
+  --examples_per_file 25 \
+  --buffer_size 500 \
+  --dataset_file high_difficulty_data
 ```
 
-### トラブルシューティング
-
-#### メモリ不足
-- ワーカー数を減らす: `--workers 2`
-- 処理する数式数を減らす: `--count 100`
-
-#### プロセスエラー
-- ログでエラー詳細を確認
-- 個別の数式で問題を特定
-- ワーカー数を調整して再実行
+#### メモリ制約環境での実行
+```bash
+# メモリ制約環境での安全な実行
+python src/data_generation/auto_data_parallel_collector.py \
+  --count 1000 \
+  --workers 1 \
+  --examples_per_file 50 \
+  --buffer_size 100
+```
 
 ## パフォーマンス評価
 
