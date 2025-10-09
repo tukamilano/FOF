@@ -1,6 +1,6 @@
 # FOF (First-Order Formula) - Transformer-based Theorem Prover
 
-このプロジェクトは、Transformerモデルを使用して命題論理の定理証明を自動化するシステムです。pyproverライブラリと組み合わせて、数式生成から証明戦略の予測まで一貫したワークフローを提供します。
+このプロジェクトは、Transformerモデルを使用して命題論理の定理証明を自動化するシステムです。[pyprover](https://github.com/kaicho8636/pyprover)ライブラリと組み合わせて、数式生成から証明戦略の予測まで一貫したワークフローを提供します。
 
 ## 環境設定
 
@@ -24,7 +24,19 @@ pip install -r requirements.txt
 
 - Python 3.8+
 - PyTorch
+- [pyprover](https://github.com/kaicho8636/pyprover) - 命題論理証明器ライブラリ
 - その他の依存関係は `requirements.txt` を参照
+
+### pyproverについて
+
+このプロジェクトは[pyprover](https://github.com/kaicho8636/pyprover)ライブラリを使用して命題論理の定理証明を行います。pyproverは以下の特徴を持ちます：
+
+- **Coqライクなインタラクティブインターフェース**
+- **古典論理のサポート**
+- **直感的な戦略システム**（assumption, intro, apply, split, left, right, destruct, specialize, add_dn, auto）
+- **命題記号のサポート**（→, ∧, ∨, ¬）
+
+pyproverの詳細な使用方法については、[公式リポジトリ](https://github.com/kaicho8636/pyprover)を参照してください。
 
 ## プロジェクト構造
 
@@ -101,7 +113,7 @@ python src/data_generation/auto_data_collector.py --count 10 --max_depth 10
 #### run_interaction.py のオプション
 
 ```bash
-python run_interaction.py [オプション]
+python src/interaction/run_interaction.py [オプション]
 
 オプション:
   --count COUNT           実行するインタラクション数 (デフォルト: 3)
@@ -119,7 +131,7 @@ python run_interaction.py [オプション]
 #### auto_data_collector.py のオプション
 
 ```bash
-python auto_data_collector.py [オプション]
+python src/data_generation/auto_data_collector.py [オプション]
 
 オプション:
   --count COUNT                 処理する式の数 (デフォルト: 10)
@@ -133,7 +145,7 @@ python auto_data_collector.py [オプション]
 
 ```bash
 # 基本的な戦略（intro, apply）の動作確認
-python run_interaction.py --selftest
+python src/interaction/run_interaction.py --selftest
 ```
 
 ### 5. 新しい形式のテスト
@@ -141,8 +153,11 @@ python run_interaction.py --selftest
 ```bash
 # 新しい制限なし形式のテスト
 python -c "
-from transformer_classifier import CharTokenizer
-from fof_tokens import input_token
+import sys
+import os
+sys.path.insert(0, '.')
+from src.core.transformer_classifier import CharTokenizer
+from src.core.fof_tokens import input_token
 
 # 制限なしの前提でテスト
 tokenizer = CharTokenizer(base_tokens=input_token)
@@ -161,24 +176,24 @@ print('Success: Unlimited premises format works!')
 
 ### 6. 学習データ収集
 
-#### Transformerベースのデータ収集（従来の方法）
+#### Transformerベースのデータ収集
 
 ```bash
 # 基本的なデータ収集（すべてのレコードを保存）
-python run_interaction.py --count 10 --collect_data --max_steps 5
+python src/interaction/run_interaction.py --count 10 --collect_data --max_steps 5
 
 # 成功した戦略かつ証明完了のみを保存
-python run_interaction.py --count 10 --collect_data --max_steps 5 --filter_successful_only
+python src/interaction/run_interaction.py --count 10 --collect_data --max_steps 5 --filter_successful_only
 ```
 
-#### auto_classical()ベースのデータ収集（推奨）
+#### auto_classical()ベースのデータ収集
 
 ```bash
 # 基本的なデータ収集（すべてのレコードを保存）
-python auto_data_collector.py --count 10
+python src/data_generation/auto_data_collector.py --count 10
 
 # カスタムファイル名でデータ収集
-python auto_data_collector.py --count 5 --dataset_file my_dataset.json
+python src/data_generation/auto_data_collector.py --count 5 --dataset_file data/my_dataset.json
 ```
 
 ### 7. データ圧縮の実行
@@ -187,23 +202,23 @@ python auto_data_collector.py --count 5 --dataset_file my_dataset.json
 
 ```bash
 # 基本的なBPE圧縮（デフォルト200回のマージ）
-python extract_tactics.py
+python src/compression/extract_tactics.py
 
 # カスタムマージ回数で圧縮
-python extract_tactics.py 100
+python src/compression/extract_tactics.py 100
 
 # 圧縮結果の確認
-ls -la tactic_compression_bpe_analysis.json
+ls -la data/tactic_compression_bpe_analysis.json
 ```
 
 #### 圧縮された学習データの作成
 
 ```bash
 # 圧縮されたタクティクで新しいtraining_data.jsonを作成
-python create_compressed_training_data.py
+python src/compression/create_compressed_training_data.py
 
 # 圧縮結果の確認
-ls -la training_data_compressed_bpe.json
+ls -la data/training_data_compressed_bpe.json
 ```
 
 ### 8. テストファイルの実行
@@ -211,7 +226,7 @@ ls -la training_data_compressed_bpe.json
 ```bash
 
 # 数式生成のテスト
-python generate_prop.py --count 5 --difficulty 0.3
+python src/core/generate_prop.py --count 5 --difficulty 0.3
 
 
 ```
@@ -224,7 +239,7 @@ python generate_prop.py --count 5 --difficulty 0.3
 2. **状態エンコーディング**: `encode_prover_state()`が制限なしで前提とゴールをエンコード
 3. **トークン化**: `CharTokenizer.encode()`が新しい形式`[CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] ... [EOS]`でトークン化
 4. **予測**: `TransformerClassifier`が次の証明戦略を予測
-5. **実行**: pyproverが実際の証明戦略を実行
+5. **実行**: [pyprover](https://github.com/kaicho8636/pyprover)が実際の証明戦略を実行
 6. **データ収集**: 学習データをJSON形式で蓄積（`--collect_data`オプション時）
 
 ### 新しい入力形式
@@ -317,14 +332,14 @@ Transformerへの入力は以下の形式でエンコードされます：
 
 #### 1. フィルタリングなし（デフォルト）
 ```bash
-python run_interaction.py --collect_data --count 10
+python src/interaction/run_interaction.py --collect_data --count 10
 ```
 - すべてのレコード（成功・失敗問わず）を保存
 - 統計: `Examples: 10 (proved: 0, failed: 10), Records: 50`
 
 #### 2. 成功した戦略かつ証明完了のみ（`--filter_successful_only`）
 ```bash
-python run_interaction.py --collect_data --count 10 --filter_successful_only
+python src/interaction/run_interaction.py --collect_data --count 10 --filter_successful_only
 ```
 - `tactic_apply: true` かつ `is_proved: true`のレコードのみを保存
 - 最も厳しい条件で、完全に成功した例のみを収集
@@ -335,19 +350,19 @@ python run_interaction.py --collect_data --count 10 --filter_successful_only
 
 ## パフォーマンス評価
 
-`test_evaluate_time.py`を使用して、システムのパフォーマンスを詳細に分析できます：
+テストファイルを使用して、システムのパフォーマンスを分析できます：
 
-### タイミング分析
+### テスト実行
 
 ```bash
-# 基本的なパフォーマンス評価
-python test_evaluate_time.py
+# 統合テストの実行
+python tests/test_integration.py
 
-# より詳細な分析
-python test_evaluate_time.py --count 20 --max_interactions 10 --warmup 3
+# パラメータテストの実行
+python tests/test_parameter_sync.py
 
-# GPU使用時のパフォーマンス比較
-python test_evaluate_time.py --device cuda --count 15
+# タクティクトークンテストの実行
+python tests/test_tactic_tokens.py
 ```
 
 ### 測定されるコンポーネント
@@ -383,34 +398,8 @@ python test_evaluate_time.py --device cuda --count 15
 - `state_encoder.py`の`encode_prover_state()`で状態エンコーディングを調整
 - セグメントIDの割り当て（0=special, 1=goal, 2+=premises）を変更可能
 
-## トラブルシューティング
+## 謝辞
 
-### 仮想環境の問題
+このプロジェクトは以下のオープンソースライブラリを使用しています：
 
-```bash
-# 仮想環境を再作成
-rm -rf .venv
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 依存関係の問題
-
-```bash
-# 依存関係を再インストール
-pip install --upgrade pip
-pip install -r requirements.txt --force-reinstall
-```
-
-### GPU使用時の問題
-
-```bash
-# CPUのみで実行
-python run_interaction.py --device cpu
-```
-
-
-## ライセンス
-
-このプロジェクトのライセンスについては、各ファイルのヘッダーを確認してください。
+- **[pyprover](https://github.com/kaicho8636/pyprover)** - 命題論理証明器ライブラリ
