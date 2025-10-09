@@ -46,8 +46,8 @@ FOF/
 │   ├── interaction/              # インタラクション（オンライン学習）
 │   │   └── run_interaction.py    # メインの実行ファイル。数式生成、Transformer予測、証明実行の統合ワークフロー
 │   ├── data_generation/          # 事前学習データ生成
-│   │   ├── auto_data_collector.py    # auto_classical()を使用したデータ収集システム
-│   │   └── training_data_collector.py # 学習データ収集用のJSONファイル管理クラス
+│   │   ├── auto_data_collector.py        # auto_classical()を使用したデータ収集システム
+│   │   └── auto_data_parallel_collector.py # 並列処理対応の高速データ収集システム
 │   ├── training/                 # 学習関連
 │   │   ├── train_hierarchical.py     # 階層分類対応の学習スクリプト
 │   │   └── inference_hierarchical.py # 階層分類対応の推論スクリプト
@@ -141,6 +141,20 @@ python src/data_generation/auto_data_collector.py [オプション]
   --dataset_file FILE           出力データセットファイル (デフォルト: training_data.json)
 ```
 
+#### auto_data_parallel_collector.py のオプション
+
+```bash
+python src/data_generation/auto_data_parallel_collector.py [オプション]
+
+オプション:
+  --count COUNT                 処理する式の数 (デフォルト: 10)
+  --difficulty DIFFICULTY       式生成の難易度 0.0-1.0 (デフォルト: 0.7)
+  --seed SEED                   乱数シード (デフォルト: 7)
+  --max_depth MAX_DEPTH         auto_classical()の最大探索深さ (デフォルト: 8)
+  --dataset_file FILE           出力データセットファイル (デフォルト: training_data.json)
+  --workers WORKERS             並列ワーカー数 (デフォルト: min(cpu_count, 8))
+```
+
 ### 4. 自己テスト
 
 ```bash
@@ -194,6 +208,19 @@ python src/data_generation/auto_data_collector.py --count 10
 
 # カスタムファイル名でデータ収集
 python src/data_generation/auto_data_collector.py --count 5 --dataset_file data/my_dataset.json
+```
+
+#### 並列データ収集（高速処理）
+
+```bash
+# 高速並列モード（証明発見のみ）
+python src/data_generation/auto_data_parallel_collector.py --count 100 --workers 4
+
+# カスタムワーカー数での並列処理
+python src/data_generation/auto_data_parallel_collector.py --count 50 --workers 2
+
+# カスタム設定での並列処理
+python src/data_generation/auto_data_parallel_collector.py --count 200 --max_depth 10 --workers 8 --dataset_file data/parallel_dataset.json
 ```
 
 ### 7. データ圧縮の実行
@@ -347,6 +374,98 @@ python src/interaction/run_interaction.py --collect_data --count 10 --filter_suc
 
 **注意**: 現在の設定では証明が完了する例が少ないため、`--filter_successful_only`オプションでは0件になる可能性があります。基本的なデータ収集（フィルタなし）の使用を推奨します。
 
+## 並列データ収集システム
+
+### 概要
+
+`auto_data_parallel_collector.py`は、マルチプロセシングを使用して大規模なデータ収集を高速化するシステムです。CPUコアを活用して複数の数式を並列処理し、従来のシーケンシャル処理と比較して大幅な処理時間短縮を実現します。
+
+### 主要機能
+
+#### 1. 並列処理
+- **高速処理**: 証明発見のみに焦点を当てた高速並列処理
+- **メモリ効率**: ワーカー数制限によるメモリ使用量の最適化
+
+#### 2. ワーカー管理
+- **自動ワーカー数決定**: `min(cpu_count, 8)`でメモリ使用量を制限
+- **カスタムワーカー数**: `--workers`オプションで手動設定
+- **プロセスプール**: `ProcessPoolExecutor`による効率的な並列実行
+
+#### 3. 進捗表示
+- **リアルタイム進捗**: `tqdm`によるプログレスバー
+- **成功統計**: リアルタイムでの証明成功数表示
+- **エラーハンドリング**: 個別プロセスのエラーを適切に処理
+
+### 処理フロー
+
+1. **数式生成**: 指定された数の数式を事前生成
+2. **並列処理**: 各ワーカープロセスで数式を並列処理
+3. **証明発見**: `auto_classical()`を使用して証明パスを発見
+4. **結果集約**: 全プロセスの結果を統合して保存
+
+### 出力形式
+
+```json
+[
+  {
+    "example_id": 0,
+    "formula": "(a → b) → (b → c) → (a → c)",
+    "proof_found": true,
+    "proof_path": ["intro", "intro", "apply 0", "apply 1"],
+    "total_steps": 4,
+    "time_taken": 0.123,
+    "worker_id": 12345
+  }
+]
+```
+
+### パフォーマンス特性
+
+#### メモリ使用量
+- **ワーカー制限**: デフォルトで最大8ワーカー（メモリ保護）
+- **プロセス分離**: 各ワーカーが独立したメモリ空間で動作
+- **ガベージコレクション**: プロセス終了時の自動メモリ解放
+
+#### 処理速度
+- **並列効率**: CPUコア数に比例した処理速度向上
+- **I/O最適化**: バッチ処理による効率的なファイル操作
+- **エラー耐性**: 個別プロセスの失敗が全体に影響しない
+
+### 使用例
+
+#### 大規模データ収集
+```bash
+# 1000個の数式を8ワーカーで並列処理
+python src/data_generation/auto_data_parallel_collector.py --count 1000 --workers 8
+```
+
+#### 中規模データ収集
+```bash
+# 50個の数式を4ワーカーで並列処理
+python src/data_generation/auto_data_parallel_collector.py --count 50 --workers 4
+```
+
+#### カスタム設定
+```bash
+# 高難易度、深い探索、カスタム出力ファイル
+python src/data_generation/auto_data_parallel_collector.py \
+  --count 500 \
+  --difficulty 0.9 \
+  --max_depth 12 \
+  --workers 6 \
+  --dataset_file data/high_difficulty_dataset.json
+```
+
+### トラブルシューティング
+
+#### メモリ不足
+- ワーカー数を減らす: `--workers 2`
+- 処理する数式数を減らす: `--count 100`
+
+#### プロセスエラー
+- ログでエラー詳細を確認
+- 個別の数式で問題を特定
+- ワーカー数を調整して再実行
 
 ## パフォーマンス評価
 
