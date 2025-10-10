@@ -118,7 +118,7 @@ def create_tactic_sequence(steps: List[Dict]) -> List[str]:
     return sequence
 
 
-def transform_to_new_format(steps: List[Dict], start_example_id: int = 1) -> List[Dict]:
+def transform_to_new_format(steps: List[Dict]) -> List[Dict]:
     """Transform flat steps to new structured format."""
     proof_groups = group_steps_into_proofs(steps)
     examples = []
@@ -137,8 +137,6 @@ def transform_to_new_format(steps: List[Dict], start_example_id: int = 1) -> Lis
             # 重複をスキップ（ログなし）
             continue
         seen_example_hashes.add(example_hash_val)
-        
-        example_id = f"ex_{start_example_id + len(examples):04d}"
         
         # Transform steps
         transformed_steps = []
@@ -162,7 +160,6 @@ def transform_to_new_format(steps: List[Dict], start_example_id: int = 1) -> Lis
             }
         
         example = {
-            "example_id": example_id,
             "example_hash": example_hash_val,  # 計算済みのハッシュを使用
             "meta": {
                 "goal_original": original_goal,
@@ -183,12 +180,12 @@ def process_single_formula_worker(args: Tuple) -> Dict[str, Any]:
     """Worker function for processing a single formula in parallel.
     
     Args:
-        args: Tuple containing (formula_data, example_id, max_depth, pyprover_dir, check_step_duplicates)
+        args: Tuple containing (formula_data, max_depth, pyprover_dir, check_step_duplicates)
     
     Returns:
         Dictionary containing the processing result
     """
-    formula_data, example_id, max_depth, pyprover_dir, check_step_duplicates = args
+    formula_data, max_depth, pyprover_dir, check_step_duplicates = args
     
     try:
         # Import pyprover in the worker process
@@ -204,7 +201,7 @@ def process_single_formula_worker(args: Tuple) -> Dict[str, Any]:
         prover = Prover(goal_node)
         
         # Process the formula
-        result = process_formula_data(prover, example_id, max_depth, check_step_duplicates)
+        result = process_formula_data(prover, max_depth, check_step_duplicates)
         result['formula'] = formula_data['goal']
         result['worker_id'] = os.getpid()
         
@@ -212,7 +209,6 @@ def process_single_formula_worker(args: Tuple) -> Dict[str, Any]:
         
     except Exception as e:
         return {
-            'example_id': example_id,
             'formula': formula_data.get('goal', ''),
             'proof_found': False,
             'proof_path': [],
@@ -223,7 +219,7 @@ def process_single_formula_worker(args: Tuple) -> Dict[str, Any]:
         }
 
 
-def process_formula_data(prover, example_id: int, max_depth: int, check_step_duplicates: bool = False) -> Dict[str, Any]:
+def process_formula_data(prover, max_depth: int, check_step_duplicates: bool = False) -> Dict[str, Any]:
     """Process a single formula and collect detailed proof data.
     
     This collects detailed step-by-step data like auto_data_collector.py
@@ -274,7 +270,6 @@ def process_formula_data(prover, example_id: int, max_depth: int, check_step_dup
                 collected_steps.append(record)
         
         return {
-            "example_id": example_id,
             "initial_state": initial_state,
             "proof_found": True,
             "proof_path": proof_path,
@@ -284,7 +279,6 @@ def process_formula_data(prover, example_id: int, max_depth: int, check_step_dup
         }
     
     return {
-        "example_id": example_id,
         "initial_state": initial_state,
         "proof_found": False,
         "proof_path": [],
@@ -375,7 +369,7 @@ class ParallelDataCollector:
                     
                     # Process the batch in parallel
                     worker_args = [
-                        (formula, formula["index"], self.max_depth, pyprover_dir, self.check_step_duplicates) 
+                        (formula, self.max_depth, pyprover_dir, self.check_step_duplicates) 
                         for formula in batch_formulas
                     ]
                     
@@ -399,7 +393,6 @@ class ParallelDataCollector:
                                         
                         except Exception as e:
                             results.append({
-                                'example_id': index,
                                 'formula': '',
                                 'proof_found': False,
                                 'proof_path': [],
@@ -423,12 +416,15 @@ class ParallelDataCollector:
                         if processed_count >= gen_params.count:
                             break
                     
+                    # Update global example counter after processing batch
+                    self.global_example_counter += successful_count
+                    
                     # Break if we've processed enough
                     if processed_count >= gen_params.count:
                         break
         
-        # Sort results by example_id to maintain order
-        results.sort(key=lambda x: x['example_id'])
+        # Sort results by formula to maintain order
+        results.sort(key=lambda x: x.get('formula', ''))
         
         print(f"Completed: {successful_proofs}/{gen_params.count} proofs, {len(self.all_collected_steps)} steps")
         
@@ -484,8 +480,8 @@ class ParallelDataCollector:
         if not self.all_collected_steps:
             return
             
-        # Transform to new format with global example counter
-        transformed_data = transform_to_new_format(self.all_collected_steps, self.global_example_counter + 1)
+        # Transform to new format
+        transformed_data = transform_to_new_format(self.all_collected_steps)
         num_examples = len(transformed_data)
         
         # Update global example counter
