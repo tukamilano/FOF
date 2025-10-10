@@ -74,6 +74,11 @@ def record_hash(premises: List[str], goal: str, tactic: str) -> str:
     return hashlib.md5(record_str.encode()).hexdigest()
 
 
+def example_hash(original_goal: str) -> str:
+    """Example全体の重複チェック用ハッシュを生成（元の目標式のみ）"""
+    return hashlib.md5(original_goal.encode()).hexdigest()
+
+
 def group_steps_into_proofs(steps: List[Dict]) -> List[List[Dict]]:
     """Group individual steps into complete proof sequences."""
     proofs = []
@@ -100,9 +105,12 @@ def create_tactic_sequence(steps: List[Dict]) -> List[str]:
         tactic = step.get('tactic', {})
         main = tactic.get('main', '')
         arg1 = tactic.get('arg1')
+        arg2 = tactic.get('arg2')
         
         if main:
-            if arg1:
+            if arg1 and arg2:
+                sequence.append(f"{main} {arg1} {arg2}")
+            elif arg1:
                 sequence.append(f"{main} {arg1}")
             else:
                 sequence.append(main)
@@ -110,18 +118,27 @@ def create_tactic_sequence(steps: List[Dict]) -> List[str]:
     return sequence
 
 
-def transform_to_new_format(steps: List[Dict]) -> List[Dict]:
+def transform_to_new_format(steps: List[Dict], start_example_id: int = 1) -> List[Dict]:
     """Transform flat steps to new structured format."""
     proof_groups = group_steps_into_proofs(steps)
     examples = []
+    seen_example_hashes = set()  # 重複チェック用
     
     for i, proof_steps in enumerate(proof_groups):
         if not proof_steps:
             continue
             
-        example_id = f"ex_{i+1:04d}"
         original_goal = proof_steps[0]['goal']
         is_proved = proof_steps[-1].get('is_proved', False)
+        
+        # Example重複チェック
+        example_hash_val = example_hash(original_goal)
+        if example_hash_val in seen_example_hashes:
+            # 重複をスキップ（ログなし）
+            continue
+        seen_example_hashes.add(example_hash_val)
+        
+        example_id = f"ex_{start_example_id + len(examples):04d}"
         
         # Transform steps
         transformed_steps = []
@@ -146,6 +163,7 @@ def transform_to_new_format(steps: List[Dict]) -> List[Dict]:
         
         example = {
             "example_id": example_id,
+            "example_hash": example_hash_val,  # 計算済みのハッシュを使用
             "meta": {
                 "goal_original": original_goal,
                 "is_proved": is_proved
@@ -165,12 +183,12 @@ def process_single_formula_worker(args: Tuple) -> Dict[str, Any]:
     """Worker function for processing a single formula in parallel.
     
     Args:
-        args: Tuple containing (formula_data, example_id, max_depth, pyprover_dir)
+        args: Tuple containing (formula_data, example_id, max_depth, pyprover_dir, check_step_duplicates)
     
     Returns:
         Dictionary containing the processing result
     """
-    formula_data, example_id, max_depth, pyprover_dir = args
+    formula_data, example_id, max_depth, pyprover_dir, check_step_duplicates = args
     
     try:
         # Import pyprover in the worker process
@@ -186,7 +204,7 @@ def process_single_formula_worker(args: Tuple) -> Dict[str, Any]:
         prover = Prover(goal_node)
         
         # Process the formula
-        result = process_formula_data(prover, example_id, max_depth)
+        result = process_formula_data(prover, example_id, max_depth, check_step_duplicates)
         result['formula'] = formula_data['goal']
         result['worker_id'] = os.getpid()
         
@@ -205,7 +223,7 @@ def process_single_formula_worker(args: Tuple) -> Dict[str, Any]:
         }
 
 
-def process_formula_data(prover, example_id: int, max_depth: int) -> Dict[str, Any]:
+def process_formula_data(prover, example_id: int, max_depth: int, check_step_duplicates: bool = False) -> Dict[str, Any]:
     """Process a single formula and collect detailed proof data.
     
     This collects detailed step-by-step data like auto_data_collector.py
@@ -229,26 +247,30 @@ def process_formula_data(prover, example_id: int, max_depth: int) -> Dict[str, A
                 
             current_state = encode_prover_state(current_prover)
             
-            # データレコードのハッシュを計算
+            # ステップハッシュを常に計算
             record_hash_val = record_hash(current_state["premises"], current_state["goal"], tactic)
             
-            # 重複チェック
-            if record_hash_val not in record_hashes:
-                record_hashes.add(record_hash_val)
-                
-                # 戦略を適用
-                success = apply_tactic_from_label(current_prover, tactic)
-                
-                # データを記録（このexampleが解けたので、すべてのレコードでis_proved=true）
+            # ステップ重複チェック（オプション）
+            should_add_step = True
+            if check_step_duplicates:
+                if record_hash_val in record_hashes:
+                    should_add_step = False
+                else:
+                    record_hashes.add(record_hash_val)
+            
+            # 戦略を適用
+            success = apply_tactic_from_label(current_prover, tactic)
+            
+            # データを記録（このexampleが解けたので、すべてのレコードでis_proved=true）
+            if should_add_step:
                 record = {
                     "premises": current_state["premises"],
                     "goal": current_state["goal"],
                     "tactic": parse_tactic_string(tactic),  # 構造化されたtactic形式に変換
                     "tactic_apply": success,
                     "is_proved": True,  # このexampleが解けたので常にtrue
-                    "record_hash": record_hash_val
+                    "record_hash": record_hash_val  # 常にハッシュを保存
                 }
-                
                 collected_steps.append(record)
         
         return {
@@ -282,7 +304,9 @@ class ParallelDataCollector:
                  examples_per_file: int = 10000,
                  buffer_size: int = 1000,
                  gcs_bucket: str = None,
-                 gcs_prefix: str = ""):
+                 gcs_prefix: str = "",
+                 check_example_duplicates: bool = True,
+                 check_step_duplicates: bool = False):
         self.dataset_file_path = dataset_file_path
         self.max_depth = max_depth
         # Default to CPU count, but allow override via num_workers parameter
@@ -297,6 +321,10 @@ class ParallelDataCollector:
         self.total_collected_steps = 0  # Track total steps across all files
         self.total_successful_tactics = 0  # Track total successful tactics
         self.total_proved_records = 0  # Track total proved records
+        self.global_example_counter = 0  # Global counter for unique example IDs across all files
+        self.example_hashes = set()  # Example重複排除用（グローバル）
+        self.check_example_duplicates = check_example_duplicates
+        self.check_step_duplicates = check_step_duplicates
         
         # GCS settings
         self.gcs_bucket = gcs_bucket
@@ -304,7 +332,7 @@ class ParallelDataCollector:
         
     def collect_data_parallel_streaming(self, gen, gen_params, pyprover_dir: str) -> List[Dict]:
         """Collect data using streaming approach - generate and process formulas in batches"""
-        print(f"Starting streaming parallel data collection with {self.num_workers} workers...")
+        print(f"Starting parallel data collection with {self.num_workers} workers...")
         
         results = []
         successful_proofs = 0
@@ -318,23 +346,36 @@ class ParallelDataCollector:
                     batch_formulas = []
                     batch_count = min(batch_size, gen_params.count - processed_count)
                     
+                    successful_count = 0
                     for i in range(batch_count):
                         goal_list = filter_formulas(gen, max_len=gen_params.max_len, require_tautology=True, limit=1)
                         if goal_list:
+                            goal = goal_list[0]
+                            # Example重複チェック（メインプロセスで実行）
+                            if self.check_example_duplicates:
+                                example_hash_val = example_hash(goal)
+                                if example_hash_val in self.example_hashes:
+                                    # 重複している場合はスキップ
+                                    processed_count += 1  # スキップした場合もカウントを増加
+                                    continue
+                                self.example_hashes.add(example_hash_val)
+                            
                             batch_formulas.append({
-                                "goal": goal_list[0],
-                                "index": processed_count + i
+                                "goal": goal,
+                                "index": successful_count
                             })
+                            successful_count += 1
                         else:
                             # If no valid formula, create a placeholder
                             batch_formulas.append({
                                 "goal": "",
-                                "index": processed_count + i
+                                "index": successful_count
                             })
+                            successful_count += 1
                     
                     # Process the batch in parallel
                     worker_args = [
-                        (formula, formula["index"], self.max_depth, pyprover_dir) 
+                        (formula, formula["index"], self.max_depth, pyprover_dir, self.check_step_duplicates) 
                         for formula in batch_formulas
                     ]
                     
@@ -389,9 +430,7 @@ class ParallelDataCollector:
         # Sort results by example_id to maintain order
         results.sort(key=lambda x: x['example_id'])
         
-        print(f"\nStreaming parallel processing completed!")
-        print(f"Successful proofs: {successful_proofs}/{gen_params.count}")
-        print(f"Total collected steps: {len(self.all_collected_steps)}")
+        print(f"Completed: {successful_proofs}/{gen_params.count} proofs, {len(self.all_collected_steps)} steps")
         
         return results
     
@@ -418,14 +457,14 @@ class ParallelDataCollector:
                 'gcloud', 'storage', 'cp', local_file_path, gcs_path
             ], capture_output=True, text=True, check=True)
             
-            print(f"✓ Uploaded {gcs_filename} to {gcs_path}")
+            print(f"Uploaded: {gcs_filename}")
             return True
             
         except subprocess.CalledProcessError as e:
-            print(f"✗ Failed to upload {gcs_filename} to GCS: {e.stderr}")
+            print(f"Upload failed: {gcs_filename}")
             return False
         except Exception as e:
-            print(f"✗ Failed to upload {gcs_filename} to GCS: {e}")
+            print(f"Upload failed: {gcs_filename}")
             return False
     
     def clear_generated_data(self):
@@ -434,20 +473,23 @@ class ParallelDataCollector:
         if os.path.exists(generated_dir):
             import shutil
             shutil.rmtree(generated_dir)
-            print(f"✓ Cleared existing {generated_dir}/ directory")
+            print(f"Cleared: {generated_dir}/")
         os.makedirs(generated_dir, exist_ok=True)
         
         if self.gcs_bucket:
-            print(f"✓ Will upload completed files to: gs://{self.gcs_bucket}/{self.gcs_prefix}")
+            print(f"GCS upload: gs://{self.gcs_bucket}/{self.gcs_prefix}")
     
     def save_current_data(self):
         """Save current collected data to local file and optionally upload to GCS"""
         if not self.all_collected_steps:
             return
             
-        # Transform to new format
-        transformed_data = transform_to_new_format(self.all_collected_steps)
+        # Transform to new format with global example counter
+        transformed_data = transform_to_new_format(self.all_collected_steps, self.global_example_counter + 1)
         num_examples = len(transformed_data)
+        
+        # Update global example counter
+        self.global_example_counter += num_examples
         
         # Update global statistics
         self.total_collected_steps += len(self.all_collected_steps)
@@ -486,6 +528,25 @@ class ParallelDataCollector:
         else:
             existing_data = []
         
+        # 既存データとの重複チェック
+        if existing_data and self.check_example_duplicates:
+            existing_hashes = set()
+            for ex in existing_data:
+                if 'example_hash' in ex:
+                    existing_hashes.add(ex['example_hash'])
+            
+            # 重複を除去
+            filtered_data = []
+            for ex in transformed_data:
+                if 'example_hash' in ex and ex['example_hash'] in existing_hashes:
+                    # 重複をスキップ（ログなし）
+                    pass
+                else:
+                    filtered_data.append(ex)
+            
+            transformed_data = filtered_data
+            num_examples = len(transformed_data)
+        
         # Add new data
         existing_data.extend(transformed_data)
         
@@ -497,9 +558,9 @@ class ParallelDataCollector:
         self.examples_in_current_file = len(existing_data)
         
         if len(existing_data) == num_examples:
-            print(f"✓ Created new file with {num_examples} examples: {filename}")
+            print(f"Created: {filename} ({num_examples} examples)")
         else:
-            print(f"✓ Appended {num_examples} examples to {filename} (total: {len(existing_data)})")
+            print(f"Appended: {filename} (+{num_examples}, total: {len(existing_data)})")
         
         return filename
     
@@ -525,6 +586,7 @@ class ParallelDataCollector:
         total_records = self.total_collected_steps + len(self.all_collected_steps)
         successful_tactics = self.total_successful_tactics + sum(1 for record in self.all_collected_steps if record["tactic_apply"])
         proved_records = self.total_proved_records + sum(1 for record in self.all_collected_steps if record["is_proved"])
+        unique_examples = len(self.example_hashes)
         
         # Count unique tactics used (this is approximate since we don't track all tactics)
         unique_tactics = set()
@@ -542,6 +604,7 @@ class ParallelDataCollector:
             "total_records": total_records,
             "successful_tactics": successful_tactics,
             "proved_records": proved_records,
+            "unique_examples": unique_examples,
             "unique_tactics": len(unique_tactics)
         }
 
@@ -612,20 +675,18 @@ def main() -> None:
         examples_per_file=args.examples_per_file,
         buffer_size=args.buffer_size,
         gcs_bucket=args.gcs_bucket,
-        gcs_prefix=args.gcs_prefix
+        gcs_prefix=args.gcs_prefix,
+        check_example_duplicates=True,  # Example重複チェックを有効化
+        check_step_duplicates=False    # ステップ重複チェックを無効化
     )
 
-    print(f"Starting parallel auto_classical() data collection for {gen_params.count} formulas...")
-    print(f"Max depth: {gen_params.max_depth}")
-    print(f"Workers: {data_collector.num_workers}")
-    print(f"Examples per file: {args.examples_per_file}")
-    print(f"Buffer size: {args.buffer_size}")
+    print(f"Starting data collection: {gen_params.count} formulas, {data_collector.num_workers} workers")
     
     base_name = os.path.basename(train_params.dataset_file).replace('.json', '')
     if args.gcs_bucket:
         print(f"Output: gs://{args.gcs_bucket}/{args.gcs_prefix}{base_name}_XXXXX.json")
     else:
-        print(f"Output files: generated_data/{base_name}_XXXXX.json")
+        print(f"Output: generated_data/{base_name}_XXXXX.json")
     
     # Clear existing generated data
     data_collector.clear_generated_data()
@@ -640,23 +701,16 @@ def main() -> None:
         data_collector.save_data()
         stats = data_collector.get_stats()
         
-        print(f"\nData collection completed!")
-        print(f"Total records: {stats['total_records']}")
-        print(f"Successful tactics: {stats['successful_tactics']}")
-        print(f"Proved records: {stats['proved_records']}")
-        print(f"Unique tactics used: {stats['unique_tactics']}")
+        print(f"\nCompleted: {stats['total_records']} records, {stats['unique_examples']} unique examples")
         if args.gcs_bucket:
-            print(f"Data saved to: gs://{args.gcs_bucket}/{args.gcs_prefix}")
+            print(f"Saved to: gs://{args.gcs_bucket}/{args.gcs_prefix}")
         else:
-            print(f"Data saved to: generated_data/ directory")
+            print(f"Saved to: generated_data/")
 
     finally:
         # Calculate total time
         total_time = time.time() - start_time
-        
-        print(f"\nParallel processing completed!")
-        print(f"Total time: {total_time:.2f}s ({total_time/60:.1f} minutes)")
-        print(f"Average time per formula: {total_time/gen_params.count:.2f}s")
+        print(f"Time: {total_time:.1f}s ({total_time/60:.1f}min), {total_time/gen_params.count:.2f}s/formula")
 
 
 if __name__ == "__main__":

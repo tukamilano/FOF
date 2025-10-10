@@ -137,9 +137,12 @@ class StructuredDataCollector:
                 tactic = step.get('tactic', {})
                 main = tactic.get('main', '')
                 arg1 = tactic.get('arg1')
+                arg2 = tactic.get('arg2')
                 
                 if main:
-                    if arg1:
+                    if arg1 and arg2:
+                        tactic_sequence.append(f"{main} {arg1} {arg2}")
+                    elif arg1:
                         tactic_sequence.append(f"{main} {arg1}")
                     else:
                         tactic_sequence.append(main)
