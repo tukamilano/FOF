@@ -554,13 +554,7 @@ class ParallelDataCollector:
         transformed_data = transform_to_new_format(self.all_collected_steps)
         num_examples = len(transformed_data)
         
-        # 平均ステップ数を動的に更新
-        if num_examples > 0:
-            current_avg = len(self.all_collected_steps) / num_examples
-            # 指数移動平均で更新（重み0.3）
-            self.avg_steps_per_example = 0.7 * self.avg_steps_per_example + 0.3 * current_avg
-            # バッファサイズを再計算
-            self.buffer_steps = int(self.buffer_size * self.avg_steps_per_example)
+        # 平均ステップ数は固定値を使用（シンプル化）
         
         # バッファの例数カウンターをリセット
         self.buffer_examples = 0
