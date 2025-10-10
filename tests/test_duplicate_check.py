@@ -48,10 +48,8 @@ def check_duplicates_in_file(file_path: str) -> Dict:
     
     print(f"Processing {len(examples)} examples...")
     
-    # hashの種類別にカウンターを作成
+    # example_hashのみをチェック（state_hashの重複は自然な現象）
     example_hash_counter = Counter()
-    state_hash_counter = Counter()
-    all_hashes = defaultdict(list)  # hash -> [(example_id, file_name), ...]
     
     total_examples = len(examples)
     total_steps = 0
@@ -60,39 +58,25 @@ def check_duplicates_in_file(file_path: str) -> Dict:
     file_hashes = extract_hashes_from_examples(examples)
     total_steps = len(file_hashes)
     
-    # hashをカウント
+    # example_hashのみをカウント
     for example_id, hash_type, hash_value in file_hashes:
         if hash_type == 'example_hash':
             example_hash_counter[hash_value] += 1
-        elif hash_type == 'state_hash':
-            state_hash_counter[hash_value] += 1
-        
-        all_hashes[hash_value].append((example_id, file_path))
     
-    # 重複を検出
+    # 重複を検出（example_hashのみ）
     duplicate_example_hashes = {h: count for h, count in example_hash_counter.items() if count > 1}
-    duplicate_state_hashes = {h: count for h, count in state_hash_counter.items() if count > 1}
-    
-    # 全hashの重複チェック
-    duplicate_all_hashes = {h: locations for h, locations in all_hashes.items() if len(locations) > 1}
     
     return {
         'file_path': file_path,
         'total_examples': total_examples,
         'total_steps': total_steps,
         'unique_example_hashes': len(example_hash_counter),
-        'unique_state_hashes': len(state_hash_counter),
-        'unique_all_hashes': len(all_hashes),
         'duplicate_example_hashes': len(duplicate_example_hashes),
-        'duplicate_state_hashes': len(duplicate_state_hashes),
-        'duplicate_all_hashes': len(duplicate_all_hashes),
-        'duplicate_example_hash_details': duplicate_example_hashes,
-        'duplicate_state_hash_details': duplicate_state_hashes,
-        'duplicate_all_hash_details': duplicate_all_hashes
+        'duplicate_example_hash_details': duplicate_example_hashes
     }
 
 def check_generated_data_duplicates():
-    """generated_data内のすべてのファイルで重複チェックを実行"""
+    """generated_data内のすべてのファイルで重複チェックを実行（ファイル間重複も検出）"""
     # generated_dataディレクトリ内のJSONファイルを取得
     pattern = "generated_data/*.json"
     files = glob.glob(pattern)
@@ -106,10 +90,10 @@ def check_generated_data_duplicates():
     all_results = []
     total_examples = 0
     total_steps = 0
-    total_unique_examples = 0
-    total_unique_states = 0
-    total_duplicate_examples = 0
-    total_duplicate_states = 0
+    
+    # 全ファイルのハッシュを集める（ファイル間重複検出用）
+    global_example_hash_counter = Counter()
+    global_example_hash_files = defaultdict(set)  # ハッシュがどのファイルに含まれているかを追跡
     
     for file_path in sorted(files):
         try:
@@ -118,16 +102,31 @@ def check_generated_data_duplicates():
             
             total_examples += result['total_examples']
             total_steps += result['total_steps']
-            total_unique_examples += result['unique_example_hashes']
-            total_unique_states += result['unique_state_hashes']
-            total_duplicate_examples += result['duplicate_example_hashes']
-            total_duplicate_states += result['duplicate_state_hashes']
             
-            print(f"  {os.path.basename(file_path)}: {result['total_examples']} examples, {result['duplicate_example_hashes']} duplicate examples, {result['duplicate_state_hashes']} duplicate states")
+            # ファイル内のすべてのハッシュをグローバルカウンターに追加
+            with open(file_path, 'r', encoding='utf-8') as f:
+                examples = json.load(f)
+            
+            for example in examples:
+                example_hash_val = example.get('example_hash', '')
+                if not example_hash_val:
+                    original_goal = example.get('meta', {}).get('goal_original', '')
+                    if original_goal:
+                        example_hash_val = example_hash(original_goal)
+                
+                if example_hash_val:
+                    global_example_hash_counter[example_hash_val] += 1
+                    global_example_hash_files[example_hash_val].add(os.path.basename(file_path))
+            
+            print(f"  {os.path.basename(file_path)}: {result['total_examples']} examples, {result['duplicate_example_hashes']} duplicate examples")
             
         except Exception as e:
             print(f"Error processing {file_path}: {e}")
             continue
+    
+    # ファイル間重複を検出
+    cross_file_duplicates = {h: count for h, count in global_example_hash_counter.items() if count > 1}
+    cross_file_duplicate_count = len(cross_file_duplicates)
     
     # 全体の結果を表示
     print(f"\n" + "="*60)
@@ -139,53 +138,22 @@ def check_generated_data_duplicates():
     print(f"総ステップ数: {total_steps:,}")
     
     print(f"\nハッシュ統計:")
-    print(f"  ユニーク example_hash: {total_unique_examples:,}")
-    print(f"  ユニーク state_hash: {total_unique_states:,}")
+    print(f"  ユニーク example_hash: {len(global_example_hash_counter):,}")
     
     print(f"\n重複検出:")
-    print(f"  重複 example_hash: {total_duplicate_examples:,}")
-    print(f"  重複 state_hash: {total_duplicate_states:,}")
+    print(f"  重複 example_hash: {cross_file_duplicate_count:,}")
     
     # 重複の詳細表示
-    if total_duplicate_examples > 0:
+    if cross_file_duplicate_count > 0:
         print(f"\n重複Exampleの詳細:")
-        for result in all_results:
-            if result['duplicate_example_hashes'] > 0:
-                print(f"  {os.path.basename(result['file_path'])}:")
-                for hash_value, count in list(result['duplicate_example_hash_details'].items())[:5]:
-                    print(f"    {hash_value} (出現回数: {count})")
-                if result['duplicate_example_hashes'] > 5:
-                    print(f"    ... 他 {result['duplicate_example_hashes'] - 5} 個")
-    
-    if total_duplicate_states > 0:
-        print(f"\n重複Stateの詳細:")
-        for result in all_results:
-            if result['duplicate_state_hashes'] > 0:
-                print(f"  {os.path.basename(result['file_path'])}:")
-                for hash_value, count in list(result['duplicate_state_hash_details'].items())[:5]:
-                    print(f"    {hash_value} (出現回数: {count})")
-                if result['duplicate_state_hashes'] > 5:
-                    print(f"    ... 他 {result['duplicate_state_hashes'] - 5} 個")
-    
-    if total_duplicate_examples == 0 and total_duplicate_states == 0:
+        for hash_value, count in list(cross_file_duplicates.items())[:10]:
+            files_list = sorted(global_example_hash_files[hash_value])
+            print(f"  {hash_value} (出現回数: {count}, ファイル: {', '.join(files_list)})")
+        if cross_file_duplicate_count > 10:
+            print(f"  ... 他 {cross_file_duplicate_count - 10} 個")
+    else:
         print(f"\n✓ 重複は見つかりませんでした！")
     
-    # 結果をJSONファイルに保存
-    output_file = f"duplicate_check_results_{int(__import__('time').time())}.json"
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump({
-            'summary': {
-                'total_files': len(all_results),
-                'total_examples': total_examples,
-                'total_steps': total_steps,
-                'unique_example_hashes': total_unique_examples,
-                'unique_state_hashes': total_unique_states,
-                'duplicate_example_hashes': total_duplicate_examples,
-                'duplicate_state_hashes': total_duplicate_states
-            },
-            'file_results': all_results
-        }, f, ensure_ascii=False, indent=2)
-    print(f"\n詳細結果を {output_file} に保存しました。")
 
 def check_single_file(file_path: str):
     """単一ファイルの重複チェックを実行"""
@@ -201,11 +169,9 @@ def check_single_file(file_path: str):
         
         print(f"\nハッシュ統計:")
         print(f"  ユニーク example_hash: {result['unique_example_hashes']:,}")
-        print(f"  ユニーク state_hash: {result['unique_state_hashes']:,}")
         
         print(f"\n重複検出:")
         print(f"  重複 example_hash: {result['duplicate_example_hashes']:,}")
-        print(f"  重複 state_hash: {result['duplicate_state_hashes']:,}")
         
         if result['duplicate_example_hashes'] > 0:
             print(f"\n重複Exampleの詳細:")
@@ -213,15 +179,7 @@ def check_single_file(file_path: str):
                 print(f"  {hash_value} (出現回数: {count})")
             if result['duplicate_example_hashes'] > 10:
                 print(f"  ... 他 {result['duplicate_example_hashes'] - 10} 個")
-        
-        if result['duplicate_state_hashes'] > 0:
-            print(f"\n重複Stateの詳細:")
-            for hash_value, count in list(result['duplicate_state_hash_details'].items())[:10]:
-                print(f"  {hash_value} (出現回数: {count})")
-            if result['duplicate_state_hashes'] > 10:
-                print(f"  ... 他 {result['duplicate_state_hashes'] - 10} 個")
-        
-        if result['duplicate_example_hashes'] == 0 and result['duplicate_state_hashes'] == 0:
+        else:
             print(f"\n✓ 重複は見つかりませんでした！")
             
     except Exception as e:
