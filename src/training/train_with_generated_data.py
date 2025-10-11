@@ -25,6 +25,8 @@ sys.path.insert(0, project_root)
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
+from torch.nn.parallel import DataParallel
+from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 
 from src.core.transformer_classifier import (
@@ -166,207 +168,8 @@ def compute_complete_tactic_accuracy(main_pred, arg1_pred, arg2_pred,
 
 
 
-def evaluate_inference_performance(
-    model: TransformerClassifier,
-    tokenizer: CharTokenizer,
-    label_mappings: Dict[str, Any],
-    device: torch.device,
-    max_seq_len: int,
-    num_examples: int = 50,
-    max_steps: int = 5,
-    temperature: float = 1.0
-) -> Tuple[float, float]:
-    """
-    推論性能を評価（inference_hierarchical.pyのロジックを使用）
-    
-    Returns:
-        (success_rate, avg_steps_when_solved)
-    """
-    import sys
-    import glob
-    import json
-    
-    # pyproverをインポート（inference_hierarchical.pyと同じ方法）
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    pyprover_dir = os.path.join(project_root, "pyprover")
-    sys.path.insert(0, pyprover_dir)
-    
-    original_cwd = os.getcwd()
-    os.chdir(pyprover_dir)
-    try:
-        import proposition as proposition_mod
-        import prover as prover_mod
-    finally:
-        os.chdir(original_cwd)
-    
-    PropParseTree = proposition_mod.PropParseTree
-    prop_parser = proposition_mod.parser
-    Prover = prover_mod.Prover
-    
-    # generated_dataから例を取得（inference_hierarchical.pyと同じ方法）
-    generated_data_dir = os.path.join(project_root, "generated_data")
-    json_files = glob.glob(os.path.join(generated_data_dir, "*.json"))
-    
-    all_examples = []
-    for json_file in json_files:
-        with open(json_file, 'r') as f:
-            file_data = json.load(f)
-            all_examples.extend(file_data)
-    
-    # 証明済みの例のみをフィルタリング
-    proved_examples = [ex for ex in all_examples if ex.get('meta', {}).get('is_proved', False)]
-    
-    if not proved_examples:
-        print("No proved examples found for inference evaluation!")
-        return 0.0, 0.0
-    
-    # 推論性能評価用の関数（inference_hierarchical.pyから移植）
-    def sample_from_logits(logits: torch.Tensor, temperature: float = 1.0) -> Tuple[int, float]:
-        if temperature != 1.0:
-            logits = logits / temperature
-        probs = torch.softmax(logits, dim=-1)
-        sampled_id = torch.multinomial(probs, 1).item()
-        confidence = probs[0, sampled_id].item()
-        return sampled_id, confidence
-    
-    def predict_tactic_inference(
-        model: TransformerClassifier,
-        tokenizer: CharTokenizer,
-        premises: List[str],
-        goal: str,
-        label_mappings: Dict[str, Any],
-        device: torch.device,
-        max_seq_len: int = 512,
-        temperature: float = 1.0
-    ) -> Tuple[str, float, float, float]:
-        # 入力をエンコード
-        input_ids, attention_mask, segment_ids = tokenizer.encode(goal, premises, max_seq_len)
-        input_ids = input_ids.unsqueeze(0).to(device)
-        attention_mask = attention_mask.unsqueeze(0).to(device)
-        segment_ids = segment_ids.unsqueeze(0).to(device)
-        
-        with torch.no_grad():
-            main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask, segment_ids)
-            
-            # 確率的サンプリングで予測（禁止タクティクマスクなし）
-            main_pred_id, main_confidence = sample_from_logits(main_logits, temperature)
-            arg1_pred_id, arg1_confidence = sample_from_logits(arg1_logits, temperature)
-            arg2_pred_id, arg2_confidence = sample_from_logits(arg2_logits, temperature)
-            
-            # タクティク文字列を構築
-            main_tactic = label_mappings['id_to_main'][main_pred_id]
-            arg1_value = label_mappings['id_to_arg1'][arg1_pred_id]
-            arg2_value = label_mappings['id_to_arg2'][arg2_pred_id]
-            
-            # 引数が不要なタクティクの場合は引数を無視
-            if main_tactic in ['assumption', 'intro', 'split', 'left', 'right', 'add_dn']:
-                tactic_string = main_tactic
-            elif main_tactic in ['apply', 'destruct']:
-                tactic_string = f"{main_tactic} {arg1_value}"
-            elif main_tactic == 'specialize':
-                tactic_string = f"{main_tactic} {arg1_value} {arg2_value}"
-            else:
-                tactic_string = main_tactic
-            
-            return tactic_string, main_confidence, arg1_confidence, arg2_confidence
-    
-    def apply_tactic_from_label(prover, label) -> bool:
-        """タクティクを適用（inference_hierarchical.pyから移植）"""
-        if isinstance(label, dict):
-            tactic_str = format_tactic_string(label)
-        else:
-            tactic_str = label
-        
-        try:
-            if tactic_str == "assumption":
-                return not prover.assumption()
-            if tactic_str == "intro":
-                return not prover.intro()
-            if tactic_str == "split":
-                return not prover.split()
-            if tactic_str == "left":
-                return not prover.left()
-            if tactic_str == "right":
-                return not prover.right()
-            if tactic_str == "add_dn":
-                return not prover.add_dn()
-            
-            parts = tactic_str.split()
-            if parts[0] == "apply" and len(parts) == 2 and parts[1].isdigit():
-                idx = int(parts[1])
-                if idx >= len(prover.variables):
-                    return False
-                return not prover.apply(idx)
-            if parts[0] == "destruct" and len(parts) == 2 and parts[1].isdigit():
-                idx = int(parts[1])
-                if idx >= len(prover.variables):
-                    return False
-                return not prover.destruct(idx)
-            if parts[0] == "specialize" and len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
-                func_idx = int(parts[1])
-                domain_idx = int(parts[2])
-                if func_idx >= len(prover.variables) or domain_idx >= len(prover.variables):
-                    return False
-                return not prover.specialize(func_idx, domain_idx)
-            return False
-        except Exception as e:
-            # pyproverのエラーをキャッチしてFalseを返す
-            return False
-    
-    # 推論性能評価を実行
-    solved_count = 0
-    solved_steps = []
-    
-    for i in range(min(num_examples, len(proved_examples))):
-        # 例を循環して選択
-        example = proved_examples[i % len(proved_examples)]
-        
-        # 最初のステップから初期状態を取得
-        first_step = example['steps'][0]
-        goal_str = first_step['goal']
-        premises = first_step['premises']
-        
-        # パースしてproverを作成
-        parse_tree = PropParseTree()
-        goal_node = parse_tree.transform(prop_parser.parse(goal_str))
-        prover = Prover(goal_node)
-        
-        # 前提を追加
-        for prem_str in premises:
-            prem_node = parse_tree.transform(prop_parser.parse(prem_str))
-            prover.variables.append(prem_node)
-        
-        # 推論ループ（シンプル化：禁止タクティクシステムなし）
-        step = 0
-        solved = prover.goal is None
-        
-        while not solved and step < max_steps:
-            # 現在の状態を取得
-            current_state = encode_prover_state(prover)
-            current_premises = current_state["premises"]
-            current_goal = current_state["goal"]
-            
-            # タクティクを予測（純粋な言語モデル性能）
-            tactic_str, main_conf, arg1_conf, arg2_conf = predict_tactic_inference(
-                model, tokenizer, current_premises, current_goal, 
-                label_mappings, device, max_seq_len, temperature
-            )
-            
-            # タクティクを適用
-            success = apply_tactic_from_label(prover, tactic_str)
-            
-            step += 1
-            solved = prover.goal is None
-        
-        if solved:
-            solved_count += 1
-            solved_steps.append(step)
-    
-    # 統計を計算
-    success_rate = solved_count / num_examples
-    avg_steps_when_solved = sum(solved_steps) / len(solved_steps) if solved_steps else 0.0
-    
-    return success_rate, avg_steps_when_solved
+# inference_hierarchical.pyから関数をインポート
+from src.training.inference_hierarchical import evaluate_inference_performance
 
 
 def train_epoch(
@@ -376,7 +179,10 @@ def train_epoch(
     criterion: nn.Module,
     device: torch.device,
     arg1_loss_weight: float = 0.8,
-    arg2_loss_weight: float = 0.8
+    arg2_loss_weight: float = 0.8,
+    use_amp: bool = False,
+    scaler: GradScaler = None,
+    gradient_accumulation_steps: int = 1
 ) -> float:
     """1エポックの学習（シンプル化：マスクなし損失計算）"""
     model.train()
@@ -397,84 +203,39 @@ def train_epoch(
         arg1_labels = arg1_labels.to(device)
         arg2_labels = arg2_labels.to(device)
         
-        optimizer.zero_grad()
+        # 勾配累積のため、最初のステップでのみzero_grad
+        if batch_idx % gradient_accumulation_steps == 0:
+            optimizer.zero_grad()
         
-        # モデル推論
-        main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
-        
-        # シンプルな損失計算（無効値-1を除外）
-        main_loss = criterion(main_logits, main_labels)
-        
-        # arg1の損失計算（無効値-1を除外）
-        arg1_valid_mask = arg1_labels != -1
-        arg1_loss = 0.0
-        if arg1_valid_mask.any():
-            arg1_loss = criterion(arg1_logits[arg1_valid_mask], arg1_labels[arg1_valid_mask])
-        
-        # arg2の損失計算（無効値-1を除外）
-        arg2_valid_mask = arg2_labels != -1
-        arg2_loss = 0.0
-        if arg2_valid_mask.any():
-            arg2_loss = criterion(arg2_logits[arg2_valid_mask], arg2_labels[arg2_valid_mask])
-        
-        # 総損失（重み付き）
-        total_loss_batch = main_loss + arg1_loss_weight * arg1_loss + arg2_loss_weight * arg2_loss
-        
-        total_loss_batch.backward()
-        optimizer.step()
-        
-        total_loss += total_loss_batch.item()
-        num_batches += 1
-        
-        # プログレスバーに現在の平均損失を表示
-        avg_loss = total_loss / num_batches
-        pbar.set_postfix({'Loss': f'{avg_loss:.4f}'})
-    
-    return total_loss / num_batches if num_batches > 0 else 0.0
-
-
-def evaluate(
-    model: TransformerClassifier,
-    dataloader: DataLoader,
-    criterion: nn.Module,
-    device: torch.device,
-    tactic_arg_mask: Dict[str, tuple],
-    main_to_id: Dict[str, int],
-    arg1_loss_weight: float = 0.8,
-    arg2_loss_weight: float = 0.8
-) -> Tuple[float, float, float, float, float, int, int]:
-    """評価（シンプル化：マスクなし損失計算、完全タクティク精度付き）"""
-    model.eval()
-    total_loss = 0.0
-    main_correct = 0
-    arg1_correct = 0
-    arg2_correct = 0
-    total_samples = 0
-    total_batches = len(dataloader)
-    
-    # 完全タクティク精度用の累積データ
-    all_main_preds = []
-    all_arg1_preds = []
-    all_arg2_preds = []
-    all_main_labels = []
-    all_arg1_labels = []
-    all_arg2_labels = []
-    
-    print(f"  Evaluating on {total_batches} batches...")
-    
-    # tqdmプログレスバーを使用
-    pbar = tqdm(dataloader, desc="Evaluating", leave=False)
-    
-    with torch.no_grad():
-        for batch_idx, batch in enumerate(pbar):
-            input_ids, attention_mask, main_labels, arg1_labels, arg2_labels = batch
-            input_ids = input_ids.to(device)
-            attention_mask = attention_mask.to(device)
-            main_labels = main_labels.to(device)
-            arg1_labels = arg1_labels.to(device)
-            arg2_labels = arg2_labels.to(device)
+        # 混合精度での推論
+        if use_amp and scaler is not None:
+            with autocast():
+                # モデル推論
+                main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
+                
+                # シンプルな損失計算（無効値-1を除外）
+                main_loss = criterion(main_logits, main_labels)
+                
+                # arg1の損失計算（無効値-1を除外）
+                arg1_valid_mask = arg1_labels != -1
+                arg1_loss = 0.0
+                if arg1_valid_mask.any():
+                    arg1_loss = criterion(arg1_logits[arg1_valid_mask], arg1_labels[arg1_valid_mask])
+                
+                # arg2の損失計算（無効値-1を除外）
+                arg2_valid_mask = arg2_labels != -1
+                arg2_loss = 0.0
+                if arg2_valid_mask.any():
+                    arg2_loss = criterion(arg2_logits[arg2_valid_mask], arg2_labels[arg2_valid_mask])
+                
+                # 総損失（重み付き）
+                total_loss_batch = main_loss + arg1_loss_weight * arg1_loss + arg2_loss_weight * arg2_loss
+                total_loss_batch = total_loss_batch / gradient_accumulation_steps
             
-            # モデル推論
+            # 混合精度での逆伝播
+            scaler.scale(total_loss_batch).backward()
+        else:
+            # 通常の推論
             main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
             
             # シンプルな損失計算（無効値-1を除外）
@@ -494,83 +255,30 @@ def evaluate(
             
             # 総損失（重み付き）
             total_loss_batch = main_loss + arg1_loss_weight * arg1_loss + arg2_loss_weight * arg2_loss
+            total_loss_batch = total_loss_batch / gradient_accumulation_steps
             
-            total_loss += total_loss_batch.item()
-            
-            # 精度計算
-            main_pred = torch.argmax(main_logits, dim=-1)
-            arg1_pred = torch.argmax(arg1_logits, dim=-1)
-            arg2_pred = torch.argmax(arg2_logits, dim=-1)
-            
-            main_correct += (main_pred == main_labels).sum().item()
-            
-            # arg1の精度計算（無効値-1を除外）
-            arg1_valid_mask = arg1_labels != -1
-            if arg1_valid_mask.any():
-                arg1_correct += (arg1_pred[arg1_valid_mask] == arg1_labels[arg1_valid_mask]).sum().item()
-            
-            # arg2の精度計算（無効値-1を除外）
-            arg2_valid_mask = arg2_labels != -1
-            if arg2_valid_mask.any():
-                arg2_correct += (arg2_pred[arg2_valid_mask] == arg2_labels[arg2_valid_mask]).sum().item()
-            
-            total_samples += main_labels.size(0)
-            
-            # 完全タクティク精度計算用にデータを蓄積
-            all_main_preds.append(main_pred.cpu())
-            all_arg1_preds.append(arg1_pred.cpu())
-            all_arg2_preds.append(arg2_pred.cpu())
-            all_main_labels.append(main_labels.cpu())
-            all_arg1_labels.append(arg1_labels.cpu())
-            all_arg2_labels.append(arg2_labels.cpu())
-            
-            # プログレスバーに現在の精度を表示
-            current_main_acc = main_correct / total_samples if total_samples > 0 else 0.0
-            
-            # 現在のバッチでの有効サンプル数を計算
-            current_arg1_valid = (arg1_labels != -1).sum().item()
-            current_arg2_valid = (arg2_labels != -1).sum().item()
-            
-            current_arg1_acc = arg1_correct / current_arg1_valid if current_arg1_valid > 0 else 0.0
-            current_arg2_acc = arg2_correct / current_arg2_valid if current_arg2_valid > 0 else 0.0
-            
-            pbar.set_postfix({
-                'Main': f'{current_main_acc:.3f}',
-                'Arg1': f'{current_arg1_acc:.3f}',
-                'Arg2': f'{current_arg2_acc:.3f}'
-            })
-    
-    avg_loss = total_loss / len(dataloader)
-    main_acc = main_correct / total_samples
-    
-    # arg1とarg2の有効サンプル数を計算
-    all_arg1_labels_tensor = torch.cat(all_arg1_labels, dim=0) if all_arg1_labels else torch.tensor([])
-    all_arg2_labels_tensor = torch.cat(all_arg2_labels, dim=0) if all_arg2_labels else torch.tensor([])
-    
-    arg1_valid_count = (all_arg1_labels_tensor != -1).sum().item() if len(all_arg1_labels_tensor) > 0 else 0
-    arg2_valid_count = (all_arg2_labels_tensor != -1).sum().item() if len(all_arg2_labels_tensor) > 0 else 0
-    
-    arg1_acc = arg1_correct / arg1_valid_count if arg1_valid_count > 0 else 0.0
-    arg2_acc = arg2_correct / arg2_valid_count if arg2_valid_count > 0 else 0.0
-    
-    # 完全タクティク精度を計算
-    if all_main_preds:
-        all_main_preds = torch.cat(all_main_preds, dim=0)
-        all_arg1_preds = torch.cat(all_arg1_preds, dim=0)
-        all_arg2_preds = torch.cat(all_arg2_preds, dim=0)
-        all_main_labels = torch.cat(all_main_labels, dim=0)
-        all_arg1_labels = torch.cat(all_arg1_labels, dim=0)
-        all_arg2_labels = torch.cat(all_arg2_labels, dim=0)
+            # 通常の逆伝播
+            total_loss_batch.backward()
         
-        complete_tactic_acc = compute_complete_tactic_accuracy(
-            all_main_preds, all_arg1_preds, all_arg2_preds,
-            all_main_labels, all_arg1_labels, all_arg2_labels,
-            tactic_arg_mask, main_to_id
-        )
-    else:
-        complete_tactic_acc = 0.0
+        # 勾配累積のステップが完了したらオプティマイザーを更新
+        if (batch_idx + 1) % gradient_accumulation_steps == 0:
+            if use_amp and scaler is not None:
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                optimizer.step()
+        
+        total_loss += total_loss_batch.item() * gradient_accumulation_steps
+        num_batches += 1
+        
+        # プログレスバーに現在の平均損失を表示
+        avg_loss = total_loss / num_batches
+        pbar.set_postfix({'Loss': f'{avg_loss:.4f}'})
     
-    return avg_loss, main_acc, arg1_acc, arg2_acc, complete_tactic_acc, arg1_valid_count, arg2_valid_count
+    return total_loss / num_batches if num_batches > 0 else 0.0
+
+
+# evaluate function removed - using inference performance evaluation instead
 
 
 def main():
@@ -578,13 +286,12 @@ def main():
     parser.add_argument("--data_dir", type=str, default="generated_data", help="generated data directory")
     parser.add_argument("--batch_size", type=int, default=32, help="batch size")
     parser.add_argument("--learning_rate", type=float, default=3e-4, help="learning rate")
-    parser.add_argument("--num_epochs", type=int, default=10, help="number of epochs")
+    parser.add_argument("--num_epochs", type=int, default=None, help="number of epochs (default: data-point based training)")
     parser.add_argument("--device", type=str, default="auto", help="device")
     parser.add_argument("--save_path", type=str, default="models/hierarchical_model_generated.pth", help="model save path")
-    parser.add_argument("--eval_split", type=float, default=0.2, help="evaluation split ratio")
+    # Removed eval_split argument - using all data for training
     parser.add_argument("--max_seq_len", type=int, default=512, help="maximum sequence length")
-    parser.add_argument("--remove_duplicates", action="store_true", default=True, help="remove duplicate examples based on state_hash (default: True)")
-    parser.add_argument("--keep_duplicates", action="store_true", help="keep duplicate examples (overrides --remove_duplicates)")
+    parser.add_argument("--keep_duplicates", action="store_true", help="keep duplicate examples (default: remove duplicates)")
     parser.add_argument("--use_wandb", action="store_true", help="use wandb for logging")
     parser.add_argument("--wandb_project", type=str, default="fof-training", help="wandb project name")
     parser.add_argument("--wandb_run_name", type=str, default=None, help="wandb run name")
@@ -593,10 +300,30 @@ def main():
     parser.add_argument("--inference_eval_examples", type=int, default=50, help="number of examples for inference evaluation")
     parser.add_argument("--inference_max_steps", type=int, default=30, help="max steps for inference evaluation")
     parser.add_argument("--inference_temperature", type=float, default=1.0, help="temperature for inference evaluation")
-    parser.add_argument("--validation_frequency", type=int, default=1000, help="run validation every n data points (default: 1000)")
+    parser.add_argument("--validation_frequency", type=int, default=10000, help="run validation every n data points (default: 10000)")
     parser.add_argument("--max_data_points", type=int, default=None, help="maximum number of data points to train on (default: all)")
+    parser.add_argument("--skip_inference_eval", action="store_true", help="skip inference performance evaluation (faster training)")
+    parser.add_argument("--max_eval_examples", type=int, default=50, help="maximum number of examples for evaluation (default: 50)")
+    parser.add_argument("--random_seed", type=int, default=42, help="random seed for reproducibility (default: 42)")
+    
+    # 並列化関連の引数
+    parser.add_argument("--num_workers", type=int, default=4, help="number of data loading workers (default: 4)")
+    parser.add_argument("--use_data_parallel", action="store_true", help="use DataParallel for multi-GPU training")
+    parser.add_argument("--gpu_ids", type=str, default=None, help="comma-separated GPU IDs to use (e.g., '0,1,2') or 'all' for all available GPUs")
+    parser.add_argument("--use_amp", action="store_true", help="use Automatic Mixed Precision for faster training")
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="number of gradient accumulation steps (default: 1)")
     
     args = parser.parse_args()
+    
+    # 再現性のためのシード設定
+    import random
+    import numpy as np
+    random.seed(args.random_seed)
+    np.random.seed(args.random_seed)
+    torch.manual_seed(args.random_seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(args.random_seed)
+        torch.cuda.manual_seed_all(args.random_seed)
     
     # パラメータを初期化
     model_params = get_model_params()
@@ -608,16 +335,35 @@ def main():
     training_params.arg1_loss_weight = args.arg1_loss_weight
     training_params.arg2_loss_weight = args.arg2_loss_weight
     
+    # GPU IDの処理
+    if args.gpu_ids is not None:
+        if args.gpu_ids == "all":
+            gpu_ids = list(range(torch.cuda.device_count()))
+        else:
+            gpu_ids = [int(x.strip()) for x in args.gpu_ids.split(",")]
+        print(f"Using GPU IDs: {gpu_ids}")
+    else:
+        gpu_ids = None
+    
     # デバイス設定
     if args.device == "auto":
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         device = torch.device(args.device)
-    
     print(f"Using device: {device}")
     
-    # 重複削除設定
-    remove_duplicates = args.remove_duplicates and not args.keep_duplicates
+    # 混合精度のスケーラー初期化
+    scaler = None
+    if args.use_amp and device.type == 'cuda':
+        scaler = GradScaler()
+        print("Using Automatic Mixed Precision (AMP)")
+    
+    # 勾配累積の確認
+    if args.gradient_accumulation_steps > 1:
+        print(f"Using gradient accumulation with {args.gradient_accumulation_steps} steps")
+    
+    # 重複削除設定（デフォルトで削除、--keep_duplicatesで保持）
+    remove_duplicates = not args.keep_duplicates
     
     # wandb初期化
     if args.use_wandb and WANDB_AVAILABLE:
@@ -632,7 +378,7 @@ def main():
                 "num_epochs": args.num_epochs,
                 "max_seq_len": args.max_seq_len,
                 "remove_duplicates": remove_duplicates,
-                "eval_split": args.eval_split,
+                "eval_split": "all_data_for_training",
                 "device": str(device)
             }
         )
@@ -684,29 +430,21 @@ def main():
         print("No training data found. Please check the generated_data directory.")
         return
     
-    # 訓練・評価分割
+    # 全データを訓練に使用（validationは推論性能評価で行う）
     total_size = len(dataset)
-    eval_size = int(total_size * args.eval_split)
-    train_size = total_size - eval_size
+    train_dataset = dataset
     
-    train_dataset, eval_dataset = torch.utils.data.random_split(
-        dataset, [train_size, eval_size]
-    )
+    print(f"Train examples: {len(train_dataset)} (using all data)")
+    print(f"Validation: Using inference performance evaluation with random generation")
+    print(f"Random seed used: {args.random_seed}")
     
-    print(f"Train examples: {len(train_dataset)}")
-    print(f"Eval examples: {len(eval_dataset)}")
-    
-    # データローダーを作成
+    # データローダーを作成（訓練用のみ）
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        collate_fn=hierarchical_collate
-    )
-    eval_loader = DataLoader(
-        eval_dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
+        num_workers=args.num_workers,
+        pin_memory=True if device.type == 'cuda' else False,
         collate_fn=hierarchical_collate
     )
     
@@ -730,6 +468,23 @@ def main():
     
     model.to(device)
     
+    # モデルの並列化
+    if args.use_data_parallel and torch.cuda.device_count() > 1:
+        if gpu_ids is not None:
+            # 指定されたGPU IDを使用
+            if len(gpu_ids) > 1:
+                model = DataParallel(model, device_ids=gpu_ids)
+                print(f"Using DataParallel with GPU IDs: {gpu_ids}")
+            else:
+                print(f"Only one GPU specified ({gpu_ids[0]}), using single GPU")
+        else:
+            # すべてのGPUを使用（警告付き）
+            print(f"⚠️  WARNING: Using all available GPUs ({torch.cuda.device_count()})")
+            print(f"⚠️  Consider using --gpu_ids to specify specific GPUs")
+            print(f"⚠️  This may conflict with other processes")
+            model = DataParallel(model)
+            print(f"Using DataParallel with all available GPUs: {torch.cuda.device_count()}")
+    
     # オプティマイザーと損失関数
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
     criterion = nn.CrossEntropyLoss()
@@ -742,18 +497,27 @@ def main():
     # 学習ループ
     best_eval_loss = float('inf')
     
-    # データポイントベースの学習設定
-    total_data_points = len(train_loader.dataset)
-    if args.max_data_points is not None:
-        total_data_points = min(total_data_points, args.max_data_points)
-    
-    print(f"\n🚀 Starting training for {total_data_points} data points...")
-    print(f"📊 Training data: {len(train_loader.dataset)} examples")
-    print(f"📊 Evaluation data: {len(eval_loader.dataset)} examples")
-    print(f"📊 Batch size: {args.batch_size}")
-    print(f"📊 Learning rate: {args.learning_rate}")
-    print(f"📊 Validation frequency: every {args.validation_frequency} data points")
-    print("=" * 60)
+    # 学習モードの設定
+    if args.num_epochs is not None:
+        print(f"\n🚀 Starting epoch-based training for {args.num_epochs} epochs...")
+        print(f"📊 Training data: {len(train_loader.dataset)} examples")
+        print(f"📊 Validation: Using inference performance evaluation")
+        print(f"📊 Batch size: {args.batch_size}")
+        print(f"📊 Learning rate: {args.learning_rate}")
+        print("=" * 60)
+    else:
+        # データポイントベースの学習設定
+        total_data_points = len(train_loader.dataset)
+        if args.max_data_points is not None:
+            total_data_points = min(total_data_points, args.max_data_points)
+        
+        print(f"\n🚀 Starting data-point based training for {total_data_points} data points...")
+        print(f"📊 Training data: {len(train_loader.dataset)} examples")
+        print(f"📊 Validation: Using inference performance evaluation")
+        print(f"📊 Batch size: {args.batch_size}")
+        print(f"📊 Learning rate: {args.learning_rate}")
+        print(f"📊 Validation frequency: every {args.validation_frequency} data points")
+        print("=" * 60)
     
     # タクティク引数マスクを取得
     tactic_arg_mask = hierarchical_labels.TACTIC_ARG_MASK
@@ -768,165 +532,400 @@ def main():
         'id_to_arg2': id_to_arg2,
     }
     
-    # 学習開始前の推論性能を評価
-    print("\n🔍 Evaluating initial inference performance...")
-    initial_success_rate, initial_avg_steps = evaluate_inference_performance(
-        model, tokenizer, label_mappings, device, args.max_seq_len,
-        num_examples=args.inference_eval_examples, 
-        max_steps=args.inference_max_steps, 
-        temperature=args.inference_temperature
-    )
-    print(f"  Initial success rate: {initial_success_rate:.3f}")
-    print(f"  Initial avg steps (when solved): {initial_avg_steps:.2f}")
+    # 学習開始前の推論性能を評価（スキップ可能）
+    if not args.skip_inference_eval:
+        print("\n🔍 Evaluating initial inference performance...")
+        # 並列化されたモデルの場合は元のモデルを取得
+        eval_model = model.module if hasattr(model, 'module') else model
+        initial_success_rate, initial_avg_steps = evaluate_inference_performance(
+            eval_model, tokenizer, label_mappings, device, args.max_seq_len,
+            num_examples=args.inference_eval_examples,
+            max_steps=args.inference_max_steps,
+            temperature=args.inference_temperature
+        )
+        print(f"  Initial success rate: {initial_success_rate:.3f}")
+        print(f"  Initial avg steps (when solved): {initial_avg_steps:.2f}")
+        
+        # 初期性能をwandbにログ
+        if args.use_wandb and WANDB_AVAILABLE:
+            wandb.log({
+                "inference/success_rate": initial_success_rate,
+                "inference/avg_steps": initial_avg_steps
+            })
+    else:
+        print("\n⏭️  Skipping initial inference performance evaluation")
+        initial_success_rate, initial_avg_steps = 0.0, 0.0
     
-    # 初期性能をwandbにログ
-    if args.use_wandb and WANDB_AVAILABLE:
-        wandb.log({
-            "inference/success_rate": initial_success_rate,
-            "inference/avg_steps": initial_avg_steps,
-            "epoch": 0  # 初期状態をepoch 0として記録
-        })
-    
-    # データポイントベースの学習ループ
-    model.train()
-    total_loss = 0.0
-    num_batches = 0
-    data_points_processed = 0
-    validation_count = 0
-    
-    # 無限ループでデータローダーを回す
-    train_loader_iter = iter(train_loader)
-    
-    while data_points_processed < total_data_points:
-        try:
-            # 次のバッチを取得
-            batch = next(train_loader_iter)
-        except StopIteration:
-            # データローダーが終了したら再開
+    if args.num_epochs is not None:
+        # エポックベースの学習ループ（データポイントベースのvalidation付き）
+        model.train()
+        total_loss = 0.0
+        num_batches = 0
+        data_points_processed = 0
+        validation_count = 0
+        
+        for epoch in range(args.num_epochs):
+            print(f"\n🚀 Starting epoch {epoch+1}/{args.num_epochs}")
+            
+            # エポック内でデータポイントベースのvalidationを実行
+            pbar = tqdm(total=len(train_loader.dataset), desc=f"Epoch {epoch+1}", unit="samples")
             train_loader_iter = iter(train_loader)
-            batch = next(train_loader_iter)
-        
-        input_ids, attention_mask, main_labels, arg1_labels, arg2_labels = batch
-        input_ids = input_ids.to(device)
-        attention_mask = attention_mask.to(device)
-        main_labels = main_labels.to(device)
-        arg1_labels = arg1_labels.to(device)
-        arg2_labels = arg2_labels.to(device)
-        
-        optimizer.zero_grad()
-        
-        # モデル推論
-        main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
-        
-        # シンプルな損失計算（無効値-1を除外）
-        main_loss = criterion(main_logits, main_labels)
-        
-        # arg1の損失計算（無効値-1を除外）
-        arg1_valid_mask = arg1_labels != -1
-        arg1_loss = 0.0
-        if arg1_valid_mask.any():
-            arg1_loss = criterion(arg1_logits[arg1_valid_mask], arg1_labels[arg1_valid_mask])
-        
-        # arg2の損失計算（無効値-1を除外）
-        arg2_valid_mask = arg2_labels != -1
-        arg2_loss = 0.0
-        if arg2_valid_mask.any():
-            arg2_loss = criterion(arg2_logits[arg2_valid_mask], arg2_labels[arg2_valid_mask])
-        
-        # 総損失（重み付き）
-        total_loss_batch = main_loss + training_params.arg1_loss_weight * arg1_loss + training_params.arg2_loss_weight * arg2_loss
-        
-        total_loss_batch.backward()
-        optimizer.step()
-        
-        total_loss += total_loss_batch.item()
-        num_batches += 1
-        data_points_processed += input_ids.size(0)
-        
-        # バッチごとの進捗表示
-        if num_batches % 10 == 0:
-            avg_loss = total_loss / num_batches
-            print(f"  Processed {data_points_processed}/{total_data_points} data points, avg loss: {avg_loss:.4f}")
-        
-        # 指定されたデータポイント数ごとにvalidationを実行
-        if data_points_processed >= (validation_count + 1) * args.validation_frequency:
-            validation_count += 1
             
-            # 現在の平均損失を計算
-            current_avg_loss = total_loss / num_batches
+            while data_points_processed < len(train_loader.dataset):
+                try:
+                    batch = next(train_loader_iter)
+                except StopIteration:
+                    break
+                
+                input_ids, attention_mask, main_labels, arg1_labels, arg2_labels = batch
+                input_ids = input_ids.to(device)
+                attention_mask = attention_mask.to(device)
+                main_labels = main_labels.to(device)
+                arg1_labels = arg1_labels.to(device)
+                arg2_labels = arg2_labels.to(device)
+                
+                optimizer.zero_grad()
+                
+                # 混合精度での推論
+                if args.use_amp and scaler is not None:
+                    with autocast():
+                        # モデル推論
+                        main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
+                        
+                        # 損失計算
+                        main_loss = criterion(main_logits, main_labels)
+                        
+                        arg1_valid_mask = arg1_labels != -1
+                        arg1_loss = 0.0
+                        if arg1_valid_mask.any():
+                            arg1_loss = criterion(arg1_logits[arg1_valid_mask], arg1_labels[arg1_valid_mask])
+                        
+                        arg2_valid_mask = arg2_labels != -1
+                        arg2_loss = 0.0
+                        if arg2_valid_mask.any():
+                            arg2_loss = criterion(arg2_logits[arg2_valid_mask], arg2_labels[arg2_valid_mask])
+                        
+                        total_loss_batch = main_loss + training_params.arg1_loss_weight * arg1_loss + training_params.arg2_loss_weight * arg2_loss
+                        total_loss_batch = total_loss_batch / args.gradient_accumulation_steps
+                    
+                    # 混合精度での逆伝播
+                    scaler.scale(total_loss_batch).backward()
+                else:
+                    # 通常の推論
+                    main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
+                    
+                    # 損失計算
+                    main_loss = criterion(main_logits, main_labels)
+                    
+                    arg1_valid_mask = arg1_labels != -1
+                    arg1_loss = 0.0
+                    if arg1_valid_mask.any():
+                        arg1_loss = criterion(arg1_logits[arg1_valid_mask], arg1_labels[arg1_valid_mask])
+                    
+                    arg2_valid_mask = arg2_labels != -1
+                    arg2_loss = 0.0
+                    if arg2_valid_mask.any():
+                        arg2_loss = criterion(arg2_logits[arg2_valid_mask], arg2_labels[arg2_valid_mask])
+                    
+                    total_loss_batch = main_loss + training_params.arg1_loss_weight * arg1_loss + training_params.arg2_loss_weight * arg2_loss
+                    total_loss_batch = total_loss_batch / args.gradient_accumulation_steps
+                    
+                    # 通常の逆伝播
+                    total_loss_batch.backward()
+                
+                total_loss += total_loss_batch.item()
+                num_batches += 1
+                batch_size = input_ids.size(0)
+                data_points_processed += batch_size
+                
+                # 勾配累積のステップが完了したらオプティマイザーを更新
+                if data_points_processed % (args.gradient_accumulation_steps * args.batch_size) == 0:
+                    if args.use_amp and scaler is not None:
+                        scaler.step(optimizer)
+                        scaler.update()
+                    else:
+                        optimizer.step()
+                    optimizer.zero_grad()
+                
+                # プログレスバーを更新
+                avg_loss = total_loss / num_batches
+                pbar.update(batch_size)
+                pbar.set_postfix({'Loss': f'{avg_loss:.4f}'})
+                
+                # 指定されたデータポイント数ごとにvalidationを実行
+                next_validation_threshold = (validation_count + 1) * args.validation_frequency
+                if data_points_processed >= next_validation_threshold:
+                    validation_count += 1
+                    
+                    # プログレスバーを一時停止
+                    pbar.set_description(f"Epoch {epoch+1} - Validating")
+                    pbar.refresh()
+                    
+                    # 現在の平均損失を計算
+                    current_avg_loss = total_loss / num_batches
+                    
+                    print(f"\n📈 Validation {validation_count} (after {data_points_processed} data points)")
+                    print(f"  🔥 Current Train Loss: {current_avg_loss:.4f}")
+                    
+                    # 推論性能を評価（従来のvalidationの代わり）
+                    print(f"  📊 Skipping traditional validation - using inference performance evaluation")
+                    print("-" * 60)
+                    
+                # 推論性能を評価
+                print(f"\n🔍 Evaluating inference performance...")
+                # 並列化されたモデルの場合は元のモデルを取得
+                eval_model = model.module if hasattr(model, 'module') else model
+                inference_success_rate, inference_avg_steps = evaluate_inference_performance(
+                    eval_model, tokenizer, label_mappings, device, args.max_seq_len,
+                    num_examples=args.inference_eval_examples, 
+                    max_steps=args.inference_max_steps, 
+                    temperature=args.inference_temperature
+                )
+                print(f"  Inference success rate: {inference_success_rate:.3f}")
+                print(f"  Inference avg steps (when solved): {inference_avg_steps:.2f}")
+                
+                # wandbにログ
+                if args.use_wandb and WANDB_AVAILABLE:
+                    wandb.log({
+                        "train_loss": current_avg_loss,
+                        "inference/success_rate": inference_success_rate,
+                        "inference/avg_steps": inference_avg_steps,
+                        "learning_rate": optimizer.param_groups[0]['lr']
+                    })
+                
+                # ベストモデルを保存（推論性能ベース）
+                if inference_success_rate > best_eval_loss:  # 推論成功率をベスト指標として使用
+                    best_eval_loss = inference_success_rate
+                    # 並列化されたモデルの場合は元のモデルを取得
+                    model_to_save = model.module if hasattr(model, 'module') else model
+                    torch.save({
+                        'model_state_dict': model_to_save.state_dict(),
+                        'main_to_id': main_to_id,
+                        'arg1_to_id': arg1_to_id,
+                        'arg2_to_id': arg2_to_id,
+                        'id_to_main': id_to_main,
+                        'id_to_arg1': id_to_arg1,
+                        'id_to_arg2': id_to_arg2,
+                        'model_params': model_params.__dict__,
+                        'vocab_size': tokenizer.vocab_size,
+                        'pad_id': tokenizer.pad_id,
+                        'max_seq_len': args.max_seq_len,
+                    }, args.save_path)
+                    print(f"Best model saved to {args.save_path} (inference success rate: {inference_success_rate:.3f})")
+                    
+                    # ベストモデル保存をwandbにログ
+                    if args.use_wandb and WANDB_AVAILABLE:
+                        wandb.log({"best_inference_success_rate": inference_success_rate})
+                    
+                    # モデルを訓練モードに戻す
+                    model.train()
+                    
+                    # プログレスバーを再開
+                    pbar.set_description(f"Epoch {epoch+1}")
+                    pbar.refresh()
             
-            print(f"\n📈 Validation {validation_count} (after {data_points_processed} data points)")
-            print(f"  🔥 Current Train Loss: {current_avg_loss:.4f}")
+            # プログレスバーを閉じる
+            pbar.close()
             
-            # 評価を実行
-            eval_loss, main_acc, arg1_acc, arg2_acc, complete_tactic_acc, arg1_valid_count, arg2_valid_count = evaluate(
-                model, eval_loader, criterion, device,
-                tactic_arg_mask, main_to_id,
-                training_params.arg1_loss_weight, training_params.arg2_loss_weight
-            )
+            # エポック終了時の最終評価
+            train_loss = total_loss / num_batches if num_batches > 0 else 0.0
             
-            print(f"  📊 Eval Loss: {eval_loss:.4f}")
-            print(f"  🎯 Main Acc: {main_acc:.4f}")
-            print(f"  🎯 Arg1 Acc: {arg1_acc:.4f} (valid samples: {arg1_valid_count})")
-            print(f"  🎯 Arg2 Acc: {arg2_acc:.4f} (valid samples: {arg2_valid_count})")
-            print(f"  ✅ Complete Tactic Acc: {complete_tactic_acc:.4f}")
+            print(f"\n📈 Epoch {epoch+1}/{args.num_epochs} completed")
+            print(f"  🔥 Train Loss: {train_loss:.4f}")
+            print(f"  📊 Data points processed: {data_points_processed}")
+            print(f"  📊 Validations performed: {validation_count}")
             print("-" * 60)
             
-            # 推論性能を評価
-            print(f"\n🔍 Evaluating inference performance...")
-            inference_success_rate, inference_avg_steps = evaluate_inference_performance(
-                model, tokenizer, label_mappings, device, args.max_seq_len,
-                num_examples=args.inference_eval_examples, 
-                max_steps=args.inference_max_steps, 
-                temperature=args.inference_temperature
-            )
-            print(f"  Inference success rate: {inference_success_rate:.3f}")
-            print(f"  Inference avg steps (when solved): {inference_avg_steps:.2f}")
+            # データポイントカウンターをリセット（次のエポック用）
+            data_points_processed = 0
+            validation_count = 0
+            total_loss = 0.0
+            num_batches = 0
+    else:
+        # データポイントベースの学習ループ
+        model.train()
+        total_loss = 0.0
+        num_batches = 0
+        data_points_processed = 0
+        validation_count = 0
+        
+        # tqdmプログレスバーを作成
+        pbar = tqdm(total=total_data_points, desc="Training", unit="samples")
+        
+        # 無限ループでデータローダーを回す
+        train_loader_iter = iter(train_loader)
+        
+        while data_points_processed < total_data_points:
+            try:
+                # 次のバッチを取得
+                batch = next(train_loader_iter)
+            except StopIteration:
+                # データローダーが終了したら再開
+                train_loader_iter = iter(train_loader)
+                batch = next(train_loader_iter)
             
-            # wandbにログ
-            if args.use_wandb and WANDB_AVAILABLE:
-                wandb.log({
-                    "data_points_processed": data_points_processed,
-                    "validation_count": validation_count,
-                    "train_loss": current_avg_loss,
-                    "eval_loss": eval_loss,
-                    "main_accuracy": main_acc,
-                    "arg1_accuracy": arg1_acc,
-                    "arg2_accuracy": arg2_acc,
-                    "complete_tactic_accuracy": complete_tactic_acc,
-                    "inference/success_rate": inference_success_rate,
-                    "inference/avg_steps": inference_avg_steps,
-                    "learning_rate": optimizer.param_groups[0]['lr']
-                })
+            input_ids, attention_mask, main_labels, arg1_labels, arg2_labels = batch
+            input_ids = input_ids.to(device)
+            attention_mask = attention_mask.to(device)
+            main_labels = main_labels.to(device)
+            arg1_labels = arg1_labels.to(device)
+            arg2_labels = arg2_labels.to(device)
             
-            # ベストモデルを保存
-            if eval_loss < best_eval_loss:
-                best_eval_loss = eval_loss
-                torch.save({
-                    'model_state_dict': model.state_dict(),
-                    'main_to_id': main_to_id,
-                    'arg1_to_id': arg1_to_id,
-                    'arg2_to_id': arg2_to_id,
-                    'id_to_main': id_to_main,
-                    'id_to_arg1': id_to_arg1,
-                    'id_to_arg2': id_to_arg2,
-                    'model_params': model_params.__dict__,
-                    'vocab_size': tokenizer.vocab_size,
-                    'pad_id': tokenizer.pad_id,
-                    'max_seq_len': args.max_seq_len,
-                }, args.save_path)
-                print(f"Best model saved to {args.save_path}")
+            optimizer.zero_grad()
+            
+            # 混合精度での推論
+            if args.use_amp and scaler is not None:
+                with autocast():
+                    # モデル推論
+                    main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
+                    
+                    # シンプルな損失計算（無効値-1を除外）
+                    main_loss = criterion(main_logits, main_labels)
+                    
+                    # arg1の損失計算（無効値-1を除外）
+                    arg1_valid_mask = arg1_labels != -1
+                    arg1_loss = 0.0
+                    if arg1_valid_mask.any():
+                        arg1_loss = criterion(arg1_logits[arg1_valid_mask], arg1_labels[arg1_valid_mask])
+                    
+                    # arg2の損失計算（無効値-1を除外）
+                    arg2_valid_mask = arg2_labels != -1
+                    arg2_loss = 0.0
+                    if arg2_valid_mask.any():
+                        arg2_loss = criterion(arg2_logits[arg2_valid_mask], arg2_labels[arg2_valid_mask])
+                    
+                    # 総損失（重み付き）
+                    total_loss_batch = main_loss + training_params.arg1_loss_weight * arg1_loss + training_params.arg2_loss_weight * arg2_loss
+                    total_loss_batch = total_loss_batch / args.gradient_accumulation_steps
                 
-                # ベストモデル保存をwandbにログ
-                if args.use_wandb and WANDB_AVAILABLE:
-                    wandb.log({"best_eval_loss": eval_loss})
+                # 混合精度での逆伝播
+                scaler.scale(total_loss_batch).backward()
+            else:
+                # 通常の推論
+                main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
+                
+                # シンプルな損失計算（無効値-1を除外）
+                main_loss = criterion(main_logits, main_labels)
+                
+                # arg1の損失計算（無効値-1を除外）
+                arg1_valid_mask = arg1_labels != -1
+                arg1_loss = 0.0
+                if arg1_valid_mask.any():
+                    arg1_loss = criterion(arg1_logits[arg1_valid_mask], arg1_labels[arg1_valid_mask])
+                
+                # arg2の損失計算（無効値-1を除外）
+                arg2_valid_mask = arg2_labels != -1
+                arg2_loss = 0.0
+                if arg2_valid_mask.any():
+                    arg2_loss = criterion(arg2_logits[arg2_valid_mask], arg2_labels[arg2_valid_mask])
+                
+                # 総損失（重み付き）
+                total_loss_batch = main_loss + training_params.arg1_loss_weight * arg1_loss + training_params.arg2_loss_weight * arg2_loss
+                total_loss_batch = total_loss_batch / args.gradient_accumulation_steps
+                
+                # 通常の逆伝播
+                total_loss_batch.backward()
             
-            # モデルを訓練モードに戻す
-            model.train()
+            total_loss += total_loss_batch.item()
+            num_batches += 1
+            batch_size = input_ids.size(0)
+            data_points_processed += batch_size
+            
+            # 勾配累積のステップが完了したらオプティマイザーを更新
+            if data_points_processed % (args.gradient_accumulation_steps * args.batch_size) == 0:
+                if args.use_amp and scaler is not None:
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    optimizer.step()
+                optimizer.zero_grad()
+            
+            # プログレスバーを更新
+            avg_loss = total_loss / num_batches
+            pbar.update(batch_size)
+            pbar.set_postfix({
+                'Loss': f'{avg_loss:.4f}',
+                'Batches': num_batches
+            })
+            
+            # 指定されたデータポイント数ごとにvalidationを実行
+            next_validation_threshold = (validation_count + 1) * args.validation_frequency
+            if data_points_processed >= next_validation_threshold:
+                validation_count += 1
+                
+                # プログレスバーを一時停止
+                pbar.set_description("Validating")
+                pbar.refresh()
+                
+                # 現在の平均損失を計算
+                current_avg_loss = total_loss / num_batches
+                
+                print(f"\n📈 Validation {validation_count} (after {data_points_processed} data points)")
+                print(f"  🔥 Current Train Loss: {current_avg_loss:.4f}")
+                
+                # 推論性能を評価（従来のvalidationの代わり）
+                print(f"  📊 Skipping traditional validation - using inference performance evaluation")
+                print("-" * 60)
+                
+                # 推論性能を評価
+                print(f"\n🔍 Evaluating inference performance...")
+                # 並列化されたモデルの場合は元のモデルを取得
+                eval_model = model.module if hasattr(model, 'module') else model
+                inference_success_rate, inference_avg_steps = evaluate_inference_performance(
+                    eval_model, tokenizer, label_mappings, device, args.max_seq_len,
+                    num_examples=args.inference_eval_examples, 
+                    max_steps=args.inference_max_steps, 
+                    temperature=args.inference_temperature
+                )
+                print(f"  Inference success rate: {inference_success_rate:.3f}")
+                print(f"  Inference avg steps (when solved): {inference_avg_steps:.2f}")
+                
+                # wandbにログ
+                if args.use_wandb and WANDB_AVAILABLE:
+                    wandb.log({
+                        "train_loss": current_avg_loss,
+                        "inference/success_rate": inference_success_rate,
+                        "inference/avg_steps": inference_avg_steps,
+                        "learning_rate": optimizer.param_groups[0]['lr']
+                    })
+                
+                # ベストモデルを保存（推論性能ベース）
+                if inference_success_rate > best_eval_loss:  # 推論成功率をベスト指標として使用
+                    best_eval_loss = inference_success_rate
+                    # 並列化されたモデルの場合は元のモデルを取得
+                    model_to_save = model.module if hasattr(model, 'module') else model
+                    torch.save({
+                        'model_state_dict': model_to_save.state_dict(),
+                        'main_to_id': main_to_id,
+                        'arg1_to_id': arg1_to_id,
+                        'arg2_to_id': arg2_to_id,
+                        'id_to_main': id_to_main,
+                        'id_to_arg1': id_to_arg1,
+                        'id_to_arg2': id_to_arg2,
+                        'model_params': model_params.__dict__,
+                        'vocab_size': tokenizer.vocab_size,
+                        'pad_id': tokenizer.pad_id,
+                        'max_seq_len': args.max_seq_len,
+                    }, args.save_path)
+                    print(f"Best model saved to {args.save_path} (inference success rate: {inference_success_rate:.3f})")
+                    
+                    # ベストモデル保存をwandbにログ
+                    if args.use_wandb and WANDB_AVAILABLE:
+                        wandb.log({"best_inference_success_rate": inference_success_rate})
+                
+                # モデルを訓練モードに戻す
+                model.train()
+                
+                # プログレスバーを再開
+                pbar.set_description("Training")
+                pbar.refresh()
+        
+        # プログレスバーを閉じる
+        pbar.close()
     
     print("\n🎉 Training completed!")
     print(f"📁 Best model saved to: {args.save_path}")
-    print(f"📊 Best evaluation loss: {best_eval_loss:.4f}")
+    print(f"📊 Best inference success rate: {best_eval_loss:.4f}")
     
     # wandb終了
     if args.use_wandb and WANDB_AVAILABLE:

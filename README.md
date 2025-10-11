@@ -131,8 +131,10 @@ python src/data_generation/auto_data_collector.py --count 10 --max_depth 10
 
 #### 生成データを使用した学習（推奨）
 
+このシステムは**全データを学習に使用**し、**推論性能評価**でモデルの性能を測定します。従来のvalidation分割は行わず、実際の問題解決能力を評価します。
+
 ```bash
-# 基本的な学習
+# 基本的な学習（全データ使用 + 推論性能評価）
 python src/training/train_with_generated_data.py
 
 # カスタム設定での学習
@@ -167,7 +169,6 @@ python src/training/train_with_generated_data.py [オプション]
   --num_epochs EPOCHS              エポック数 (デフォルト: 10)
   --device DEVICE                  デバイス選択 auto/cpu/cuda (デフォルト: auto)
   --save_path PATH                 モデル保存パス (デフォルト: models/hierarchical_model_generated.pth)
-  --eval_split RATIO               評価分割比率 (デフォルト: 0.2)
   --max_seq_len LEN                最大シーケンス長 (デフォルト: 512)
   --remove_duplicates              重複削除を有効化 (デフォルト: True)
   --keep_duplicates                重複を保持 (--remove_duplicatesを無効化)
@@ -179,6 +180,8 @@ python src/training/train_with_generated_data.py [オプション]
   --inference_eval_examples COUNT  推論評価例数 (デフォルト: 50)
   --inference_max_steps STEPS      推論最大ステップ数 (デフォルト: 30)
   --inference_temperature TEMP     推論温度 (デフォルト: 1.0)
+  --validation_frequency FREQ      推論評価の実行頻度 (デフォルト: 1000データポイント)
+  --skip_inference_eval            推論性能評価をスキップ（高速学習）
 ```
 
 ### 3. 推論実行
@@ -237,15 +240,20 @@ python src/training/analyze_generated_data.py --data_dir generated_data
 
 ## 学習システムの特徴
 
-### 純粋な言語モデル性能評価
+### 全データ学習 + 推論性能評価
 
-このシステムは、人工的な精度向上要因を排除し、純粋な言語モデルの性能を測定します：
+このシステムは従来のvalidation分割を廃止し、より効率的で実用的な学習アプローチを採用しています：
 
-#### 改善された評価指標
-- **個別精度**: メインタクティク、arg1、arg2の個別精度
-- **完全タクティク精度**: 必要な引数がすべて正しい場合の精度
-- **有効サンプル数**: arg1/arg2が実際に必要な場合のみをカウント
-- **推論成功率**: 実際の問題解決能力の測定
+#### 新しい学習アプローチ
+- **全データ学習**: 利用可能なすべてのデータを学習に使用（データの無駄を排除）
+- **推論性能評価**: 実際の問題解決能力を測定する評価システム
+- **ランダム問題選択**: 毎回異なる問題で評価（公平性の確保）
+- **実用的メトリクス**: 推論成功率と平均ステップ数で性能を測定
+
+#### 推論性能評価の特徴
+- **毎回異なる問題**: 現在時刻をシードとして使用し、毎回ランダムに問題を選択
+- **実際の証明実行**: pyproverを使用した実際の定理証明で性能を測定
+- **純粋な言語モデル性能**: 人工的な精度向上要因を排除した真の性能評価
 
 ### 階層分類アーキテクチャ
 
@@ -302,16 +310,17 @@ TACTIC_ARG_MASK = {
 
 学習中に以下のメトリクスが記録されます：
 
-- `epoch`: エポック番号
 - `train_loss`: 訓練損失
-- `eval_loss`: 評価損失
-- `main_accuracy`: メインタクティク精度
-- `arg1_accuracy`: arg1精度（有効サンプルのみ）
-- `arg2_accuracy`: arg2精度（有効サンプルのみ）
-- `complete_tactic_accuracy`: 完全タクティク精度
-- `inference/success_rate`: 推論成功率
-- `inference/avg_steps`: 推論平均ステップ数
+- `inference/success_rate`: 推論成功率（実際の問題解決能力）
+- `inference/avg_steps`: 推論平均ステップ数（解決時の効率性）
 - `learning_rate`: 学習率
+- `best_inference_success_rate`: 最高推論成功率（モデル保存の基準）
+
+#### 推論性能評価の詳細
+- **問題選択**: 毎回ランダムに異なる問題を選択（公平性確保）
+- **評価頻度**: 指定されたデータポイント数ごとに実行（デフォルト: 1000）
+- **評価例数**: デフォルト50例（カスタマイズ可能）
+- **最大ステップ数**: 各問題の最大証明ステップ数（デフォルト: 30）
 
 ### 使用方法
 
@@ -341,6 +350,26 @@ python src/compression/extract_tactics.py
 # 圧縮された学習データの作成
 python src/compression/create_compressed_training_data.py
 ```
+
+## 推論性能評価システム
+
+### 概要
+
+従来のvalidation分割に代わり、実際の問題解決能力を測定する推論性能評価システムを採用しています。
+
+### 特徴
+
+- **全データ学習**: 利用可能なすべてのデータを学習に使用
+- **ランダム問題選択**: 毎回異なる問題で評価（公平性確保）
+- **実際の証明実行**: pyproverを使用した実際の定理証明
+- **実用的メトリクス**: 推論成功率と平均ステップ数
+
+### 評価プロセス
+
+1. **問題選択**: 現在時刻をシードとしてランダムに問題を選択
+2. **証明実行**: 選択された問題に対して実際に証明を実行
+3. **性能測定**: 成功率と平均ステップ数を計算
+4. **モデル保存**: 最高推論成功率でモデルを保存
 
 ## テスト
 

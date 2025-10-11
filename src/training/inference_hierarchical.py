@@ -178,6 +178,124 @@ def predict_tactic(
         return tactic_string, main_confidence, arg1_confidence, arg2_confidence
 
 
+def evaluate_inference_performance(
+    model: TransformerClassifier,
+    tokenizer: CharTokenizer,
+    label_mappings: Dict[str, Any],
+    device: torch.device,
+    max_seq_len: int,
+    num_examples: int = 50,
+    max_steps: int = 5,
+    temperature: float = 1.0
+) -> Tuple[float, float]:
+    """
+    推論性能を評価（軽量化版）
+    
+    Returns:
+        (success_rate, avg_steps_when_solved)
+    """
+    import sys
+    import glob
+    import json
+    
+    # pyproverをインポート
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    pyprover_dir = os.path.join(project_root, "pyprover")
+    sys.path.insert(0, pyprover_dir)
+    
+    original_cwd = os.getcwd()
+    os.chdir(pyprover_dir)
+    try:
+        import proposition as proposition_mod
+        import prover as prover_mod
+    finally:
+        os.chdir(original_cwd)
+    
+    PropParseTree = proposition_mod.PropParseTree
+    prop_parser = proposition_mod.parser
+    Prover = prover_mod.Prover
+    
+    # generated_dataから例を取得
+    generated_data_dir = os.path.join(project_root, "generated_data")
+    json_files = glob.glob(os.path.join(generated_data_dir, "*.json"))
+    
+    all_examples = []
+    for json_file in json_files:
+        with open(json_file, 'r') as f:
+            file_data = json.load(f)
+            all_examples.extend(file_data)
+    
+    # 証明済みの例のみをフィルタリング
+    proved_examples = [ex for ex in all_examples if ex.get('meta', {}).get('is_proved', False)]
+    
+    if not proved_examples:
+        print("No proved examples found for inference evaluation!")
+        return 0.0, 0.0
+    
+    # 推論性能評価を実行
+    solved_count = 0
+    solved_steps = []
+    
+    # ランダムに問題を選択（毎回異なる問題を使用）
+    import random
+    import time
+    # 現在時刻をシードとして使用して毎回異なる問題を選択
+    random.seed(int(time.time() * 1000) % 2**32)
+    selected_examples = random.sample(proved_examples, min(num_examples, len(proved_examples)))
+    
+    print(f"Selected {len(selected_examples)} random examples for inference evaluation")
+    print(f"First example goal: {selected_examples[0]['steps'][0]['goal'][:100]}...")
+    
+    for i, example in enumerate(selected_examples):
+        
+        # 最初のステップから初期状態を取得
+        first_step = example['steps'][0]
+        goal_str = first_step['goal']
+        premises = first_step['premises']
+        
+        # パースしてproverを作成
+        parse_tree = PropParseTree()
+        goal_node = parse_tree.transform(prop_parser.parse(goal_str))
+        prover = Prover(goal_node)
+        
+        # 前提を追加
+        for prem_str in premises:
+            prem_node = parse_tree.transform(prop_parser.parse(prem_str))
+            prover.variables.append(prem_node)
+        
+        # 推論ループ（シンプル化：禁止タクティクシステムなし）
+        step = 0
+        solved = prover.goal is None
+        
+        while not solved and step < max_steps:
+            # 現在の状態を取得
+            current_state = encode_prover_state(prover)
+            current_premises = current_state["premises"]
+            current_goal = current_state["goal"]
+            
+            # タクティクを予測（純粋な言語モデル性能）
+            tactic_str, main_conf, arg1_conf, arg2_conf = predict_tactic(
+                model, tokenizer, current_premises, current_goal, 
+                label_mappings, device, max_seq_len, None, temperature
+            )
+            
+            # タクティクを適用
+            success = apply_tactic_from_label(prover, tactic_str)
+            
+            step += 1
+            solved = prover.goal is None
+        
+        if solved:
+            solved_count += 1
+            solved_steps.append(step)
+    
+    # 統計を計算
+    success_rate = solved_count / num_examples
+    avg_steps_when_solved = sum(solved_steps) / len(solved_steps) if solved_steps else 0.0
+    
+    return success_rate, avg_steps_when_solved
+
+
 def apply_tactic_from_label(prover, label) -> bool:
     """タクティクを適用"""
     if isinstance(label, dict):
