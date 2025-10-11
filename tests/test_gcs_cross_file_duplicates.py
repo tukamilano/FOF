@@ -39,15 +39,22 @@ def download_gcs_file(bucket_name: str, file_path: str) -> List[Dict]:
     content = blob.download_as_text()
     return json.loads(content)
 
-def check_gcs_cross_file_duplicates(bucket_name: str, prefix: str):
+def check_gcs_cross_file_duplicates(bucket_name: str, prefix: str, limit: int = None):
     """GCSの全ファイルを横断して重複チェックを実行"""
     print(f"GCS Bucket: {bucket_name}")
     print(f"Prefix: {prefix}")
+    if limit:
+        print(f"Limit: 最初の {limit} ファイルのみ処理")
     print("="*60)
     
     # GCSファイル一覧を取得
     print("GCSファイル一覧を取得中...")
     files = list_gcs_files(bucket_name, prefix)
+    
+    # ファイル数制限を適用
+    if limit and limit > 0:
+        files = files[:limit]
+        print(f"制限適用: {len(files)} ファイルを処理します")
     
     if not files:
         print("No JSON files found in GCS bucket")
@@ -58,6 +65,7 @@ def check_gcs_cross_file_duplicates(bucket_name: str, prefix: str):
     # 全ファイルのハッシュを集める
     global_example_hash_counter = Counter()
     global_example_hash_files = defaultdict(set)  # ハッシュがどのファイルに含まれているかを追跡
+    file_stats = []  # ファイルごとの統計を保存
     
     total_examples = 0
     total_steps = 0
@@ -88,6 +96,13 @@ def check_gcs_cross_file_duplicates(bucket_name: str, prefix: str):
                     global_example_hash_files[example_hash_val].add(os.path.basename(file_path))
             
             print(f"  {os.path.basename(file_path)}: {file_examples} examples, {file_steps} steps")
+            
+            # ファイル統計を保存
+            file_stats.append({
+                'file_path': file_path,
+                'examples': file_examples,
+                'steps': file_steps
+            })
             
         except Exception as e:
             print(f"Error processing {file_path}: {e}")
@@ -128,15 +143,28 @@ def check_gcs_cross_file_duplicates(bucket_name: str, prefix: str):
         duplicate_examples = sum(count - 1 for count in duplicates.values())
         duplicate_rate = (duplicate_examples / total_examples) * 100
         print(f"\n重複率: {duplicate_rate:.2f}% ({duplicate_examples:,}/{total_examples:,})")
+        
+        # ファイルごとの重複統計
+        print(f"\n📊 ファイルごとの重複統計:")
+        for i, stat in enumerate(file_stats, 1):
+            file_duplicates = sum(1 for hash_val, (count, files_list) in duplicates.items() 
+                                if count > 1 and os.path.basename(stat['file_path']) in files_list)
+            file_examples = stat['examples']
+            if file_examples > 0:
+                file_duplicate_rate = (file_duplicates / file_examples) * 100
+                print(f"  File {i:02d}: {file_duplicates}/{file_examples} duplicates ({file_duplicate_rate:.1f}%) - {os.path.basename(stat['file_path'])}")
+            else:
+                print(f"  File {i:02d}: 0/0 duplicates (N/A) - {os.path.basename(stat['file_path'])}")
 
 def main():
     parser = argparse.ArgumentParser(description='GCSの全ファイルを横断して重複チェックを実行')
     parser.add_argument('--bucket', default='fof-data-20251009-milano', help='GCS bucket name')
     parser.add_argument('--prefix', default='generated_data/', help='GCS prefix')
+    parser.add_argument('--limit', type=int, help='処理するファイル数の上限（最初のN個のファイルのみ）')
     
     args = parser.parse_args()
     
-    check_gcs_cross_file_duplicates(args.bucket, args.prefix)
+    check_gcs_cross_file_duplicates(args.bucket, args.prefix, args.limit)
 
 if __name__ == "__main__":
     main()

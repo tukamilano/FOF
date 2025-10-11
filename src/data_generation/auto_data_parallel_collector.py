@@ -323,6 +323,7 @@ class ParallelDataCollector:
         self.example_hashes = set()  # Example重複排除用（グローバル）
         self.check_example_duplicates = check_example_duplicates
         self.check_step_duplicates = check_step_duplicates
+        self.file_duplicate_stats = []  # ファイルごとの重複統計
         
         # GCS settings
         self.gcs_bucket = gcs_bucket
@@ -497,6 +498,17 @@ class ParallelDataCollector:
         
         print(f"Completed: {successful_proofs}/{gen_params.count} proofs, {len(self.all_collected_steps)} steps")
         print(f"Duplicates skipped: {skipped_duplicates} ({skipped_duplicates/gen_params.count*100:.1f}%)")
+        print(f"Global unique examples: {len(self.example_hashes)}")
+        
+        # ファイルごとの重複統計を表示
+        if self.file_duplicate_stats:
+            print(f"\n📈 File-by-file duplicate statistics:")
+            for stat in self.file_duplicate_stats:
+                print(f"  File {stat['file_index']:05d}: {stat['duplicates_removed']}/{stat['total_processed']} duplicates ({stat['duplicate_rate']:.1f}%) - Efficiency: {stat['efficiency']:.1f}%")
+            
+            # 平均効率を計算
+            avg_efficiency = sum(s['efficiency'] for s in self.file_duplicate_stats) / len(self.file_duplicate_stats)
+            print(f"  📊 Average efficiency: {avg_efficiency:.1f}%")
         
         return results
     
@@ -625,7 +637,26 @@ class ParallelDataCollector:
                         self.example_hashes.add(ex['example_hash'])
             
             if duplicates_removed > 0:
-                print(f"  Removed {duplicates_removed} duplicate examples at file level")
+                duplicate_rate = (duplicates_removed / len(transformed_data)) * 100
+                print(f"  📊 File {self.current_file_index:05d}: Removed {duplicates_removed}/{len(transformed_data)} duplicates ({duplicate_rate:.1f}%)")
+                
+                # 統計を記録
+                self.file_duplicate_stats.append({
+                    'file_index': self.current_file_index,
+                    'duplicates_removed': duplicates_removed,
+                    'total_processed': len(transformed_data) + duplicates_removed,
+                    'duplicate_rate': duplicate_rate,
+                    'efficiency': len(transformed_data) / (len(transformed_data) + duplicates_removed) * 100
+                })
+            else:
+                # 重複なしの場合も記録
+                self.file_duplicate_stats.append({
+                    'file_index': self.current_file_index,
+                    'duplicates_removed': 0,
+                    'total_processed': len(transformed_data),
+                    'duplicate_rate': 0.0,
+                    'efficiency': 100.0
+                })
             
             transformed_data = filtered_data
             num_examples = len(transformed_data)
@@ -642,6 +673,13 @@ class ParallelDataCollector:
         
         # グローバルハッシュを保存
         self.save_global_hashes()
+        
+        # ファイル保存時の統計を表示
+        total_processed = len(transformed_data) + duplicates_removed if 'duplicates_removed' in locals() else len(transformed_data)
+        if 'duplicates_removed' in locals() and duplicates_removed > 0:
+            print(f"  ✅ File {self.current_file_index:05d} saved: {len(existing_data)} examples (efficiency: {len(transformed_data)/total_processed*100:.1f}%)")
+        else:
+            print(f"  ✅ File {self.current_file_index:05d} saved: {len(existing_data)} examples (no duplicates)")
         
         if len(existing_data) == num_examples:
             print(f"Created: {filename} ({num_examples} examples)")

@@ -3,3 +3,4 @@ torch>=1.9.0
 numpy>=1.21.0
 tqdm
 rich
+wandb

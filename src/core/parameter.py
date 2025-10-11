@@ -60,6 +60,10 @@ class TrainingParameters:
     batch_size: int = 32
     num_epochs: int = 10
     
+    # 損失関数の重み設定
+    arg1_loss_weight: float = 0.8  # Arg1損失の重み
+    arg2_loss_weight: float = 0.8  # Arg2損失の重み
+    
     # データ収集設定
     collect_data: bool = False
     work_file: str = "temp_work.json"
@@ -120,6 +124,9 @@ class HierarchicalLabels:
     arg2_values: List[str] = None   # 第2引数の値のリスト
     num_tactic_tokens: int = 50     # tactic用トークンの数
     
+    # タクティクごとの引数要件マスク (arg1_required, arg2_required)
+    TACTIC_ARG_MASK: Dict[str, tuple] = None
+    
     def __post_init__(self):
         if self.main_tactics is None:
             # デフォルトの主タクティク（既存9個 + 新規tactic用）
@@ -132,10 +139,26 @@ class HierarchicalLabels:
             self.main_tactics = existing_tactics + new_tactic_placeholders
         if self.arg1_values is None:
             # デフォルトの第1引数（数値）
-            self.arg1_values = ["0", "1", "2", "3", "4", "5"]
+            self.arg1_values = [str(i) for i in range(10)]  # 0-19の20通り
         if self.arg2_values is None:
             # デフォルトの第2引数（数値）
-            self.arg2_values = ["0", "1", "2", "3", "4", "5"]
+            self.arg2_values = [str(i) for i in range(10)]  # 0-19の20通り
+        if self.TACTIC_ARG_MASK is None:
+            # タクティクごとの引数要件マスク (arg1_required, arg2_required)
+            self.TACTIC_ARG_MASK = {
+                "intro": (False, False),
+                "apply": (True, False),
+                "specialize": (True, True),
+                "split": (False, False),
+                "left": (False, False),
+                "right": (False, False),
+                "destruct": (True, False),
+                "assumption": (False, False),
+                "add_dn": (False, False),
+            }
+            # 新規タクティクは全て引数不要として設定
+            for i in range(self.num_tactic_tokens):
+                self.TACTIC_ARG_MASK[f"TACTIC_{i}"] = (False, False)
     
     def get_main_to_id(self) -> Dict[str, int]:
         """主タクティクの文字列からIDへのマッピング"""

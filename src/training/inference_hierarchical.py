@@ -6,7 +6,17 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import glob
+import json
+import time
 from typing import List, Tuple, Dict, Any
+
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+    print("Warning: wandb not available. Install with: pip install wandb")
 
 # プロジェクトルートをパスに追加
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -42,10 +52,13 @@ def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[Tran
     num_arg1_classes = len(checkpoint['id_to_arg1'])
     num_arg2_classes = len(checkpoint['id_to_arg2'])
     
+    # max_seq_lenをチェックポイントから取得（後方互換性のため）
+    max_seq_len = checkpoint.get('max_seq_len', model_params['max_seq_len'])
+    
     model = TransformerClassifier(
         vocab_size=vocab_size,
         pad_id=pad_id,
-        max_seq_len=model_params['max_seq_len'],
+        max_seq_len=max_seq_len,
         d_model=model_params['d_model'],
         nhead=model_params['nhead'],
         num_layers=model_params['num_layers'],
@@ -73,6 +86,31 @@ def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[Tran
     return model, label_mappings
 
 
+def sample_from_logits(logits: torch.Tensor, temperature: float = 1.0) -> Tuple[int, float]:
+    """
+    ロジットから確率的にサンプリング
+    
+    Args:
+        logits: ロジットテンソル [batch_size, vocab_size]
+        temperature: 温度パラメータ（高いほどランダム、低いほど確定的）
+    
+    Returns:
+        (sampled_id, confidence)
+    """
+    # 温度を適用
+    if temperature != 1.0:
+        logits = logits / temperature
+    
+    # softmaxで確率に変換
+    probs = torch.softmax(logits, dim=-1)
+    
+    # 確率的サンプリング
+    sampled_id = torch.multinomial(probs, 1).item()
+    confidence = probs[0, sampled_id].item()
+    
+    return sampled_id, confidence
+
+
 def predict_tactic(
     model: TransformerClassifier,
     tokenizer: CharTokenizer,
@@ -80,7 +118,9 @@ def predict_tactic(
     goal: str,
     label_mappings: Dict[str, Any],
     device: torch.device,
-    banned_tactics: set = None
+    max_seq_len: int = 512,
+    banned_tactics: set = None,
+    temperature: float = 1.0
 ) -> Tuple[str, float, float, float]:
     """
     タクティクを予測
@@ -92,39 +132,33 @@ def predict_tactic(
         banned_tactics = set()
     
     # 入力をエンコード
-    input_ids, attention_mask, segment_ids = tokenizer.encode(goal, premises)
+    input_ids, attention_mask, segment_ids = tokenizer.encode(goal, premises, max_seq_len)
     input_ids = input_ids.unsqueeze(0).to(device)
     attention_mask = attention_mask.unsqueeze(0).to(device)
     segment_ids = segment_ids.unsqueeze(0).to(device)
     
     with torch.no_grad():
-        main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask, segment_ids)
-        
-        # 主タクティクを予測
-        main_probs = torch.softmax(main_logits, dim=-1)
-        main_pred_id = torch.argmax(main_probs, dim=-1).item()
-        main_confidence = main_probs[0, main_pred_id].item()
+        main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
         
         # 禁止されたタクティクをマスク
         if banned_tactics:
             for tactic in banned_tactics:
                 if tactic in label_mappings['main_to_id']:
                     tactic_id = label_mappings['main_to_id'][tactic]
-                    main_probs[0, tactic_id] = 0.0
-            
-            # 再正規化
-            main_probs = main_probs / main_probs.sum(dim=-1, keepdim=True)
-            main_pred_id = torch.argmax(main_probs, dim=-1).item()
-            main_confidence = main_probs[0, main_pred_id].item()
+                    main_logits[0, tactic_id] = float('-inf')
         
-        # 引数を予測
-        arg1_probs = torch.softmax(arg1_logits, dim=-1)
-        arg1_pred_id = torch.argmax(arg1_probs, dim=-1).item()
-        arg1_confidence = arg1_probs[0, arg1_pred_id].item()
+        # 確率的サンプリングで予測
+        main_pred_id, main_confidence = sample_from_logits(
+            main_logits, temperature
+        )
         
-        arg2_probs = torch.softmax(arg2_logits, dim=-1)
-        arg2_pred_id = torch.argmax(arg2_probs, dim=-1).item()
-        arg2_confidence = arg2_probs[0, arg2_pred_id].item()
+        arg1_pred_id, arg1_confidence = sample_from_logits(
+            arg1_logits, temperature
+        )
+        
+        arg2_pred_id, arg2_confidence = sample_from_logits(
+            arg2_logits, temperature
+        )
         
         # タクティク文字列を構築
         main_tactic = label_mappings['id_to_main'][main_pred_id]
@@ -151,37 +185,41 @@ def apply_tactic_from_label(prover, label) -> bool:
     else:
         tactic_str = label
     
-    if tactic_str == "assumption":
-        return not prover.assumption()
-    if tactic_str == "intro":
-        return not prover.intro()
-    if tactic_str == "split":
-        return not prover.split()
-    if tactic_str == "left":
-        return not prover.left()
-    if tactic_str == "right":
-        return not prover.right()
-    if tactic_str == "add_dn":
-        return not prover.add_dn()
-    
-    parts = tactic_str.split()
-    if parts[0] == "apply" and len(parts) == 2 and parts[1].isdigit():
-        idx = int(parts[1])
-        if idx >= len(prover.variables):
-            return False
-        return not prover.apply(idx)
-    if parts[0] == "destruct" and len(parts) == 2 and parts[1].isdigit():
-        idx = int(parts[1])
-        if idx >= len(prover.variables):
-            return False
-        return not prover.destruct(idx)
-    if parts[0] == "specialize" and len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
-        func_idx = int(parts[1])
-        domain_idx = int(parts[2])
-        if func_idx >= len(prover.variables) or domain_idx >= len(prover.variables):
-            return False
-        return not prover.specialize(func_idx, domain_idx)
-    return False
+    try:
+        if tactic_str == "assumption":
+            return not prover.assumption()
+        if tactic_str == "intro":
+            return not prover.intro()
+        if tactic_str == "split":
+            return not prover.split()
+        if tactic_str == "left":
+            return not prover.left()
+        if tactic_str == "right":
+            return not prover.right()
+        if tactic_str == "add_dn":
+            return not prover.add_dn()
+        
+        parts = tactic_str.split()
+        if parts[0] == "apply" and len(parts) == 2 and parts[1].isdigit():
+            idx = int(parts[1])
+            if idx >= len(prover.variables):
+                return False
+            return not prover.apply(idx)
+        if parts[0] == "destruct" and len(parts) == 2 and parts[1].isdigit():
+            idx = int(parts[1])
+            if idx >= len(prover.variables):
+                return False
+            return not prover.destruct(idx)
+        if parts[0] == "specialize" and len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+            func_idx = int(parts[1])
+            domain_idx = int(parts[2])
+            if func_idx >= len(prover.variables) or domain_idx >= len(prover.variables):
+                return False
+            return not prover.specialize(func_idx, domain_idx)
+        return False
+    except Exception as e:
+        # pyproverのエラーをキャッチしてFalseを返す
+        return False
 
 
 def main():
@@ -191,6 +229,11 @@ def main():
     parser.add_argument("--max_steps", type=int, default=5, help="max steps per example")
     parser.add_argument("--device", type=str, default="auto", help="device")
     parser.add_argument("--verbose", action="store_true", help="verbose output")
+    parser.add_argument("--temperature", type=float, default=1.0, help="sampling temperature (higher = more random)")
+    parser.add_argument("--use_wandb", action="store_true", help="use wandb for logging")
+    parser.add_argument("--wandb_project", type=str, default="fof-inference", help="wandb project name")
+    parser.add_argument("--wandb_run_name", type=str, default=None, help="wandb run name")
+    parser.add_argument("--max_seq_len", type=int, default=512, help="maximum sequence length")
     
     args = parser.parse_args()
     
@@ -202,20 +245,92 @@ def main():
     
     print(f"Using device: {device}")
     
-    # モデルを読み込み
+    # wandb初期化
+    if args.use_wandb and WANDB_AVAILABLE:
+        run_name = args.wandb_run_name or f"inference_{int(time.time())}"
+        wandb.init(
+            project=args.wandb_project,
+            name=run_name,
+            config={
+                "model_path": args.model_path,
+                "count": args.count,
+                "max_steps": args.max_steps,
+                "temperature": args.temperature,
+                "device": str(device)
+            }
+        )
+        print(f"Wandb initialized: {args.wandb_project}/{run_name}")
+    elif args.use_wandb and not WANDB_AVAILABLE:
+        print("Warning: wandb requested but not available. Continuing without logging.")
+    
+    # モデルを読み込みまたは初期化
     if not os.path.exists(args.model_path):
         print(f"Model file not found: {args.model_path}")
-        print("Please train a model first using train_hierarchical.py")
-        return
-    
-    model, label_mappings = load_hierarchical_model(args.model_path, device)
-    print(f"Loaded model from {args.model_path}")
-    
-    # トークナイザーを作成
-    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    token_py_path = os.path.join(root_dir, "src", "core", "fof_tokens.py")
-    base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
-    tokenizer = CharTokenizer(base_tokens=base_tokens)
+        print("Creating a randomly initialized model...")
+        
+        # 初期化されたモデルを作成
+        from src.core.parameter import get_model_params, get_hierarchical_labels
+        
+        model_params = get_model_params()
+        hierarchical_labels = get_hierarchical_labels()
+        
+        # ラベルマッピングを作成
+        main_to_id = hierarchical_labels.get_main_to_id()
+        arg1_to_id = hierarchical_labels.get_arg1_to_id()
+        arg2_to_id = hierarchical_labels.get_arg2_to_id()
+        id_to_main = hierarchical_labels.get_id_to_main()
+        id_to_arg1 = hierarchical_labels.get_id_to_arg1()
+        id_to_arg2 = hierarchical_labels.get_id_to_arg2()
+        
+        label_mappings = {
+            'main_to_id': main_to_id,
+            'arg1_to_id': arg1_to_id,
+            'arg2_to_id': arg2_to_id,
+            'id_to_main': id_to_main,
+            'id_to_arg1': id_to_arg1,
+            'id_to_arg2': id_to_arg2,
+        }
+        
+        # トークナイザーを作成
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        token_py_path = os.path.join(root_dir, "src", "core", "fof_tokens.py")
+        base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
+        tokenizer = CharTokenizer(base_tokens=base_tokens)
+        
+        # モデルを作成
+        vocab_size = tokenizer.vocab_size
+        model = TransformerClassifier(
+            vocab_size=vocab_size,
+            pad_id=0,
+            max_seq_len=args.max_seq_len,
+            d_model=model_params.d_model,
+            nhead=model_params.nhead,
+            num_layers=model_params.num_layers,
+            dim_feedforward=model_params.dim_feedforward,
+            dropout=model_params.dropout,
+            num_main_classes=len(main_to_id),
+            num_arg1_classes=len(arg1_to_id),
+            num_arg2_classes=len(arg2_to_id),
+        )
+        model.to(device)
+        model.eval()
+        
+        max_seq_len = args.max_seq_len if hasattr(args, 'max_seq_len') else 512
+        
+        print(f"Created randomly initialized model with {len(main_to_id)} main tactics, {len(arg1_to_id)} arg1 values, {len(arg2_to_id)} arg2 values")
+    else:
+        model, label_mappings = load_hierarchical_model(args.model_path, device)
+        print(f"Loaded model from {args.model_path}")
+        
+        # モデルのmax_seq_lenを取得
+        checkpoint = torch.load(args.model_path, map_location=device)
+        max_seq_len = checkpoint.get('max_seq_len', 512)
+        
+        # トークナイザーを作成
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        token_py_path = os.path.join(root_dir, "src", "core", "fof_tokens.py")
+        base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
+        tokenizer = CharTokenizer(base_tokens=base_tokens)
     
     # pyproverをインポート
     pyprover_dir = os.path.join(root_dir, "pyprover")
@@ -234,25 +349,42 @@ def main():
     prop_parser = proposition_mod.parser
     Prover = prover_mod.Prover
     
-    # 簡単なテスト例を実行
-    print(f"\nRunning {args.count} examples...")
+    # generated_dataから実際の例を取得
+    print(f"\nLoading examples from generated_data...")
+    
+    # generated_dataディレクトリから例を読み込み
+    generated_data_dir = os.path.join(project_root, "generated_data")
+    json_files = glob.glob(os.path.join(generated_data_dir, "*.json"))
+    
+    all_examples = []
+    for json_file in json_files:
+        with open(json_file, 'r') as f:
+            file_data = json.load(f)
+            all_examples.extend(file_data)
+    
+    # 証明済みの例のみをフィルタリング
+    proved_examples = [ex for ex in all_examples if ex.get('meta', {}).get('is_proved', False)]
+    
+    if not proved_examples:
+        print("No proved examples found in generated_data!")
+        return
+    
+    print(f"Found {len(proved_examples)} proved examples")
+    print(f"Running {args.count} examples (max_steps: {args.max_steps})...")
     
     solved_count = 0
+    step_counts = []
+    tactic_usage = {}
+    confidence_scores = []
     
     for i in range(args.count):
-        # 簡単な例を作成
-        if i % 3 == 0:
-            # (a → a) の例
-            goal_str = "(a → a)"
-            premises = []
-        elif i % 3 == 1:
-            # (a → b), a から b を導く例
-            goal_str = "b"
-            premises = ["(a → b)", "a"]
-        else:
-            # (a ∨ b) から a を導く例
-            goal_str = "a"
-            premises = ["(a ∨ b)"]
+        # 例を循環して選択
+        example = proved_examples[i % len(proved_examples)]
+        
+        # 最初のステップから初期状態を取得
+        first_step = example['steps'][0]
+        goal_str = first_step['goal']
+        premises = first_step['premises']
         
         # パースしてproverを作成
         parse_tree = PropParseTree()
@@ -273,6 +405,8 @@ def main():
         step = 0
         solved = prover.goal is None
         banned_tactics = set()
+        example_tactics = []
+        example_confidences = []
         
         while not solved and step < args.max_steps:
             # 現在の状態を取得
@@ -283,7 +417,8 @@ def main():
             # タクティクを予測
             tactic_str, main_conf, arg1_conf, arg2_conf = predict_tactic(
                 model, tokenizer, current_premises, current_goal, 
-                label_mappings, device, banned_tactics
+                label_mappings, device, max_seq_len, banned_tactics,
+                args.temperature
             )
             
             if args.verbose:
@@ -291,6 +426,11 @@ def main():
             
             # タクティクを適用
             success = apply_tactic_from_label(prover, tactic_str)
+            
+            # ログ用データを記録
+            example_tactics.append(tactic_str)
+            example_confidences.append(main_conf)
+            tactic_usage[tactic_str] = tactic_usage.get(tactic_str, 0) + 1
             
             if success:
                 if args.verbose:
@@ -304,6 +444,10 @@ def main():
             step += 1
             solved = prover.goal is None
         
+        # 例の結果を記録
+        step_counts.append(step)
+        confidence_scores.extend(example_confidences)
+        
         if solved:
             solved_count += 1
             if args.verbose:
@@ -311,8 +455,42 @@ def main():
         else:
             if args.verbose:
                 print(f"  Result: FAILED after {step} steps")
+        
+        # wandbに例の結果をログ
+        if args.use_wandb and WANDB_AVAILABLE:
+            wandb.log({
+                f"example_{i+1}/solved": 1 if solved else 0,
+                f"example_{i+1}/steps": step,
+                f"example_{i+1}/avg_confidence": sum(example_confidences) / len(example_confidences) if example_confidences else 0,
+                f"example_{i+1}/goal_length": len(goal_str),
+                f"example_{i+1}/premises_count": len(premises)
+            })
     
-    print(f"\nResults: {solved_count}/{args.count} examples solved ({solved_count/args.count*100:.1f}%)")
+    # 最終結果を計算
+    success_rate = solved_count / args.count
+    avg_steps = sum(step_counts) / len(step_counts) if step_counts else 0
+    avg_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0
+    
+    print(f"\nResults: {solved_count}/{args.count} examples solved ({success_rate*100:.1f}%)")
+    print(f"Average steps: {avg_steps:.2f}")
+    print(f"Average confidence: {avg_confidence:.3f}")
+    
+    # wandbに最終結果をログ
+    if args.use_wandb and WANDB_AVAILABLE:
+        wandb.log({
+            "final/success_rate": success_rate,
+            "final/avg_steps": avg_steps,
+            "final/avg_confidence": avg_confidence,
+            "final/solved_count": solved_count,
+            "final/total_examples": args.count
+        })
+        
+        # タクティク使用頻度をログ
+        for tactic, count in tactic_usage.items():
+            wandb.log({f"tactics/{tactic}": count})
+        
+        wandb.finish()
+        print("Wandb logging completed!")
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ pip install -r requirements.txt
 - Python 3.8+
 - PyTorch
 - [pyprover](https://github.com/kaicho8636/pyprover) - 命題論理証明器ライブラリ
+- wandb (オプション) - 実験追跡
 - その他の依存関係は `requirements.txt` を参照
 
 ### pyproverについて
@@ -49,8 +50,11 @@ FOF/
 │   │   ├── auto_data_collector.py        # auto_classical()を使用したデータ収集システム
 │   │   └── auto_data_parallel_collector.py # 並列処理対応の高速データ収集システム
 │   ├── training/                 # 学習関連
-│   │   ├── train_hierarchical.py     # 階層分類対応の学習スクリプト
-│   │   └── inference_hierarchical.py # 階層分類対応の推論スクリプト
+│   │   ├── train_with_generated_data.py  # 生成データを使用した学習スクリプト（推奨）
+│   │   ├── inference_hierarchical.py     # 階層分類対応の推論スクリプト
+│   │   ├── analyze_generated_data.py     # 生成データの分析
+│   │   ├── check_duplicates.py           # 重複チェック
+│   │   └── run_training.py               # 学習実行スクリプト
 │   ├── compression/              # 圧縮関連
 │   │   ├── create_compressed_training_data.py # 圧縮されたタクティクで新しいtraining_data.jsonを作成
 │   │   └── extract_tactics.py        # BPEアルゴリズムでタクティクシーケンスを圧縮
@@ -64,27 +68,145 @@ FOF/
 ├── tests/                        # テストファイル
 │   ├── test_parameter_sync.py    # パラメータ同期テスト
 │   ├── test_tactic_tokens.py     # タクティクトークンテスト
-│   └── test_integration.py       # 統合テスト
+│   ├── test_integration.py       # 統合テスト
+│   ├── test_wandb_connection.py  # wandb接続テスト
+│   └── test_single_file_training.py # 単一ファイル学習テスト
 ├── examples/                     # 使用例
 │   └── example_parameter_usage.py # parameter.pyの使用例
 ├── data/                         # データファイル
 │   ├── training_data.json
 │   ├── training_data_compressed.json
 │   └── tactic_compression_*.json
+├── generated_data/               # 生成された学習データ
+│   ├── test_output_00001.json
+│   ├── test_output_00002.json
+│   └── ...
 ├── models/                       # 学習済みモデル
-│   └── hierarchical_model.pth
+│   ├── hierarchical_model.pth
+│   └── hierarchical_model_generated.pth
 ├── pyprover/                     # pyprover（既存のまま）
 └── README.md
 ```
 
 ## 使用方法
 
-### 1. Transformerベースの実行（従来の方法）
+### 1. データ生成（推奨ワークフロー）
+
+#### 並列データ収集（本番環境推奨）
 
 ```bash
-# 仮想環境を有効化
-source .venv/bin/activate
+# 大規模データ収集（GCS直接アップロード）
+python src/data_generation/auto_data_parallel_collector.py \
+  --count 1000 \
+  --examples_per_file 100 \
+  --workers 2 \
+  --gcs_bucket fof-data-20251009-milano \
+  --gcs_prefix generated_data/ \
+  --dataset_file training_data
 
+# 中規模データ収集（ローカル保存）
+python src/data_generation/auto_data_parallel_collector.py --count 100 --workers 4
+
+# 高難易度・深い探索
+python src/data_generation/auto_data_parallel_collector.py \
+  --count 200 \
+  --difficulty 0.9 \
+  --max_depth 12 \
+  --workers 8 \
+  --examples_per_file 50 \
+  --dataset_file high_difficulty_data
+```
+
+#### 基本的なデータ収集
+
+```bash
+# 基本的なデータ収集（Transformer不要）
+python src/data_generation/auto_data_collector.py --count 10
+
+# 探索の深さを調整
+python src/data_generation/auto_data_collector.py --count 10 --max_depth 10
+```
+
+### 2. モデル学習
+
+#### 生成データを使用した学習（推奨）
+
+```bash
+# 基本的な学習
+python src/training/train_with_generated_data.py
+
+# カスタム設定での学習
+python src/training/train_with_generated_data.py \
+  --batch_size 64 \
+  --learning_rate 1e-4 \
+  --num_epochs 20 \
+  --max_seq_len 512
+
+# wandbを使用した学習追跡
+python src/training/train_with_generated_data.py \
+  --use_wandb \
+  --wandb_project fof-training \
+  --wandb_run_name experiment_001
+
+# 重複を保持した学習
+python src/training/train_with_generated_data.py --keep_duplicates
+
+# カスタムデータディレクトリ
+python src/training/train_with_generated_data.py --data_dir my_generated_data
+```
+
+#### 学習オプション
+
+```bash
+python src/training/train_with_generated_data.py [オプション]
+
+オプション:
+  --data_dir DIR                   生成データディレクトリ (デフォルト: generated_data)
+  --batch_size SIZE                バッチサイズ (デフォルト: 32)
+  --learning_rate RATE             学習率 (デフォルト: 3e-4)
+  --num_epochs EPOCHS              エポック数 (デフォルト: 10)
+  --device DEVICE                  デバイス選択 auto/cpu/cuda (デフォルト: auto)
+  --save_path PATH                 モデル保存パス (デフォルト: models/hierarchical_model_generated.pth)
+  --eval_split RATIO               評価分割比率 (デフォルト: 0.2)
+  --max_seq_len LEN                最大シーケンス長 (デフォルト: 512)
+  --remove_duplicates              重複削除を有効化 (デフォルト: True)
+  --keep_duplicates                重複を保持 (--remove_duplicatesを無効化)
+  --use_wandb                      wandbを使用した学習追跡
+  --wandb_project PROJECT          wandbプロジェクト名 (デフォルト: fof-training)
+  --wandb_run_name NAME            wandb実行名
+  --arg1_loss_weight WEIGHT        arg1損失重み (デフォルト: 0.8)
+  --arg2_loss_weight WEIGHT        arg2損失重み (デフォルト: 0.8)
+  --inference_eval_examples COUNT  推論評価例数 (デフォルト: 50)
+  --inference_max_steps STEPS      推論最大ステップ数 (デフォルト: 30)
+  --inference_temperature TEMP     推論温度 (デフォルト: 1.0)
+```
+
+### 3. 推論実行
+
+#### 階層分類推論
+
+```bash
+# 基本的な推論
+python src/training/inference_hierarchical.py
+
+# カスタム設定での推論
+python src/training/inference_hierarchical.py \
+  --model_path models/hierarchical_model_generated.pth \
+  --num_examples 100 \
+  --max_steps 20 \
+  --temperature 0.8 \
+  --verbose
+
+# wandbを使用した推論追跡
+python src/training/inference_hierarchical.py \
+  --use_wandb \
+  --wandb_project fof-inference \
+  --wandb_run_name inference_test
+```
+
+#### インタラクティブ実行
+
+```bash
 # 基本的な実行（selftest）
 python src/interaction/run_interaction.py --selftest
 
@@ -98,259 +220,152 @@ python src/interaction/run_interaction.py --difficulty 0.7
 python src/interaction/run_interaction.py --max_steps 10
 ```
 
-### 2. auto_classical()ベースのデータ収集（推奨）
+### 4. データ分析
+
+#### 生成データの分析
 
 ```bash
-# 基本的なデータ収集（Transformer不要）
-python src/data_generation/auto_data_collector.py --count 10
+# 生成データの統計分析
+python src/training/analyze_generated_data.py
 
-# 探索の深さを調整
-python src/data_generation/auto_data_collector.py --count 10 --max_depth 10
+# 重複チェック
+python src/training/check_duplicates.py
+
+# 特定のファイルを分析
+python src/training/analyze_generated_data.py --data_dir generated_data
 ```
 
-### 3. コマンドラインオプション
+## 学習システムの特徴
 
-#### run_interaction.py のオプション
+### 純粋な言語モデル性能評価
 
-```bash
-python src/interaction/run_interaction.py [オプション]
+このシステムは、人工的な精度向上要因を排除し、純粋な言語モデルの性能を測定します：
 
-オプション:
-  --count COUNT           実行するインタラクション数 (デフォルト: 3)
-  --difficulty DIFFICULTY 数式の難易度 0.0-1.0 (デフォルト: 0.3)
-  --seed SEED             乱数シード (デフォルト: 7)
-  --device DEVICE         デバイス選択 auto/cpu/cuda (デフォルト: auto)
-  --max_steps MAX_STEPS   1つの例あたりの最大戦略適用回数（成功・失敗含む） (デフォルト: 5)
-  --selftest              自己テストを実行して終了
-  --collect_data          学習データをJSON形式で収集
-  --work_file FILE        作業用一時ファイル (デフォルト: temp_work.json)
-  --dataset_file FILE     データセットファイル (デフォルト: training_data.json)
-  --filter_successful_only      成功した戦略かつ証明完了のみを保存 (tactic_apply=true かつ is_proved=true)
+#### 改善された評価指標
+- **個別精度**: メインタクティク、arg1、arg2の個別精度
+- **完全タクティク精度**: 必要な引数がすべて正しい場合の精度
+- **有効サンプル数**: arg1/arg2が実際に必要な場合のみをカウント
+- **推論成功率**: 実際の問題解決能力の測定
+
+### 階層分類アーキテクチャ
+
+```python
+# 3つの独立した分類ヘッド
+main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
+
+# タクティクの種類に応じた引数要件
+TACTIC_ARG_MASK = {
+    "intro": (False, False),      # 引数不要
+    "apply": (True, False),       # arg1のみ必要
+    "specialize": (True, True),   # arg1, arg2両方必要
+    # ...
+}
 ```
 
-#### auto_data_collector.py のオプション
+### データ形式
 
-```bash
-python src/data_generation/auto_data_collector.py [オプション]
-
-オプション:
-  --count COUNT                 処理する式の数 (デフォルト: 10)
-  --difficulty DIFFICULTY       式生成の難易度 0.0-1.0 (デフォルト: 0.7)
-  --seed SEED                   乱数シード (デフォルト: 7)
-  --max_depth MAX_DEPTH         auto_classical()の最大探索深さ (デフォルト: 8)
-  --dataset_file FILE           出力データセットファイル (デフォルト: training_data.json)
+#### 学習データ形式
+```json
+[
+  {
+    "example_hash": "1743dfaf9bb101e51276719e50ba05ce",
+    "meta": {
+      "goal_original": "((((b ∧ a) ∧ ((b ∨ c) → False)) ∧ (c → (b → c))) → b)",
+      "is_proved": true
+    },
+    "steps": [
+      {
+        "step_index": 0,
+        "premises": [],
+        "goal": "((((b ∧ a) ∧ ((b ∨ c) → False)) ∧ (c → (b → c))) → b)",
+        "tactic": {
+          "main": "intro",
+          "arg1": null,
+          "arg2": null
+        },
+        "tactic_apply": true,
+        "state_hash": "29326faf43695967bc47255fc73a580c"
+      }
+    ]
+  }
+]
 ```
 
-#### auto_data_parallel_collector.py のオプション
-
-```bash
-python src/data_generation/auto_data_parallel_collector.py [オプション]
-
-オプション:
-  --count COUNT                 処理する式の数 (デフォルト: 10)
-  --difficulty DIFFICULTY       式生成の難易度 0.0-1.0 (デフォルト: 0.7)
-  --seed SEED                   乱数シード (デフォルト: 7)
-  --max_depth MAX_DEPTH         auto_classical()の最大探索深さ (デフォルト: 8)
-  --dataset_file FILE           出力データセットファイルのベース名 (デフォルト: training_data)
-  --workers WORKERS             並列ワーカー数 (デフォルト: min(cpu_count, 8))
-  --examples_per_file COUNT     ファイルあたりの例数 (デフォルト: 10000)
-  --buffer_size SIZE            書き込みバッファサイズ (デフォルト: 1000)
-  --gcs_bucket BUCKET           GCSバケット名 (例: fof-data-20251009-milano)
-  --gcs_prefix PREFIX           GCSプレフィックス (例: generated_data/)
-```
-
-### 4. 自己テスト
-
-```bash
-# 基本的な戦略（intro, apply）の動作確認
-python src/interaction/run_interaction.py --selftest
-```
-
-### 5. 新しい形式のテスト
-
-```bash
-# 新しい制限なし形式のテスト
-python -c "
-import sys
-import os
-sys.path.insert(0, '.')
-from src.core.transformer_classifier import CharTokenizer
-from src.core.fof_tokens import input_token
-
-# 制限なしの前提でテスト
-tokenizer = CharTokenizer(base_tokens=input_token)
-goal = 'a'
-premises = ['(a→b)', '(b→c)', '(c→d)', '(d→e)', '(e→f)']  # 5つの前提
-
-# 新しい形式でエンコード
-ids, mask, seg = tokenizer.encode(goal, premises, max_seq_len=512)
-print(f'Goal: {goal}')
-print(f'Premises: {premises}')
-print(f'Number of premises: {len(premises)}')
-print(f'Input format: [CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] ... [EOS]')
-print('Success: Unlimited premises format works!')
-"
-```
-
-### 6. 学習データ収集
-
-#### Transformerベースのデータ収集
-
-```bash
-# 基本的なデータ収集（すべてのレコードを保存）
-python src/interaction/run_interaction.py --count 10 --collect_data --max_steps 5
-
-# 成功した戦略かつ証明完了のみを保存
-python src/interaction/run_interaction.py --count 10 --collect_data --max_steps 5 --filter_successful_only
-```
-
-#### auto_classical()ベースのデータ収集
-
-```bash
-# 基本的なデータ収集（すべてのレコードを保存）
-python src/data_generation/auto_data_collector.py --count 10
-
-# カスタムファイル名でデータ収集
-python src/data_generation/auto_data_collector.py --count 5 --dataset_file data/my_dataset.json
-```
-
-#### 並列データ収集（本番環境推奨）
-
-```bash
-# 本番環境での大規模データ収集（GCS直接アップロード）
-python src/data_generation/auto_data_parallel_collector.py \
-  --count 1000 \
-  --examples_per_file 100 \
-  --workers 2 \
-  --gcs_bucket fof-data-20251009-milano \
-  --gcs_prefix generated_data/ \
-  --dataset_file training_data
-
-# 中規模データ収集（ローカル保存）
-python src/data_generation/auto_data_parallel_collector.py --count 100 --workers 4
-
-# 高難易度・深い探索での並列処理
-python src/data_generation/auto_data_parallel_collector.py \
-  --count 200 \
-  --difficulty 0.9 \
-  --max_depth 12 \
-  --workers 8 \
-  --examples_per_file 50 \
-  --dataset_file high_difficulty_data
-```
-
-### 7. データ圧縮の実行
-
-#### タクティクシーケンスの圧縮
-
-```bash
-# 基本的なBPE圧縮（デフォルト200回のマージ）
-python src/compression/extract_tactics.py
-
-# カスタムマージ回数で圧縮
-python src/compression/extract_tactics.py 100
-
-# 圧縮結果の確認
-ls -la data/tactic_compression_bpe_analysis.json
-```
-
-#### 圧縮された学習データの作成
-
-```bash
-# 圧縮されたタクティクで新しいtraining_data.jsonを作成
-python src/compression/create_compressed_training_data.py
-
-# 圧縮結果の確認
-ls -la data/training_data_compressed_bpe.json
-```
-
-### 8. テストファイルの実行
-
-```bash
-
-# 数式生成のテスト
-python src/core/generate_prop.py --count 5 --difficulty 0.3
-
-
-```
-
-## システムの動作
-
-### 基本的なワークフロー（run_interaction.py）
-
-1. **数式生成**: `FormulaGenerator`が命題論理式を生成
-2. **状態エンコーディング**: `encode_prover_state()`が制限なしで前提とゴールをエンコード
-3. **トークン化**: `CharTokenizer.encode()`が新しい形式`[CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] ... [EOS]`でトークン化
-4. **予測**: `TransformerClassifier`が次の証明戦略を予測
-5. **実行**: [pyprover](https://github.com/kaicho8636/pyprover)が実際の証明戦略を実行
-6. **データ収集**: 学習データをJSON形式で蓄積（`--collect_data`オプション時）
-
-### 新しい入力形式
-
-Transformerへの入力は以下の形式でエンコードされます：
-
+#### 入力エンコーディング
 ```
 [CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] Premise₃ [SEP] ... [EOS]
 ```
 
+## 実験追跡（wandb）
+
+### 学習メトリクス
+
+学習中に以下のメトリクスが記録されます：
+
+- `epoch`: エポック番号
+- `train_loss`: 訓練損失
+- `eval_loss`: 評価損失
+- `main_accuracy`: メインタクティク精度
+- `arg1_accuracy`: arg1精度（有効サンプルのみ）
+- `arg2_accuracy`: arg2精度（有効サンプルのみ）
+- `complete_tactic_accuracy`: 完全タクティク精度
+- `inference/success_rate`: 推論成功率
+- `inference/avg_steps`: 推論平均ステップ数
+- `learning_rate`: 学習率
+
+### 使用方法
+
+```bash
+# wandbを使用した学習
+python src/training/train_with_generated_data.py --use_wandb
+
+# カスタムプロジェクト名
+python src/training/train_with_generated_data.py \
+  --use_wandb \
+  --wandb_project my-fof-experiment \
+  --wandb_run_name run_001
+```
 
 ## データ圧縮システム
 
 ### 概要
 
-このシステムは、BPE（Byte Pair Encoding）アルゴリズムを使用してタクティクシーケンスを圧縮し、より効率的な学習データを作成します。圧縮により、冗長なタクティクの組み合わせを単一のトークンに統合し、モデルの学習効率を向上させます。
+BPE（Byte Pair Encoding）アルゴリズムを使用してタクティクシーケンスを圧縮し、より効率的な学習データを作成します。
 
 ### 圧縮プロセス
 
-1. **タクティク抽出**: `training_data.json`からタクティクシーケンスを抽出
-2. **BPE適用**: 最も頻繁に出現するタクティクペアを繰り返しマージ
-3. **圧縮データ生成**: 圧縮されたタクティクで新しい学習データを作成
+```bash
+# タクティクシーケンスの圧縮
+python src/compression/extract_tactics.py
 
-### 圧縮ファイル
-
-- **`tactic_compression_bpe_analysis.json`** - BPE圧縮の分析結果とマッピング情報
-- **`training_data_compressed_bpe.json`** - 圧縮されたタクティクで作成された学習データ
-
-### 圧縮効果
-
-- タクティクシーケンスの長さを大幅に短縮
-- 頻出するタクティクの組み合わせを単一トークンに統合
-- モデルの学習効率と推論速度の向上
-
-## 学習データ収集
-
-### データ形式
-
-学習データは以下のJSON形式で保存されます：
-
-```json
-[
-  {
-    "premises": ["(a → b)", "(b → c)", "(c → d)", "a"],
-    "goal": "d",
-    "tactic": {
-      "main": "apply",
-      "arg1": "0",
-      "arg2": null
-    },
-    "tactic_apply": true,
-    "is_proved": true
-  }
-]
+# 圧縮された学習データの作成
+python src/compression/create_compressed_training_data.py
 ```
 
-### フィールド説明
+## テスト
 
-- `premises`: 前提の配列（制限なし、任意の数）
-- `goal`: 現在のゴール
-- `tactic`: 構造化された戦略オブジェクト
-  - `main`: 戦略の種類（"apply", "intro", "split"など）
-  - `arg1`: 第1引数（インデックスやパラメータ）
-  - `arg2`: 第2引数（specialize戦略などで使用）
-- `tactic_apply`: 戦略の適用が成功したかどうか
-- `is_proved`: その例全体で証明が成功したかどうか
+### テスト実行
 
-### 戦略の種類
+```bash
+# 統合テスト
+python tests/test_integration.py
+
+# パラメータテスト
+python tests/test_parameter_sync.py
+
+# タクティクトークンテスト
+python tests/test_tactic_tokens.py
+
+# wandb接続テスト
+python tests/test_wandb_connection.py
+
+# 単一ファイル学習テスト
+python tests/test_single_file_training.py
+```
+
+## 証明戦略
+
+システムは以下の戦略をサポートします：
 
 | 戦略 | main | arg1 | arg2 | 説明 |
 |------|------|------|------|------|
@@ -364,201 +379,18 @@ Transformerへの入力は以下の形式でエンコードされます：
 | `destruct N` | "destruct" | "N" | null | 前提Nの分解 |
 | `specialize N M` | "specialize" | "N" | "M" | 前提NをMで特殊化 |
 
-### ファイル管理
-
-- **作業ファイル**: 各例の進行状況を一時保存（`temp_work.json`）
-- **データセットファイル**: 完了した例の学習データを蓄積（`training_data.json`）
-
-### データフィルタリングオプション
-
-学習データ収集時に、以下のフィルタリングオプションを使用できます：
-
-#### 1. フィルタリングなし（デフォルト）
-```bash
-python src/interaction/run_interaction.py --collect_data --count 10
-```
-- すべてのレコード（成功・失敗問わず）を保存
-- 統計: `Examples: 10 (proved: 0, failed: 10), Records: 50`
-
-#### 2. 成功した戦略かつ証明完了のみ（`--filter_successful_only`）
-```bash
-python src/interaction/run_interaction.py --collect_data --count 10 --filter_successful_only
-```
-- `tactic_apply: true` かつ `is_proved: true`のレコードのみを保存
-- 最も厳しい条件で、完全に成功した例のみを収集
-- 統計: `Examples: 10 (proved: 0, failed: 10), Records: 0, Successful tactics: 0`
-
-**注意**: 現在の設定では証明が完了する例が少ないため、`--filter_successful_only`オプションでは0件になる可能性があります。基本的なデータ収集（フィルタなし）の使用を推奨します。
-
-## 並列データ収集システム（本番環境対応）
-
-### 概要
-
-`auto_data_parallel_collector.py`は、本番環境での大規模データ収集に最適化されたシステムです。ストリーミング処理、GCS直接アップロード、ファイル分割管理により、効率的でスケーラブルなデータ収集を実現します。
-
-### 主要機能
-
-#### 1. ストリーミング処理
-- **メモリ効率**: バッチ処理によるメモリ使用量の最適化
-- **リアルタイム保存**: バッファサイズに達した時点で即座にファイル保存
-- **継続処理**: 大規模データセットでも安定した処理継続
-
-#### 2. ファイル管理
-- **自動分割**: `examples_per_file`でファイルサイズを制御
-- **連番管理**: `training_data_00001.json`形式で自動ファイル名生成
-- **バッファ制御**: `buffer_size`で書き込み頻度を調整
-
-#### 3. GCS統合
-- **直接アップロード**: ローカル保存と同時にGCSへ自動アップロード
-- **gcloud連携**: `gcloud storage cp`コマンドによる効率的なアップロード
-- **エラーハンドリング**: アップロード失敗時の適切なエラー処理
-
-#### 4. 並列処理
-- **ワーカー管理**: `min(cpu_count, 8)`でメモリ使用量を制限
-- **プロセスプール**: `ProcessPoolExecutor`による効率的な並列実行
-- **進捗表示**: `tqdm`によるリアルタイム進捗と統計表示
-
-### 本番環境ワークフロー
-
-1. **初期化**: 生成データディレクトリのクリアとGCS設定確認
-2. **ストリーミング生成**: バッチ単位で数式を生成・処理
-3. **並列証明**: 各ワーカーで`auto_classical()`による証明発見
-4. **リアルタイム保存**: バッファサイズに達した時点でファイル保存
-5. **GCSアップロード**: 保存完了と同時にGCSへ自動アップロード
-6. **統計収集**: 処理完了時に詳細統計を表示
-
-### 出力形式
-
-#### ファイル構造
-```
-generated_data/
-├── training_data_00001.json  # 例数: 100 (examples_per_file)
-├── training_data_00002.json  # 例数: 100
-├── training_data_00003.json  # 例数: 100
-└── ...
-```
-
-#### データ形式（新しい構造化形式）
-```json
-[
-  {
-    "example_id": "ex_0001",
-    "meta": {
-      "goal_original": "(a → b) → (b → c) → (a → c)",
-      "is_proved": true
-    },
-    "steps": [
-      {
-        "step_index": 0,
-        "premises": [],
-        "goal": "(a → b) → (b → c) → (a → c)",
-        "tactic": {"main": "intro", "arg1": null, "arg2": null},
-        "tactic_apply": true,
-        "state_hash": "abc123..."
-      }
-    ],
-    "summary": {
-      "tactic_sequence": ["intro", "intro", "apply 0", "apply 1"],
-      "total_steps": 4
-    }
-  }
-]
-```
-
-### 使用例
-
-#### 本番環境での大規模データ収集
-```bash
-# 1000個の数式をGCSに直接アップロード（本番環境推奨）
-python src/data_generation/auto_data_parallel_collector.py \
-  --count 1000 \
-  --examples_per_file 100 \
-  --workers 2 \
-  --gcs_bucket fof-data-20251009-milano \
-  --gcs_prefix generated_data/ \
-  --dataset_file training_data
-```
-
-#### 中規模データ収集（ローカル保存）
-```bash
-# 500個の数式をローカルに保存
-python src/data_generation/auto_data_parallel_collector.py \
-  --count 500 \
-  --workers 4 \
-  --examples_per_file 50
-```
-
-#### 高難易度・深い探索
-```bash
-# 高難易度、深い探索、カスタム設定
-python src/data_generation/auto_data_parallel_collector.py \
-  --count 200 \
-  --difficulty 0.9 \
-  --max_depth 12 \
-  --workers 6 \
-  --examples_per_file 25 \
-  --buffer_size 500 \
-  --dataset_file high_difficulty_data
-```
-
-#### メモリ制約環境での実行
-```bash
-# メモリ制約環境での安全な実行
-python src/data_generation/auto_data_parallel_collector.py \
-  --count 1000 \
-  --workers 1 \
-  --examples_per_file 50 \
-  --buffer_size 100
-```
-
-## パフォーマンス評価
-
-テストファイルを使用して、システムのパフォーマンスを分析できます：
-
-### テスト実行
-
-```bash
-# 統合テストの実行
-python tests/test_integration.py
-
-# パラメータテストの実行
-python tests/test_parameter_sync.py
-
-# タクティクトークンテストの実行
-python tests/test_tactic_tokens.py
-```
-
-### 測定されるコンポーネント
-
-- **transformer_inference**: Transformerモデルの推論時間
-- **tactic_application**: pyproverの戦略実行時間
-- **state_extraction**: 証明状態からの入力抽出時間
-- **tokenization**: 入力のトークン化時間
-
-## 証明戦略
-
-システムは以下の戦略をサポートします：
-
-- `assumption` - 前提の直接適用
-- `intro` - 含意導入
-- `split` - 連言の分解
-- `left`/`right` - 選言の左/右側選択
-- `add_dn` - 二重否定の追加
-- `apply N` - 前提Nの適用
-- `destruct N` - 前提Nの分解
-- `specialize N M` - 前提NをMで特殊化
-
 ## 開発
 
 ### モデルの改善
 
-- `transformer_classifier.py`でモデルアーキテクチャを調整（制限なしの新しい形式）
-- `state_encoder.py`でエンコーディング方法を調整
+- `src/core/transformer_classifier.py`でモデルアーキテクチャを調整
+- `src/core/state_encoder.py`でエンコーディング方法を調整
+- `src/core/parameter.py`でハイパーパラメータを管理
 
 ### 新しい入力形式のカスタマイズ
 
-- `transformer_classifier.py`の`encode()`メソッドで入力形式を調整
-- `state_encoder.py`の`encode_prover_state()`で状態エンコーディングを調整
+- `src/core/transformer_classifier.py`の`encode()`メソッドで入力形式を調整
+- `src/core/state_encoder.py`の`encode_prover_state()`で状態エンコーディングを調整
 - セグメントIDの割り当て（0=special, 1=goal, 2+=premises）を変更可能
 
 ## 謝辞
@@ -566,3 +398,5 @@ python tests/test_tactic_tokens.py
 このプロジェクトは以下のオープンソースライブラリを使用しています：
 
 - **[pyprover](https://github.com/kaicho8636/pyprover)** - 命題論理証明器ライブラリ
+- **PyTorch** - 深層学習フレームワーク
+- **wandb** - 実験追跡プラットフォーム

@@ -249,6 +249,9 @@ weights/
 output/
 results/
 
+# Experiment tracking
+wandb/
+
 # pyprover subdirectory virtual environment
 pyprover/.venv/
 pyprover/venv/
