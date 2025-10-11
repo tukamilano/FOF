@@ -593,6 +593,8 @@ def main():
     parser.add_argument("--inference_eval_examples", type=int, default=50, help="number of examples for inference evaluation")
     parser.add_argument("--inference_max_steps", type=int, default=30, help="max steps for inference evaluation")
     parser.add_argument("--inference_temperature", type=float, default=1.0, help="temperature for inference evaluation")
+    parser.add_argument("--validation_frequency", type=int, default=1000, help="run validation every n data points (default: 1000)")
+    parser.add_argument("--max_data_points", type=int, default=None, help="maximum number of data points to train on (default: all)")
     
     args = parser.parse_args()
     
@@ -740,11 +742,17 @@ def main():
     # 学習ループ
     best_eval_loss = float('inf')
     
-    print(f"\n🚀 Starting training for {args.num_epochs} epochs...")
+    # データポイントベースの学習設定
+    total_data_points = len(train_loader.dataset)
+    if args.max_data_points is not None:
+        total_data_points = min(total_data_points, args.max_data_points)
+    
+    print(f"\n🚀 Starting training for {total_data_points} data points...")
     print(f"📊 Training data: {len(train_loader.dataset)} examples")
     print(f"📊 Evaluation data: {len(eval_loader.dataset)} examples")
     print(f"📊 Batch size: {args.batch_size}")
     print(f"📊 Learning rate: {args.learning_rate}")
+    print(f"📊 Validation frequency: every {args.validation_frequency} data points")
     print("=" * 60)
     
     # タクティク引数マスクを取得
@@ -779,76 +787,142 @@ def main():
             "epoch": 0  # 初期状態をepoch 0として記録
         })
     
-    for epoch in range(args.num_epochs):
-        # 訓練
-        train_loss = train_epoch(
-            model, train_loader, optimizer, criterion, device,
-            training_params.arg1_loss_weight, training_params.arg2_loss_weight
-        )
+    # データポイントベースの学習ループ
+    model.train()
+    total_loss = 0.0
+    num_batches = 0
+    data_points_processed = 0
+    validation_count = 0
+    
+    # 無限ループでデータローダーを回す
+    train_loader_iter = iter(train_loader)
+    
+    while data_points_processed < total_data_points:
+        try:
+            # 次のバッチを取得
+            batch = next(train_loader_iter)
+        except StopIteration:
+            # データローダーが終了したら再開
+            train_loader_iter = iter(train_loader)
+            batch = next(train_loader_iter)
         
-        # 評価
-        eval_loss, main_acc, arg1_acc, arg2_acc, complete_tactic_acc, arg1_valid_count, arg2_valid_count = evaluate(
-            model, eval_loader, criterion, device,
-            tactic_arg_mask, main_to_id,
-            training_params.arg1_loss_weight, training_params.arg2_loss_weight
-        )
+        input_ids, attention_mask, main_labels, arg1_labels, arg2_labels = batch
+        input_ids = input_ids.to(device)
+        attention_mask = attention_mask.to(device)
+        main_labels = main_labels.to(device)
+        arg1_labels = arg1_labels.to(device)
+        arg2_labels = arg2_labels.to(device)
         
-        print(f"\n📈 Epoch {epoch+1}/{args.num_epochs} completed")
-        print(f"  🔥 Train Loss: {train_loss:.4f}")
-        print(f"  📊 Eval Loss: {eval_loss:.4f}")
-        print(f"  🎯 Main Acc: {main_acc:.4f}")
-        print(f"  🎯 Arg1 Acc: {arg1_acc:.4f} (valid samples: {arg1_valid_count})")
-        print(f"  🎯 Arg2 Acc: {arg2_acc:.4f} (valid samples: {arg2_valid_count})")
-        print(f"  ✅ Complete Tactic Acc: {complete_tactic_acc:.4f}")
-        print("-" * 60)
+        optimizer.zero_grad()
         
-        # 推論性能を評価
-        print(f"\n🔍 Evaluating inference performance after epoch {epoch+1}...")
-        inference_success_rate, inference_avg_steps = evaluate_inference_performance(
-            model, tokenizer, label_mappings, device, args.max_seq_len,
-            num_examples=args.inference_eval_examples, 
-            max_steps=args.inference_max_steps, 
-            temperature=args.inference_temperature
-        )
-        print(f"  Inference success rate: {inference_success_rate:.3f}")
-        print(f"  Inference avg steps (when solved): {inference_avg_steps:.2f}")
+        # モデル推論
+        main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
         
-        # wandbにログ
-        if args.use_wandb and WANDB_AVAILABLE:
-            wandb.log({
-                "epoch": epoch + 1,
-                "train_loss": train_loss,
-                "eval_loss": eval_loss,
-                "main_accuracy": main_acc,
-                "arg1_accuracy": arg1_acc,
-                "arg2_accuracy": arg2_acc,
-                "complete_tactic_accuracy": complete_tactic_acc,
-                "inference/success_rate": inference_success_rate,
-                "inference/avg_steps": inference_avg_steps,
-                "learning_rate": optimizer.param_groups[0]['lr']
-            })
+        # シンプルな損失計算（無効値-1を除外）
+        main_loss = criterion(main_logits, main_labels)
         
-        # ベストモデルを保存
-        if eval_loss < best_eval_loss:
-            best_eval_loss = eval_loss
-            torch.save({
-                'model_state_dict': model.state_dict(),
-                'main_to_id': main_to_id,
-                'arg1_to_id': arg1_to_id,
-                'arg2_to_id': arg2_to_id,
-                'id_to_main': id_to_main,
-                'id_to_arg1': id_to_arg1,
-                'id_to_arg2': id_to_arg2,
-                'model_params': model_params.__dict__,
-                'vocab_size': tokenizer.vocab_size,
-                'pad_id': tokenizer.pad_id,
-                'max_seq_len': args.max_seq_len,
-            }, args.save_path)
-            print(f"Best model saved to {args.save_path}")
+        # arg1の損失計算（無効値-1を除外）
+        arg1_valid_mask = arg1_labels != -1
+        arg1_loss = 0.0
+        if arg1_valid_mask.any():
+            arg1_loss = criterion(arg1_logits[arg1_valid_mask], arg1_labels[arg1_valid_mask])
+        
+        # arg2の損失計算（無効値-1を除外）
+        arg2_valid_mask = arg2_labels != -1
+        arg2_loss = 0.0
+        if arg2_valid_mask.any():
+            arg2_loss = criterion(arg2_logits[arg2_valid_mask], arg2_labels[arg2_valid_mask])
+        
+        # 総損失（重み付き）
+        total_loss_batch = main_loss + training_params.arg1_loss_weight * arg1_loss + training_params.arg2_loss_weight * arg2_loss
+        
+        total_loss_batch.backward()
+        optimizer.step()
+        
+        total_loss += total_loss_batch.item()
+        num_batches += 1
+        data_points_processed += input_ids.size(0)
+        
+        # バッチごとの進捗表示
+        if num_batches % 10 == 0:
+            avg_loss = total_loss / num_batches
+            print(f"  Processed {data_points_processed}/{total_data_points} data points, avg loss: {avg_loss:.4f}")
+        
+        # 指定されたデータポイント数ごとにvalidationを実行
+        if data_points_processed >= (validation_count + 1) * args.validation_frequency:
+            validation_count += 1
             
-            # ベストモデル保存をwandbにログ
+            # 現在の平均損失を計算
+            current_avg_loss = total_loss / num_batches
+            
+            print(f"\n📈 Validation {validation_count} (after {data_points_processed} data points)")
+            print(f"  🔥 Current Train Loss: {current_avg_loss:.4f}")
+            
+            # 評価を実行
+            eval_loss, main_acc, arg1_acc, arg2_acc, complete_tactic_acc, arg1_valid_count, arg2_valid_count = evaluate(
+                model, eval_loader, criterion, device,
+                tactic_arg_mask, main_to_id,
+                training_params.arg1_loss_weight, training_params.arg2_loss_weight
+            )
+            
+            print(f"  📊 Eval Loss: {eval_loss:.4f}")
+            print(f"  🎯 Main Acc: {main_acc:.4f}")
+            print(f"  🎯 Arg1 Acc: {arg1_acc:.4f} (valid samples: {arg1_valid_count})")
+            print(f"  🎯 Arg2 Acc: {arg2_acc:.4f} (valid samples: {arg2_valid_count})")
+            print(f"  ✅ Complete Tactic Acc: {complete_tactic_acc:.4f}")
+            print("-" * 60)
+            
+            # 推論性能を評価
+            print(f"\n🔍 Evaluating inference performance...")
+            inference_success_rate, inference_avg_steps = evaluate_inference_performance(
+                model, tokenizer, label_mappings, device, args.max_seq_len,
+                num_examples=args.inference_eval_examples, 
+                max_steps=args.inference_max_steps, 
+                temperature=args.inference_temperature
+            )
+            print(f"  Inference success rate: {inference_success_rate:.3f}")
+            print(f"  Inference avg steps (when solved): {inference_avg_steps:.2f}")
+            
+            # wandbにログ
             if args.use_wandb and WANDB_AVAILABLE:
-                wandb.log({"best_eval_loss": eval_loss})
+                wandb.log({
+                    "data_points_processed": data_points_processed,
+                    "validation_count": validation_count,
+                    "train_loss": current_avg_loss,
+                    "eval_loss": eval_loss,
+                    "main_accuracy": main_acc,
+                    "arg1_accuracy": arg1_acc,
+                    "arg2_accuracy": arg2_acc,
+                    "complete_tactic_accuracy": complete_tactic_acc,
+                    "inference/success_rate": inference_success_rate,
+                    "inference/avg_steps": inference_avg_steps,
+                    "learning_rate": optimizer.param_groups[0]['lr']
+                })
+            
+            # ベストモデルを保存
+            if eval_loss < best_eval_loss:
+                best_eval_loss = eval_loss
+                torch.save({
+                    'model_state_dict': model.state_dict(),
+                    'main_to_id': main_to_id,
+                    'arg1_to_id': arg1_to_id,
+                    'arg2_to_id': arg2_to_id,
+                    'id_to_main': id_to_main,
+                    'id_to_arg1': id_to_arg1,
+                    'id_to_arg2': id_to_arg2,
+                    'model_params': model_params.__dict__,
+                    'vocab_size': tokenizer.vocab_size,
+                    'pad_id': tokenizer.pad_id,
+                    'max_seq_len': args.max_seq_len,
+                }, args.save_path)
+                print(f"Best model saved to {args.save_path}")
+                
+                # ベストモデル保存をwandbにログ
+                if args.use_wandb and WANDB_AVAILABLE:
+                    wandb.log({"best_eval_loss": eval_loss})
+            
+            # モデルを訓練モードに戻す
+            model.train()
     
     print("\n🎉 Training completed!")
     print(f"📁 Best model saved to: {args.save_path}")
