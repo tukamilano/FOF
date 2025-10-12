@@ -189,14 +189,14 @@ def evaluate_inference_performance(
     temperature: float = 1.0
 ) -> Tuple[float, float]:
     """
-    推論性能を評価（軽量化版）
+    推論性能を評価（トートロジーを新規生成）
     
     Returns:
         (success_rate, avg_steps_when_solved)
     """
     import sys
-    import glob
-    import json
+    import random
+    import time
     
     # pyproverをインポート
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -215,82 +215,97 @@ def evaluate_inference_performance(
     prop_parser = proposition_mod.parser
     Prover = prover_mod.Prover
     
-    # generated_dataから例を取得
-    generated_data_dir = os.path.join(project_root, "generated_data")
-    json_files = glob.glob(os.path.join(generated_data_dir, "*.json"))
+    # generate_propをインポート
+    from src.core.generate_prop import FormulaGenerator, filter_formulas
     
-    all_examples = []
-    for json_file in json_files:
-        with open(json_file, 'r') as f:
-            file_data = json.load(f)
-            all_examples.extend(file_data)
+    # トートロジーを新規生成
+    print(f"Generating {num_examples} new tautologies for validation...")
     
-    # 証明済みの例のみをフィルタリング
-    proved_examples = [ex for ex in all_examples if ex.get('meta', {}).get('is_proved', False)]
+    # 変数を取得（fof_tokens.pyから）
+    from src.core.transformer_classifier import load_tokens_and_labels_from_token_py
+    token_py_path = os.path.join(project_root, "src", "core", "fof_tokens.py")
+    base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
     
-    if not proved_examples:
-        print("No proved examples found for inference evaluation!")
+    # 利用可能な変数を推論
+    variables = [t for t in ["a", "b", "c"] if t in base_tokens]
+    if not variables:
+        variables = ["a", "b", "c"]
+    
+    # データ生成時と同じパラメータを取得
+    from src.core.parameter import get_generation_params
+    gen_params = get_generation_params()
+    
+    # フォーミュラジェネレーターを作成
+    gen = FormulaGenerator(
+        variables=variables,
+        allow_const=gen_params.allow_const,  # データ生成時と同じ設定
+        difficulty=gen_params.difficulty,  # データ生成時と同じ難易度
+        max_depth=gen_params.max_depth,  # データ生成時と同じ最大深度
+        seed=int(time.time() * 1000) % 2**32  # 現在時刻をシードとして使用
+    )
+    
+    # トートロジーを生成
+    tautologies = filter_formulas(
+        gen=gen,
+        max_len=100,  # 最大長を制限
+        require_tautology=True,  # トートロジーのみ
+        limit=num_examples
+    )
+    
+    if not tautologies:
+        print("Failed to generate tautologies for validation!")
         return 0.0, 0.0
+    
+    print(f"Generated {len(tautologies)} tautologies for validation")
+    print(f"First tautology: {tautologies[0]}")
     
     # 推論性能評価を実行
     solved_count = 0
     solved_steps = []
     
-    # ランダムに問題を選択（毎回異なる問題を使用）
-    import random
-    import time
-    # 現在時刻をシードとして使用して毎回異なる問題を選択
-    random.seed(int(time.time() * 1000) % 2**32)
-    selected_examples = random.sample(proved_examples, min(num_examples, len(proved_examples)))
-    
-    print(f"Selected {len(selected_examples)} random examples for inference evaluation")
-    print(f"First example goal: {selected_examples[0]['steps'][0]['goal'][:100]}...")
-    
-    for i, example in enumerate(selected_examples):
-        
-        # 最初のステップから初期状態を取得
-        first_step = example['steps'][0]
-        goal_str = first_step['goal']
-        premises = first_step['premises']
-        
-        # パースしてproverを作成
-        parse_tree = PropParseTree()
-        goal_node = parse_tree.transform(prop_parser.parse(goal_str))
-        prover = Prover(goal_node)
-        
-        # 前提を追加
-        for prem_str in premises:
-            prem_node = parse_tree.transform(prop_parser.parse(prem_str))
-            prover.variables.append(prem_node)
-        
-        # 推論ループ（シンプル化：禁止タクティクシステムなし）
-        step = 0
-        solved = prover.goal is None
-        
-        while not solved and step < max_steps:
-            # 現在の状態を取得
-            current_state = encode_prover_state(prover)
-            current_premises = current_state["premises"]
-            current_goal = current_state["goal"]
+    for i, goal_str in enumerate(tautologies):
+        try:
+            # パースしてproverを作成
+            parse_tree = PropParseTree()
+            goal_node = parse_tree.transform(prop_parser.parse(goal_str))
+            prover = Prover(goal_node)
             
-            # タクティクを予測（純粋な言語モデル性能）
-            tactic_str, main_conf, arg1_conf, arg2_conf = predict_tactic(
-                model, tokenizer, current_premises, current_goal, 
-                label_mappings, device, max_seq_len, None, temperature
-            )
+            # 前提は空（トートロジーなので前提なしで証明可能）
+            premises = []
             
-            # タクティクを適用
-            success = apply_tactic_from_label(prover, tactic_str)
-            
-            step += 1
+            # 推論ループ（シンプル化：禁止タクティクシステムなし）
+            step = 0
             solved = prover.goal is None
-        
-        if solved:
-            solved_count += 1
-            solved_steps.append(step)
+            
+            while not solved and step < max_steps:
+                # 現在の状態を取得
+                current_state = encode_prover_state(prover)
+                current_premises = current_state["premises"]
+                current_goal = current_state["goal"]
+                
+                # タクティクを予測（純粋な言語モデル性能）
+                tactic_str, main_conf, arg1_conf, arg2_conf = predict_tactic(
+                    model, tokenizer, current_premises, current_goal, 
+                    label_mappings, device, max_seq_len, None, temperature
+                )
+                
+                # タクティクを適用
+                success = apply_tactic_from_label(prover, tactic_str)
+                
+                step += 1
+                solved = prover.goal is None
+            
+            if solved:
+                solved_count += 1
+                solved_steps.append(step)
+                
+        except Exception as e:
+            # パースエラーなどで失敗した場合はスキップ
+            print(f"Warning: Failed to process tautology {i+1}: {e}")
+            continue
     
     # 統計を計算
-    success_rate = solved_count / num_examples
+    success_rate = solved_count / len(tautologies) if tautologies else 0.0
     avg_steps_when_solved = sum(solved_steps) / len(solved_steps) if solved_steps else 0.0
     
     return success_rate, avg_steps_when_solved
@@ -467,129 +482,149 @@ def main():
     prop_parser = proposition_mod.parser
     Prover = prover_mod.Prover
     
-    # generated_dataから実際の例を取得
-    print(f"\nLoading examples from generated_data...")
+    # トートロジーを新規生成
+    print(f"\nGenerating {args.count} new tautologies for inference...")
     
-    # generated_dataディレクトリから例を読み込み
-    generated_data_dir = os.path.join(project_root, "generated_data")
-    json_files = glob.glob(os.path.join(generated_data_dir, "*.json"))
+    # generate_propをインポート
+    from src.core.generate_prop import FormulaGenerator, filter_formulas
     
-    all_examples = []
-    for json_file in json_files:
-        with open(json_file, 'r') as f:
-            file_data = json.load(f)
-            all_examples.extend(file_data)
+    # 変数を取得（fof_tokens.pyから）
+    from src.core.transformer_classifier import load_tokens_and_labels_from_token_py
+    token_py_path = os.path.join(project_root, "src", "core", "fof_tokens.py")
+    base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
     
-    # 証明済みの例のみをフィルタリング
-    proved_examples = [ex for ex in all_examples if ex.get('meta', {}).get('is_proved', False)]
+    # 利用可能な変数を推論
+    variables = [t for t in ["a", "b", "c"] if t in base_tokens]
+    if not variables:
+        variables = ["a", "b", "c"]
     
-    if not proved_examples:
-        print("No proved examples found in generated_data!")
+    # データ生成時と同じパラメータを取得
+    from src.core.parameter import get_generation_params
+    gen_params = get_generation_params()
+    
+    # フォーミュラジェネレーターを作成
+    gen = FormulaGenerator(
+        variables=variables,
+        allow_const=gen_params.allow_const,  # データ生成時と同じ設定
+        difficulty=gen_params.difficulty,  # データ生成時と同じ難易度
+        max_depth=gen_params.max_depth,  # データ生成時と同じ最大深度
+        seed=int(time.time() * 1000) % 2**32  # 現在時刻をシードとして使用
+    )
+    
+    # トートロジーを生成
+    tautologies = filter_formulas(
+        gen=gen,
+        max_len=100,  # 最大長を制限
+        require_tautology=True,  # トートロジーのみ
+        limit=args.count
+    )
+    
+    if not tautologies:
+        print("Failed to generate tautologies for inference!")
         return
     
-    print(f"Found {len(proved_examples)} proved examples")
-    print(f"Running {args.count} examples (max_steps: {args.max_steps})...")
+    print(f"Generated {len(tautologies)} tautologies for inference")
+    print(f"First tautology: {tautologies[0]}")
+    print(f"Running {len(tautologies)} examples (max_steps: {args.max_steps})...")
     
     solved_count = 0
     step_counts = []
     tactic_usage = {}
     confidence_scores = []
     
-    for i in range(args.count):
-        # 例を循環して選択
-        example = proved_examples[i % len(proved_examples)]
-        
-        # 最初のステップから初期状態を取得
-        first_step = example['steps'][0]
-        goal_str = first_step['goal']
-        premises = first_step['premises']
-        
-        # パースしてproverを作成
-        parse_tree = PropParseTree()
-        goal_node = parse_tree.transform(prop_parser.parse(goal_str))
-        prover = Prover(goal_node)
-        
-        # 前提を追加
-        for prem_str in premises:
-            prem_node = parse_tree.transform(prop_parser.parse(prem_str))
-            prover.variables.append(prem_node)
-        
-        if args.verbose:
-            print(f"\nExample {i+1}:")
-            print(f"  Goal: {goal_str}")
-            print(f"  Premises: {premises}")
-        
-        # 推論ループ
-        step = 0
-        solved = prover.goal is None
-        banned_tactics = set()
-        example_tactics = []
-        example_confidences = []
-        
-        while not solved and step < args.max_steps:
-            # 現在の状態を取得
-            current_state = encode_prover_state(prover)
-            current_premises = current_state["premises"]
-            current_goal = current_state["goal"]
+    for i, goal_str in enumerate(tautologies):
+        try:
+            # パースしてproverを作成
+            parse_tree = PropParseTree()
+            goal_node = parse_tree.transform(prop_parser.parse(goal_str))
+            prover = Prover(goal_node)
             
-            # タクティクを予測
-            tactic_str, main_conf, arg1_conf, arg2_conf = predict_tactic(
-                model, tokenizer, current_premises, current_goal, 
-                label_mappings, device, max_seq_len, banned_tactics,
-                args.temperature
-            )
+            # 前提は空（トートロジーなので前提なしで証明可能）
+            premises = []
             
             if args.verbose:
-                print(f"  Step {step+1}: {tactic_str} (conf: {main_conf:.3f}, {arg1_conf:.3f}, {arg2_conf:.3f})")
+                print(f"\nExample {i+1}:")
+                print(f"  Goal: {goal_str}")
+                print(f"  Premises: {premises}")
             
-            # タクティクを適用
-            success = apply_tactic_from_label(prover, tactic_str)
+            # 推論ループ
+            step = 0
+            solved = prover.goal is None
+            banned_tactics = set()
+            example_tactics = []
+            example_confidences = []
             
-            # ログ用データを記録
-            example_tactics.append(tactic_str)
-            example_confidences.append(main_conf)
-            tactic_usage[tactic_str] = tactic_usage.get(tactic_str, 0) + 1
-            
-            if success:
+            while not solved and step < args.max_steps:
+                # 現在の状態を取得
+                current_state = encode_prover_state(prover)
+                current_premises = current_state["premises"]
+                current_goal = current_state["goal"]
+                
+                # タクティクを予測
+                tactic_str, main_conf, arg1_conf, arg2_conf = predict_tactic(
+                    model, tokenizer, current_premises, current_goal, 
+                    label_mappings, device, max_seq_len, banned_tactics,
+                    args.temperature
+                )
+                
                 if args.verbose:
-                    print(f"    Applied successfully")
-                banned_tactics = set()  # 成功したら禁止リストをリセット
+                    print(f"  Step {step+1}: {tactic_str} (conf: {main_conf:.3f}, {arg1_conf:.3f}, {arg2_conf:.3f})")
+                
+                # タクティクを適用
+                success = apply_tactic_from_label(prover, tactic_str)
+                
+                # ログ用データを記録
+                example_tactics.append(tactic_str)
+                example_confidences.append(main_conf)
+                tactic_usage[tactic_str] = tactic_usage.get(tactic_str, 0) + 1
+                
+                if success:
+                    if args.verbose:
+                        print(f"    Applied successfully")
+                    banned_tactics = set()  # 成功したら禁止リストをリセット
+                else:
+                    if args.verbose:
+                        print(f"    Failed")
+                    banned_tactics.add(tactic_str)
+                
+                step += 1
+                solved = prover.goal is None
+            
+            # 例の結果を記録
+            step_counts.append(step)
+            confidence_scores.extend(example_confidences)
+            
+            if solved:
+                solved_count += 1
+                if args.verbose:
+                    print(f"  Result: SOLVED in {step} steps")
             else:
                 if args.verbose:
-                    print(f"    Failed")
-                banned_tactics.add(tactic_str)
+                    print(f"  Result: FAILED after {step} steps")
             
-            step += 1
-            solved = prover.goal is None
-        
-        # 例の結果を記録
-        step_counts.append(step)
-        confidence_scores.extend(example_confidences)
-        
-        if solved:
-            solved_count += 1
-            if args.verbose:
-                print(f"  Result: SOLVED in {step} steps")
-        else:
-            if args.verbose:
-                print(f"  Result: FAILED after {step} steps")
-        
-        # wandbに例の結果をログ
-        if args.use_wandb and WANDB_AVAILABLE:
-            wandb.log({
-                f"example_{i+1}/solved": 1 if solved else 0,
-                f"example_{i+1}/steps": step,
-                f"example_{i+1}/avg_confidence": sum(example_confidences) / len(example_confidences) if example_confidences else 0,
-                f"example_{i+1}/goal_length": len(goal_str),
-                f"example_{i+1}/premises_count": len(premises)
-            })
+            # wandbに例の結果をログ
+            if args.use_wandb and WANDB_AVAILABLE:
+                wandb.log({
+                    f"example_{i+1}/solved": 1 if solved else 0,
+                    f"example_{i+1}/steps": step,
+                    f"example_{i+1}/avg_confidence": sum(example_confidences) / len(example_confidences) if example_confidences else 0,
+                    f"example_{i+1}/goal_length": len(goal_str),
+                    f"example_{i+1}/premises_count": len(premises)
+                })
+                
+        except Exception as e:
+            # パースエラーなどで失敗した場合はスキップ
+            print(f"Warning: Failed to process tautology {i+1}: {e}")
+            step_counts.append(args.max_steps)  # 失敗として記録
+            continue
     
     # 最終結果を計算
-    success_rate = solved_count / args.count
+    total_examples = len(tautologies)
+    success_rate = solved_count / total_examples if total_examples > 0 else 0.0
     avg_steps = sum(step_counts) / len(step_counts) if step_counts else 0
     avg_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0
     
-    print(f"\nResults: {solved_count}/{args.count} examples solved ({success_rate*100:.1f}%)")
+    print(f"\nResults: {solved_count}/{total_examples} examples solved ({success_rate*100:.1f}%)")
     print(f"Average steps: {avg_steps:.2f}")
     print(f"Average confidence: {avg_confidence:.3f}")
     
@@ -600,7 +635,7 @@ def main():
             "final/avg_steps": avg_steps,
             "final/avg_confidence": avg_confidence,
             "final/solved_count": solved_count,
-            "final/total_examples": args.count
+            "final/total_examples": total_examples
         })
         
         # タクティク使用頻度をログ

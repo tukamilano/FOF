@@ -41,7 +41,7 @@ def expr_to_string(e: Expr) -> str:
     if isinstance(e, Var):
         return e.name
     if isinstance(e, Const):
-        return "⊤" if e.value else "⊥"
+        return "True" if e.value else "⊥"  # pyprover互換性のため⊤をTrueに変更
     if isinstance(e, Not):
         s = expr_to_string(e.expr)
         # Keep parentheses around non-atomic to avoid ambiguity

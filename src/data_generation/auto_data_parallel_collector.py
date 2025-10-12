@@ -18,7 +18,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, project_root)
 
 from src.core.generate_prop import FormulaGenerator, filter_formulas
-from src.core.state_encoder import encode_prover_state, parse_tactic_string
+from src.core.state_encoder import encode_prover_state, parse_tactic_string, state_hash, state_tactic_hash, format_tactic_string
 from src.core.parameter import (
     default_params, get_generation_params, get_training_params, 
     get_system_params, DeviceType, DataFilterType
@@ -141,13 +141,22 @@ def transform_to_new_format(steps: List[Dict]) -> List[Dict]:
         # Transform steps
         transformed_steps = []
         for j, step in enumerate(proof_steps):
+            premises = step.get('premises', [])
+            goal = step['goal']
+            tactic_str = format_tactic_string(step['tactic'])
+            
+            # ハッシュを計算
+            state_hash_val = state_hash(premises, goal)
+            state_tactic_hash_val = state_tactic_hash(premises, goal, tactic_str)
+            
             transformed_steps.append({
                 "step_index": j,
-                "premises": step.get('premises', []),
-                "goal": step['goal'],
+                "premises": premises,
+                "goal": goal,
                 "tactic": step['tactic'],
                 "tactic_apply": step['tactic_apply'],
-                "state_hash": step.get('record_hash', '')
+                "state_hash": state_hash_val,
+                "state_tactic_hash": state_tactic_hash_val
             })
         
         # Create summary if proof was completed

@@ -2,6 +2,7 @@
 推論時と学習時で一貫した状態エンコードを行うモジュール
 前提の数と長さに制限なし
 """
+import hashlib
 from typing import Dict, List, Tuple, Any, Optional
 
 
@@ -91,5 +92,38 @@ def format_tactic_string(tactic_dict: Dict[str, Any]) -> str:
         return f"{main} {arg1}"
     else:
         return f"{main} {arg1} {arg2}"
+
+
+def state_hash(premises: List[str], goal: str) -> str:
+    """
+    状態のみのハッシュ（tactic を含まない）
+    強化学習で同じ状態での複数のアクション試行を管理するために使用
+    
+    Args:
+        premises: 前提のリスト
+        goal: ゴール
+        
+    Returns:
+        状態のハッシュ値
+    """
+    state_str = f"{'|'.join(premises)}|{goal}"
+    return hashlib.md5(state_str.encode()).hexdigest()
+
+
+def state_tactic_hash(premises: List[str], goal: str, tactic: str) -> str:
+    """
+    状態とtacticの組み合わせのハッシュ
+    重複チェックやデータ管理に使用
+    
+    Args:
+        premises: 前提のリスト
+        goal: ゴール
+        tactic: 戦略文字列
+        
+    Returns:
+        状態とtacticの組み合わせのハッシュ値
+    """
+    record_str = f"{'|'.join(premises)}|{goal}|{tactic}"
+    return hashlib.md5(record_str.encode()).hexdigest()
 
 

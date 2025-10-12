@@ -20,7 +20,7 @@ from src.core.transformer_classifier import (
     build_hierarchical_label_mappings,
 )
 from src.core.generate_prop import FormulaGenerator, filter_formulas
-from src.core.state_encoder import encode_prover_state, format_tactic_string, parse_tactic_string
+from src.core.state_encoder import encode_prover_state, format_tactic_string, parse_tactic_string, state_hash, state_tactic_hash
 from src.core.parameter import (
     default_params, get_model_params, get_training_params, 
     get_generation_params, get_system_params, DeviceType, DataFilterType
@@ -99,8 +99,9 @@ class StructuredDataCollector:
         # 戦略文字列を構造化形式に変換
         structured_tactic = parse_tactic_string(tactic)
         
-        # レコードハッシュを計算
-        record_hash_val = record_hash(premises, goal, tactic)
+        # ハッシュを計算
+        state_hash_val = state_hash(premises, goal)
+        state_tactic_hash_val = state_tactic_hash(premises, goal, tactic)
         
         step_data = {
             "step_index": step,
@@ -108,7 +109,8 @@ class StructuredDataCollector:
             "goal": goal,
             "tactic": structured_tactic,
             "tactic_apply": tactic_apply,
-            "state_hash": record_hash_val
+            "state_hash": state_hash_val,
+            "state_tactic_hash": state_tactic_hash_val
         }
         
         self.current_example_steps.append(step_data)

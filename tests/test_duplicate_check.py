@@ -54,9 +54,14 @@ def check_duplicates_in_file(file_path: str) -> Dict:
     total_examples = len(examples)
     total_steps = 0
     
+    # 実際のステップ数をカウント（tactic_applyがTrueのステップのみ）
+    for example in examples:
+        for step in example.get('steps', []):
+            if step.get('tactic_apply', False):
+                total_steps += 1
+    
     # hashを抽出
     file_hashes = extract_hashes_from_examples(examples)
-    total_steps = len(file_hashes)
     
     # example_hashのみをカウント
     for example_id, hash_type, hash_value in file_hashes:

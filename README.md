@@ -2,6 +2,15 @@
 
 このプロジェクトは、Transformerモデルを使用して命題論理の定理証明を自動化するシステムです。[pyprover](https://github.com/kaicho8636/pyprover)ライブラリと組み合わせて、数式生成から証明戦略の予測まで一貫したワークフローを提供します。
 
+## 🚀 主な特徴
+
+- **階層分類アーキテクチャ**: タクティクの種類と引数を独立して予測
+- **推論性能評価システム**: 実際の問題解決能力を測定する評価システム
+- **大規模データ処理**: GCS統合による効率的なデータ管理
+- **高度な重複排除**: 効率的な重複排除システム
+- **並列データ収集**: マルチプロセス対応の高速データ生成
+- **実験追跡**: wandbによる詳細な学習・推論ログ
+
 ## 環境設定
 
 ### 仮想環境の作成と有効化
@@ -48,13 +57,16 @@ FOF/
 │   │   └── run_interaction.py    # メインの実行ファイル。数式生成、Transformer予測、証明実行の統合ワークフロー
 │   ├── data_generation/          # 事前学習データ生成
 │   │   ├── auto_data_collector.py        # auto_classical()を使用したデータ収集システム
-│   │   └── auto_data_parallel_collector.py # 並列処理対応の高速データ収集システム
+│   │   └── auto_data_parallel_collector.py # 並列処理対応の高速データ収集システム（GCS統合）
 │   ├── training/                 # 学習関連
 │   │   ├── train_with_generated_data.py  # 生成データを使用した学習スクリプト（推奨）
 │   │   ├── inference_hierarchical.py     # 階層分類対応の推論スクリプト
 │   │   ├── analyze_generated_data.py     # 生成データの分析
 │   │   ├── check_duplicates.py           # 重複チェック
-│   │   └── run_training.py               # 学習実行スクリプト
+│   │   ├── deduplicate_generated_data.py # 生成データの重複排除
+│   │   ├── deduplicate_gcs_data.py       # GCSデータの重複排除
+│   │   ├── run_training.py               # 学習実行スクリプト
+│   │   └── README.md                     # 学習システムの詳細ドキュメント
 │   ├── compression/              # 圧縮関連
 │   │   ├── create_compressed_training_data.py # 圧縮されたタクティクで新しいtraining_data.jsonを作成
 │   │   └── extract_tactics.py        # BPEアルゴリズムでタクティクシーケンスを圧縮
@@ -70,7 +82,11 @@ FOF/
 │   ├── test_tactic_tokens.py     # タクティクトークンテスト
 │   ├── test_integration.py       # 統合テスト
 │   ├── test_wandb_connection.py  # wandb接続テスト
-│   └── test_single_file_training.py # 単一ファイル学習テスト
+│   ├── test_single_file_training.py # 単一ファイル学習テスト
+│   ├── test_duplicate_check.py   # 重複チェックテスト
+│   ├── test_deduplicated_data_hashes.py # 重複排除データハッシュテスト
+│   ├── test_gcs_cross_file_duplicates.py # GCSクロスファイル重複テスト
+│   └── debug_duplicate_counting.py # 重複カウントデバッグ
 ├── examples/                     # 使用例
 │   └── example_parameter_usage.py # parameter.pyの使用例
 ├── data/                         # データファイル
@@ -81,10 +97,19 @@ FOF/
 │   ├── test_output_00001.json
 │   ├── test_output_00002.json
 │   └── ...
+├── deduplicated_data/            # 重複排除済みデータ
+│   ├── deduplicated_batch_00001.json
+│   ├── deduplicated_batch_00002.json
+│   └── ...
 ├── models/                       # 学習済みモデル
 │   ├── hierarchical_model.pth
-│   └── hierarchical_model_generated.pth
+│   ├── hierarchical_model_generated.pth
+│   └── test_*.pth                # テスト用モデル
 ├── pyprover/                     # pyprover（既存のまま）
+├── test_inference_randomness.py  # 推論ランダム性テスト
+├── test_problem_selection.py     # 問題選択テスト
+├── deduplication_report.json     # 重複排除レポート
+├── gcs_deduplication_report.json # GCS重複排除レポート
 └── README.md
 ```
 
@@ -115,7 +140,25 @@ python src/data_generation/auto_data_parallel_collector.py \
   --workers 8 \
   --examples_per_file 50 \
   --dataset_file high_difficulty_data
+
+# 超大量データ収集（GCS + 高並列度）
+python src/data_generation/auto_data_parallel_collector.py \
+  --count 10000 \
+  --examples_per_file 1000 \
+  --workers 16 \
+  --gcs_bucket fof-data-20251009-milano \
+  --gcs_prefix generated_data/ \
+  --dataset_file large_scale_data \
+  --buffer_size 5000
 ```
+
+#### 並列データ収集の特徴
+
+- **マルチプロセス処理**: CPUコア数を活用した高速データ生成
+- **GCS統合**: 大規模データセットの効率的な管理
+- **重複排除**: Example重複の自動検出とスキップ
+- **ストリーミング処理**: メモリ効率的な大規模データ処理
+- **バッチ分割**: 指定されたサイズでファイルを自動分割
 
 #### 基本的なデータ収集
 
@@ -136,6 +179,12 @@ python src/data_generation/auto_data_collector.py --count 10 --max_depth 10
 ```bash
 # 基本的な学習（全データ使用 + 推論性能評価）
 python src/training/train_with_generated_data.py
+
+# 重複排除済みデータを使用（推奨）
+python src/training/train_with_generated_data.py \
+  --data_dir deduplicated_data \
+  --batch_size 32 \
+  --learning_rate 3e-4
 
 # カスタム設定での学習
 python src/training/train_with_generated_data.py \
@@ -255,6 +304,18 @@ python src/training/analyze_generated_data.py --data_dir generated_data
 - **実際の証明実行**: pyproverを使用した実際の定理証明で性能を測定
 - **純粋な言語モデル性能**: 人工的な精度向上要因を排除した真の性能評価
 
+### 重複排除済みデータ対応
+
+#### 新しいデータ形式サポート
+- **DeduplicatedDataDataset**: 重複排除済みデータ専用のデータセットクラス
+- **効率的なメモリ使用**: 単純なstepの集合形式でメモリ効率を向上
+- **バッチ処理**: 大規模データセットの効率的な処理
+
+#### 学習オプション
+- **重複排除済みデータ使用**: `--data_dir deduplicated_data`で重複排除済みデータを指定
+- **従来データ使用**: `--data_dir generated_data`で従来のデータ形式を使用
+- **重複保持**: `--keep_duplicates`で重複を保持した学習
+
 ### 階層分類アーキテクチャ
 
 ```python
@@ -335,6 +396,93 @@ python src/training/train_with_generated_data.py \
   --wandb_run_name run_001
 ```
 
+## 重複排除システム
+
+### 概要
+
+大規模データセットの効率的な処理のため、重複排除機能を提供しています。これにより、学習データの品質向上とメモリ使用量の最適化を実現します。
+
+### 重複排除の実行
+
+#### 生成データの重複排除
+
+```bash
+# 生成データの重複排除
+python src/training/deduplicate_generated_data.py \
+    --input_dir generated_data \
+    --output_dir deduplicated_data \
+    --report_file deduplication_report.json \
+    --verbose
+```
+
+#### GCSデータの重複排除（大規模データセット用）
+
+```bash
+# GCSデータの重複排除
+python src/training/deduplicate_gcs_data.py \
+    --gcs_bucket fof-data-20251009-milano \
+    --gcs_prefix generated_data/ \
+    --output_dir deduplicated_data \
+    --report_file gcs_deduplication_report.json \
+    --batch_size 20000 \
+    --max_workers 8 \
+    --verbose
+```
+
+### 重複排除済みデータの使用
+
+重複排除済みデータを使用して学習：
+
+```bash
+# 重複排除済みデータを使用
+python src/training/train_with_generated_data.py \
+    --data_dir deduplicated_data \
+    --batch_size 32 \
+    --learning_rate 3e-4
+
+# または従来通り（重複排除を学習時に実行）
+python src/training/train_with_generated_data.py \
+    --data_dir generated_data \
+    --batch_size 32 \
+    --learning_rate 3e-4
+```
+
+### 重複排除の種類
+
+1. **Example重複**: 同じ`example_hash`の例（完全に同一の問題）
+2. **State重複**: 同じ`state_hash`の例（同じ証明状態）
+3. **State-Tactic重複**: 同じ`state_tactic_hash`の例（同じ状態+戦略の組み合わせ）
+
+### 出力形式
+
+重複排除後は証明の連続性が失われるため、単純なstepの集合として保存されます：
+
+```json
+[
+  {
+    "step_index": 0,
+    "premises": [],
+    "goal": "((((b ∧ a) ∧ ((b ∨ c) → False)) ∧ (c → (b → c))) → b)",
+    "tactic": {
+      "main": "intro",
+      "arg1": null,
+      "arg2": null
+    },
+    "tactic_apply": true,
+    "state_hash": "29326faf43695967bc47255fc73a580c"
+  }
+]
+```
+
+### GCS統合
+
+大規模データセットの効率的な処理のため、Google Cloud Storageとの統合を提供：
+
+- **直接アップロード**: データ生成時にGCSに直接アップロード
+- **並列ダウンロード**: 複数ファイルの並列ダウンロード
+- **メモリ効率**: 大規模データセットでもメモリ効率的に処理
+- **バッチ処理**: 指定されたサイズでバッチ分割
+
 ## データ圧縮システム
 
 ### 概要
@@ -375,6 +523,8 @@ python src/compression/create_compressed_training_data.py
 
 ### テスト実行
 
+#### 基本機能テスト
+
 ```bash
 # 統合テスト
 python tests/test_integration.py
@@ -391,6 +541,40 @@ python tests/test_wandb_connection.py
 # 単一ファイル学習テスト
 python tests/test_single_file_training.py
 ```
+
+#### 重複排除テスト
+
+```bash
+# 重複チェックテスト
+python tests/test_duplicate_check.py
+
+# 重複排除データハッシュテスト
+python tests/test_deduplicated_data_hashes.py
+
+# GCSクロスファイル重複テスト
+python tests/test_gcs_cross_file_duplicates.py
+
+# 重複カウントデバッグ
+python tests/debug_duplicate_counting.py
+```
+
+#### 推論・問題選択テスト
+
+```bash
+# 推論ランダム性テスト
+python test_inference_randomness.py
+
+# 問題選択テスト
+python test_problem_selection.py
+```
+
+### テストカバレッジ
+
+- **基本機能**: インポート、パラメータ同期、トークナイザー
+- **学習システム**: 単一ファイル学習、wandb統合
+- **重複排除**: 各種重複チェック、ハッシュ検証
+- **GCS統合**: クロスファイル重複検出
+- **推論システム**: ランダム性、問題選択の公平性
 
 ## 証明戦略
 
@@ -421,6 +605,87 @@ python tests/test_single_file_training.py
 - `src/core/transformer_classifier.py`の`encode()`メソッドで入力形式を調整
 - `src/core/state_encoder.py`の`encode_prover_state()`で状態エンコーディングを調整
 - セグメントIDの割り当て（0=special, 1=goal, 2+=premises）を変更可能
+
+## 推奨ワークフロー
+
+### 完全なワークフロー（大規模データセット）
+
+```bash
+# 1. 大規模データ生成（GCS直接アップロード）
+python src/data_generation/auto_data_parallel_collector.py \
+  --count 10000 \
+  --examples_per_file 1000 \
+  --workers 8 \
+  --gcs_bucket fof-data-20251009-milano \
+  --gcs_prefix generated_data/ \
+  --dataset_file large_scale_data
+
+# 2. GCSデータの重複排除
+python src/training/deduplicate_gcs_data.py \
+  --gcs_bucket fof-data-20251009-milano \
+  --gcs_prefix generated_data/ \
+  --output_dir deduplicated_data \
+  --report_file gcs_deduplication_report.json \
+  --batch_size 20000 \
+  --max_workers 8 \
+  --verbose
+
+# 3. 重複排除済みデータで学習
+python src/training/train_with_generated_data.py \
+  --data_dir deduplicated_data \
+  --batch_size 32 \
+  --learning_rate 3e-4 \
+  --num_epochs 10 \
+  --use_wandb \
+  --wandb_project fof-training \
+  --wandb_run_name large_scale_experiment
+
+# 4. 推論性能評価
+python src/training/inference_hierarchical.py \
+  --model_path models/hierarchical_model_generated.pth \
+  --num_examples 100 \
+  --max_steps 30 \
+  --use_wandb \
+  --wandb_project fof-inference
+```
+
+### 簡易ワークフロー（小規模データセット）
+
+```bash
+# 1. データ生成
+python src/data_generation/auto_data_parallel_collector.py --count 100 --workers 4
+
+# 2. 重複排除
+python src/training/deduplicate_generated_data.py \
+  --input_dir generated_data \
+  --output_dir deduplicated_data \
+  --verbose
+
+# 3. 学習
+python src/training/train_with_generated_data.py \
+  --data_dir deduplicated_data \
+  --use_wandb
+
+# 4. 推論
+python src/training/inference_hierarchical.py --verbose
+```
+
+### 開発・テストワークフロー
+
+```bash
+# 1. テスト実行
+python tests/test_integration.py
+python tests/test_duplicate_check.py
+python tests/test_wandb_connection.py
+
+# 2. 小規模データで動作確認
+python src/data_generation/auto_data_collector.py --count 10
+python src/training/train_with_generated_data.py --data_dir generated_data --num_epochs 1
+
+# 3. 推論テスト
+python test_inference_randomness.py
+python test_problem_selection.py
+```
 
 ## 謝辞
 
