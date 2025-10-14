@@ -257,7 +257,9 @@ def evaluate_inference_performance(
         return 0.0, 0.0
     
     print(f"Generated {len(tautologies)} tautologies for validation")
-    print(f"First tautology: {tautologies[0]}")
+    print("First 5 tautologies:")
+    for i in range(min(5, len(tautologies))):
+        print(f"  {i+1}: {tautologies[i]}")
     
     # 推論性能評価を実行
     solved_count = 0
@@ -524,7 +526,9 @@ def main():
         return
     
     print(f"Generated {len(tautologies)} tautologies for inference")
-    print(f"First tautology: {tautologies[0]}")
+    print("First 5 tautologies:")
+    for i in range(min(5, len(tautologies))):
+        print(f"  {i+1}: {tautologies[i]}")
     print(f"Running {len(tautologies)} examples (max_steps: {args.max_steps})...")
     
     solved_count = 0
