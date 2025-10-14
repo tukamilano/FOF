@@ -80,7 +80,7 @@ class GenerationParameters:
     """公式生成と評価のパラメータ"""
     # 基本生成設定
     count: int = 10
-    difficulty: float = 0.5
+    difficulty: float = 0.7
     seed: int = 7
     max_len: int = 50
     
