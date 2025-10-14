@@ -172,6 +172,11 @@ def filter_formulas(
         if s in out:
             continue
         out.append(s)
+    
+    # 要求された数に達しない場合は警告を出す
+    if len(out) < limit:
+        print(f"Warning: Only generated {len(out)}/{limit} formulas after {attempts} attempts (max_attempts reached)")
+    
     return out
 
 

@@ -264,7 +264,7 @@ def main():
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="number of gradient accumulation steps")
     
     # 推論評価関連の引数
-    parser.add_argument("--inference_eval_examples", type=int, default=50, help="number of examples for inference evaluation")
+    parser.add_argument("--inference_eval_examples", type=int, default=100, help="number of examples for inference evaluation")
     parser.add_argument("--inference_max_steps", type=int, default=30, help="max steps for inference evaluation")
     parser.add_argument("--inference_temperature", type=float, default=1.0, help="temperature for inference evaluation")
     
