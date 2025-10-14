@@ -42,6 +42,7 @@ from src.core.parameter import (
     default_params, get_model_params, get_training_params, 
     get_system_params, get_hierarchical_labels, DeviceType
 )
+from src.training.inference_hierarchical import evaluate_inference_performance
 
 
 class DeduplicatedDataDataset(Dataset):
@@ -243,6 +244,12 @@ def main():
     parser.add_argument("--use_amp", action="store_true", help="use Automatic Mixed Precision")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="number of gradient accumulation steps")
     
+    # 推論評価関連の引数
+    parser.add_argument("--inference_eval_examples", type=int, default=50, help="number of examples for inference evaluation")
+    parser.add_argument("--inference_max_steps", type=int, default=30, help="max steps for inference evaluation")
+    parser.add_argument("--inference_temperature", type=float, default=1.0, help="temperature for inference evaluation")
+    parser.add_argument("--eval_frequency", type=int, default=1, help="run evaluation every n epochs (default: 1)")
+    
     args = parser.parse_args()
     
     # 実行されたコマンドライン引数をログ出力
@@ -442,11 +449,22 @@ def main():
     elif args.use_wandb and not WANDB_AVAILABLE:
         print("Warning: wandb requested but not available. Continuing without logging.")
     
+    # ラベルマッピングを作成（推論評価用）
+    label_mappings = {
+        'main_to_id': main_to_id,
+        'arg1_to_id': arg1_to_id,
+        'arg2_to_id': arg2_to_id,
+        'id_to_main': id_to_main,
+        'id_to_arg1': id_to_arg1,
+        'id_to_arg2': id_to_arg2
+    }
+    
     # 学習ループ
     print(f"\n🚀 Starting training for {args.num_epochs} epochs...")
     print(f"📊 Training data: {len(dataset)} examples")
     print(f"📊 Batch size: {args.batch_size}")
     print(f"📊 Learning rate: {args.learning_rate}")
+    print(f"📊 Evaluation frequency: every {args.eval_frequency} epochs")
     print("=" * 60)
     
     for epoch in range(args.num_epochs):
@@ -468,12 +486,32 @@ def main():
         
         print(f"Epoch {epoch+1} completed. Average loss: {avg_loss:.4f}")
         
+        # 推論性能を評価（指定された頻度で）
+        if (epoch + 1) % args.eval_frequency == 0:
+            print(f"\n🔍 Evaluating inference performance after epoch {epoch+1}...")
+            inference_success_rate, inference_avg_steps = evaluate_inference_performance(
+                model, tokenizer, label_mappings, device, args.max_seq_len,
+                num_examples=args.inference_eval_examples, 
+                max_steps=args.inference_max_steps, 
+                temperature=args.inference_temperature
+            )
+            print(f"  Inference success rate: {inference_success_rate:.3f}")
+            print(f"  Inference avg steps (when solved): {inference_avg_steps:.2f}")
+        else:
+            inference_success_rate = None
+            inference_avg_steps = None
+        
         # wandbにログ
         if args.use_wandb and WANDB_AVAILABLE:
-            wandb.log({
-                "epoch": epoch + 1,
+            log_data = {
                 "loss": avg_loss
-            })
+            }
+            if inference_success_rate is not None:
+                log_data.update({
+                    "inference/success_rate": inference_success_rate,
+                    "inference/avg_steps": inference_avg_steps
+                })
+            wandb.log(log_data)
         
         # チェックポイント保存
         if args.save_checkpoints:
