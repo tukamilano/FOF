@@ -128,7 +128,10 @@ def train_epoch(
     arg2_loss_weight: float = 0.8,
     use_amp: bool = False,
     scaler: GradScaler = None,
-    gradient_accumulation_steps: int = 1
+    gradient_accumulation_steps: int = 1,
+    use_wandb: bool = False,
+    epoch: int = 0,
+    log_frequency: int = 1000
 ) -> float:
     """1エポックの学習を実行"""
     model.train()
@@ -215,6 +218,15 @@ def train_epoch(
         
         # プログレスバーを更新
         pbar.set_postfix({'Loss': f'{total_loss / num_batches:.4f}'})
+        
+        # 指定された頻度でwandbにログ
+        if use_wandb and WANDB_AVAILABLE and batch_idx % log_frequency == 0:
+            wandb.log({
+                "batch_loss": total_loss_batch.item() * gradient_accumulation_steps,
+                "running_avg_loss": total_loss / num_batches,
+                "batch": epoch * len(dataloader) + batch_idx,
+                "epoch": epoch + 1
+            })
     
     return total_loss / num_batches if num_batches > 0 else 0.0
 
@@ -248,7 +260,9 @@ def main():
     parser.add_argument("--inference_eval_examples", type=int, default=50, help="number of examples for inference evaluation")
     parser.add_argument("--inference_max_steps", type=int, default=30, help="max steps for inference evaluation")
     parser.add_argument("--inference_temperature", type=float, default=1.0, help="temperature for inference evaluation")
-    parser.add_argument("--eval_frequency", type=int, default=1, help="run evaluation every n epochs (default: 1)")
+    
+    # ログ関連の引数
+    parser.add_argument("--log_frequency", type=int, default=1000, help="log training loss every n batches (default: 1000)")
     
     args = parser.parse_args()
     
@@ -464,7 +478,28 @@ def main():
     print(f"📊 Training data: {len(dataset)} examples")
     print(f"📊 Batch size: {args.batch_size}")
     print(f"📊 Learning rate: {args.learning_rate}")
-    print(f"📊 Evaluation frequency: every {args.eval_frequency} epochs")
+    print(f"📊 Log frequency: every {args.log_frequency} batches")
+    print("=" * 60)
+    
+    # 学習開始前のベースライン推論評価
+    print(f"\n🔍 Evaluating baseline inference performance (before training)...")
+    baseline_success_rate, baseline_avg_steps = evaluate_inference_performance(
+        model, tokenizer, label_mappings, device, args.max_seq_len,
+        num_examples=args.inference_eval_examples, 
+        max_steps=args.inference_max_steps, 
+        temperature=args.inference_temperature
+    )
+    print(f"  Baseline inference success rate: {baseline_success_rate:.3f}")
+    print(f"  Baseline inference avg steps (when solved): {baseline_avg_steps:.2f}")
+    
+    # ベースライン結果をwandbに記録
+    if args.use_wandb and WANDB_AVAILABLE:
+        wandb.log({
+            "inference/success_rate": baseline_success_rate,
+            "inference/avg_steps": baseline_avg_steps,
+            "epoch": 0  # 学習前なのでepoch 0
+        })
+    
     print("=" * 60)
     
     for epoch in range(args.num_epochs):
@@ -481,13 +516,16 @@ def main():
             arg2_loss_weight=args.arg2_loss_weight,
             use_amp=use_amp,
             scaler=scaler,
-            gradient_accumulation_steps=args.gradient_accumulation_steps
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+            use_wandb=args.use_wandb and WANDB_AVAILABLE,
+            epoch=epoch,
+            log_frequency=args.log_frequency
         )
         
         print(f"Epoch {epoch+1} completed. Average loss: {avg_loss:.4f}")
         
-        # 推論性能を評価（指定された頻度で）
-        if (epoch + 1) % args.eval_frequency == 0:
+        # 推論性能を評価（毎エポック）
+        if True:  # 毎エポック実行
             print(f"\n🔍 Evaluating inference performance after epoch {epoch+1}...")
             inference_success_rate, inference_avg_steps = evaluate_inference_performance(
                 model, tokenizer, label_mappings, device, args.max_seq_len,

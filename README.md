@@ -177,20 +177,14 @@ python src/data_generation/auto_data_collector.py --count 10 --max_depth 10
 このシステムは**全データを学習に使用**し、**推論性能評価**でモデルの性能を測定します。従来のvalidation分割は行わず、実際の問題解決能力を評価します。
 
 ```bash
-# 基本的な学習（全データ使用 + 推論性能評価）
+# 基本的な学習（重複排除済みデータ + 推論性能評価）
 python src/training/train_with_generated_data.py
-
-# 重複排除済みデータを使用（推奨）
-python src/training/train_with_generated_data.py \
-  --data_dir deduplicated_data \
-  --batch_size 32 \
-  --learning_rate 3e-4
 
 # カスタム設定での学習
 python src/training/train_with_generated_data.py \
   --batch_size 64 \
   --learning_rate 1e-4 \
-  --num_epochs 20 \
+  --num_epochs 10 \
   --max_seq_len 512
 
 # wandbを使用した学習追跡
@@ -199,8 +193,16 @@ python src/training/train_with_generated_data.py \
   --wandb_project fof-training \
   --wandb_run_name experiment_001
 
-# 重複を保持した学習
-python src/training/train_with_generated_data.py --keep_duplicates
+# ログ頻度を調整（500バッチごと）
+python src/training/train_with_generated_data.py \
+  --log_frequency 500 \
+  --use_wandb
+
+# 推論評価のパラメータを調整
+python src/training/train_with_generated_data.py \
+  --inference_eval_examples 100 \
+  --inference_max_steps 50 \
+  --use_wandb
 
 # カスタムデータディレクトリ
 python src/training/train_with_generated_data.py --data_dir my_generated_data
@@ -212,15 +214,13 @@ python src/training/train_with_generated_data.py --data_dir my_generated_data
 python src/training/train_with_generated_data.py [オプション]
 
 オプション:
-  --data_dir DIR                   生成データディレクトリ (デフォルト: generated_data)
+  --data_dir DIR                   データディレクトリ (デフォルト: deduplicated_data)
   --batch_size SIZE                バッチサイズ (デフォルト: 32)
   --learning_rate RATE             学習率 (デフォルト: 3e-4)
-  --num_epochs EPOCHS              エポック数 (デフォルト: 10)
+  --num_epochs EPOCHS              エポック数 (デフォルト: 1)
   --device DEVICE                  デバイス選択 auto/cpu/cuda (デフォルト: auto)
   --save_path PATH                 モデル保存パス (デフォルト: models/hierarchical_model_generated.pth)
   --max_seq_len LEN                最大シーケンス長 (デフォルト: 512)
-  --remove_duplicates              重複削除を有効化 (デフォルト: True)
-  --keep_duplicates                重複を保持 (--remove_duplicatesを無効化)
   --use_wandb                      wandbを使用した学習追跡
   --wandb_project PROJECT          wandbプロジェクト名 (デフォルト: fof-training)
   --wandb_run_name NAME            wandb実行名
@@ -229,8 +229,7 @@ python src/training/train_with_generated_data.py [オプション]
   --inference_eval_examples COUNT  推論評価例数 (デフォルト: 50)
   --inference_max_steps STEPS      推論最大ステップ数 (デフォルト: 30)
   --inference_temperature TEMP     推論温度 (デフォルト: 1.0)
-  --validation_frequency FREQ      推論評価の実行頻度 (デフォルト: 1000データポイント)
-  --skip_inference_eval            推論性能評価をスキップ（高速学習）
+  --log_frequency FREQ             バッチログ頻度 (デフォルト: 1000)
 ```
 
 ### 3. 推論実行
@@ -295,14 +294,22 @@ python src/training/analyze_generated_data.py --data_dir generated_data
 
 #### 新しい学習アプローチ
 - **全データ学習**: 利用可能なすべてのデータを学習に使用（データの無駄を排除）
+- **ベースライン評価**: 学習開始前の性能を測定（改善の基準点）
 - **推論性能評価**: 実際の問題解決能力を測定する評価システム
 - **ランダム問題選択**: 毎回異なる問題で評価（公平性の確保）
 - **実用的メトリクス**: 推論成功率と平均ステップ数で性能を測定
 
 #### 推論性能評価の特徴
+- **ベースライン測定**: 学習開始前（epoch 0）で初期性能を記録
+- **毎エポック評価**: 各エポック終了後に推論性能を測定
 - **毎回異なる問題**: 現在時刻をシードとして使用し、毎回ランダムに問題を選択
 - **実際の証明実行**: pyproverを使用した実際の定理証明で性能を測定
 - **純粋な言語モデル性能**: 人工的な精度向上要因を排除した真の性能評価
+
+#### バッチログ機能
+- **細かい監視**: 指定された頻度（デフォルト1000バッチ）で学習損失を記録
+- **リアルタイム追跡**: 大規模データでの学習進捗を詳細に監視
+- **wandb統合**: バッチごとの損失とエポックごとの推論性能を同時に追跡
 
 ### 重複排除済みデータ対応
 
@@ -371,17 +378,27 @@ TACTIC_ARG_MASK = {
 
 学習中に以下のメトリクスが記録されます：
 
-- `train_loss`: 訓練損失
+#### エポックごとのメトリクス
+- `loss`: エポック平均損失
 - `inference/success_rate`: 推論成功率（実際の問題解決能力）
 - `inference/avg_steps`: 推論平均ステップ数（解決時の効率性）
-- `learning_rate`: 学習率
-- `best_inference_success_rate`: 最高推論成功率（モデル保存の基準）
+
+#### バッチごとのメトリクス（指定頻度で記録）
+- `batch_loss`: 現在のバッチの損失
+- `running_avg_loss`: エポック開始からの累積平均損失
+- `batch`: 全体のバッチ番号（エポック間で連続）
+- `epoch`: 現在のエポック番号
+
+#### ベースライン評価
+- **epoch 0**: 学習開始前のベースライン性能を記録
+- **改善追跡**: ベースライン性能からの改善を明確に可視化
 
 #### 推論性能評価の詳細
 - **問題選択**: 毎回ランダムに異なる問題を選択（公平性確保）
-- **評価頻度**: 指定されたデータポイント数ごとに実行（デフォルト: 1000）
+- **評価頻度**: 毎エポック実行（固定）
 - **評価例数**: デフォルト50例（カスタマイズ可能）
 - **最大ステップ数**: 各問題の最大証明ステップ数（デフォルト: 30）
+- **ログ頻度**: デフォルト1000バッチごと（カスタマイズ可能）
 
 ### 使用方法
 
@@ -636,6 +653,7 @@ python src/training/train_with_generated_data.py \
   --batch_size 32 \
   --learning_rate 3e-4 \
   --num_epochs 10 \
+  --log_frequency 1000 \
   --use_wandb \
   --wandb_project fof-training \
   --wandb_run_name large_scale_experiment
