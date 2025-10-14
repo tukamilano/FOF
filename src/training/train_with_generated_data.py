@@ -138,6 +138,9 @@ def train_epoch(
     total_loss = 0.0
     num_batches = 0
     
+    # 直近1000バッチの損失を記録するためのキュー
+    recent_losses = []
+    
     pbar = tqdm(dataloader, desc="Training", unit="batch")
     
     for batch_idx, batch in enumerate(pbar):
@@ -216,16 +219,20 @@ def train_epoch(
         total_loss += total_loss_batch.item() * gradient_accumulation_steps
         num_batches += 1
         
+        # 直近1000バッチの損失を記録
+        current_loss = total_loss_batch.item() * gradient_accumulation_steps
+        recent_losses.append(current_loss)
+        if len(recent_losses) > 1000:
+            recent_losses.pop(0)  # 古い損失を削除
+        
         # プログレスバーを更新
         pbar.set_postfix({'Loss': f'{total_loss / num_batches:.4f}'})
         
         # 指定された頻度でwandbにログ
         if use_wandb and WANDB_AVAILABLE and batch_idx % log_frequency == 0:
+            recent_avg_loss = sum(recent_losses) / len(recent_losses) if recent_losses else 0.0
             wandb.log({
-                "batch_loss": total_loss_batch.item() * gradient_accumulation_steps,
-                "running_avg_loss": total_loss / num_batches,
-                "batch": epoch * len(dataloader) + batch_idx,
-                "epoch": epoch + 1
+                "recent_avg_loss": recent_avg_loss
             })
     
     return total_loss / num_batches if num_batches > 0 else 0.0
@@ -496,8 +503,7 @@ def main():
     if args.use_wandb and WANDB_AVAILABLE:
         wandb.log({
             "inference/success_rate": baseline_success_rate,
-            "inference/avg_steps": baseline_avg_steps,
-            "epoch": 0  # 学習前なのでepoch 0
+            "inference/avg_steps": baseline_avg_steps
         })
     
     print("=" * 60)
