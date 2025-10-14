@@ -494,7 +494,10 @@ def main():
         model, tokenizer, label_mappings, device, args.max_seq_len,
         num_examples=args.inference_eval_examples, 
         max_steps=args.inference_max_steps, 
-        temperature=args.inference_temperature
+        temperature=args.inference_temperature,
+        difficulty=0.7,  # デフォルトのdifficulty値を使用
+        max_depth=4,  # データ生成時と同じmax_depth値を使用
+        seed=42  # 再現性のため固定シードを使用
     )
     print(f"  Baseline inference success rate: {baseline_success_rate:.3f}")
     print(f"  Baseline inference avg steps (when solved): {baseline_avg_steps:.2f}")
@@ -537,7 +540,9 @@ def main():
                 model, tokenizer, label_mappings, device, args.max_seq_len,
                 num_examples=args.inference_eval_examples, 
                 max_steps=args.inference_max_steps, 
-                temperature=args.inference_temperature
+                temperature=args.inference_temperature,
+                difficulty=0.7,  # デフォルトのdifficulty値を使用
+                max_depth=4  # データ生成時と同じmax_depth値を使用
             )
             print(f"  Inference success rate: {inference_success_rate:.3f}")
             print(f"  Inference avg steps (when solved): {inference_avg_steps:.2f}")

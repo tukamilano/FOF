@@ -186,7 +186,10 @@ def evaluate_inference_performance(
     max_seq_len: int,
     num_examples: int = 50,
     max_steps: int = 5,
-    temperature: float = 1.0
+    temperature: float = 1.0,
+    difficulty: float = 0.7,
+    seed: int = None,
+    max_depth: int = None
 ) -> Tuple[float, float]:
     """
     推論性能を評価（トートロジーを新規生成）
@@ -239,9 +242,9 @@ def evaluate_inference_performance(
     gen = FormulaGenerator(
         variables=variables,
         allow_const=gen_params.allow_const,  # データ生成時と同じ設定
-        difficulty=gen_params.difficulty,  # データ生成時と同じ難易度
-        max_depth=gen_params.max_depth,  # データ生成時と同じ最大深度
-        seed=int(time.time() * 1000) % 2**32  # 現在時刻をシードとして使用
+        difficulty=difficulty,  # 引数で指定された難易度を使用
+        max_depth=max_depth if max_depth is not None else gen_params.max_depth,  # 指定された最大深度またはデータ生成時と同じ最大深度
+        seed=seed if seed is not None else int(time.time() * 1000) % 2**32  # 指定されたシードまたは現在時刻を使用
     )
     
     # トートロジーを生成
@@ -508,9 +511,9 @@ def main():
     gen = FormulaGenerator(
         variables=variables,
         allow_const=gen_params.allow_const,  # データ生成時と同じ設定
-        difficulty=gen_params.difficulty,  # データ生成時と同じ難易度
-        max_depth=gen_params.max_depth,  # データ生成時と同じ最大深度
-        seed=int(time.time() * 1000) % 2**32  # 現在時刻をシードとして使用
+        difficulty=difficulty,  # 引数で指定された難易度を使用
+        max_depth=max_depth if max_depth is not None else gen_params.max_depth,  # 指定された最大深度またはデータ生成時と同じ最大深度
+        seed=seed if seed is not None else int(time.time() * 1000) % 2**32  # 指定されたシードまたは現在時刻を使用
     )
     
     # トートロジーを生成
