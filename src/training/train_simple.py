@@ -174,7 +174,6 @@ def main():
     parser.add_argument("--arg2_loss_weight", type=float, default=0.8, help="weight for arg2 loss")
     parser.add_argument("--random_seed", type=int, default=42, help="random seed for reproducibility")
     parser.add_argument("--log_frequency", type=int, default=1000, help="log training loss every n examples")
-    parser.add_argument("--save_frequency", type=int, default=10000, help="save model every n examples")
     parser.add_argument("--save_checkpoints", action="store_true", help="save model checkpoint after each epoch")
     
     # 推論評価関連の引数
@@ -429,12 +428,6 @@ def main():
                     "loss": recent_avg_loss  # 直近log_frequency分の平均
                 })
             
-            # 指定された頻度でモデルを保存（例数ベース）
-            if total_examples % args.save_frequency == 0:
-                checkpoint_path = f"models/simple_model_checkpoint_{total_examples}.pth"
-                os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
-                torch.save(model.state_dict(), checkpoint_path)
-                print(f"\n💾 Checkpoint saved: {checkpoint_path}")
         
         # エポックの平均損失を計算
         avg_epoch_loss = epoch_loss / num_examples if num_examples > 0 else 0.0
