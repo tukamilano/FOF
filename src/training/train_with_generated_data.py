@@ -495,7 +495,7 @@ def main():
         num_examples=args.inference_eval_examples, 
         max_steps=args.inference_max_steps, 
         temperature=args.inference_temperature,
-        difficulty=0.7,  # デフォルトのdifficulty値を使用
+        difficulty=0.5,  # デフォルトのdifficulty値を使用
         max_depth=4,  # データ生成時と同じmax_depth値を使用
         seed=42  # 再現性のため固定シードを使用
     )
@@ -541,7 +541,7 @@ def main():
                 num_examples=args.inference_eval_examples, 
                 max_steps=args.inference_max_steps, 
                 temperature=args.inference_temperature,
-                difficulty=0.7,  # デフォルトのdifficulty値を使用
+                difficulty=0.5,  # デフォルトのdifficulty値を使用
                 max_depth=4  # データ生成時と同じmax_depth値を使用
             )
             print(f"  Inference success rate: {inference_success_rate:.3f}")

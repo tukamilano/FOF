@@ -187,7 +187,7 @@ def evaluate_inference_performance(
     num_examples: int = 50,
     max_steps: int = 5,
     temperature: float = 1.0,
-    difficulty: float = 0.7,
+    difficulty: float = 0.5,
     seed: int = None,
     max_depth: int = None
 ) -> Tuple[float, float]:
