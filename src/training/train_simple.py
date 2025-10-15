@@ -175,6 +175,7 @@ def main():
     parser.add_argument("--random_seed", type=int, default=42, help="random seed for reproducibility")
     parser.add_argument("--log_frequency", type=int, default=1000, help="log training loss every n examples")
     parser.add_argument("--save_frequency", type=int, default=10000, help="save model every n examples")
+    parser.add_argument("--save_checkpoints", action="store_true", help="save model checkpoint after each epoch")
     
     # 推論評価関連の引数
     parser.add_argument("--inference_eval_examples", type=int, default=100, help="number of examples for inference evaluation")
@@ -428,7 +429,7 @@ def main():
                     "loss": recent_avg_loss  # 直近log_frequency分の平均
                 })
             
-            # 指定された頻度でモデルを保存
+            # 指定された頻度でモデルを保存（例数ベース）
             if total_examples % args.save_frequency == 0:
                 checkpoint_path = f"models/simple_model_checkpoint_{total_examples}.pth"
                 os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
@@ -453,6 +454,18 @@ def main():
         )
         print(f"  Inference success rate: {inference_success_rate:.3f}")
         print(f"  Inference avg steps (when solved): {inference_avg_steps:.2f}")
+        
+        # エポックごとにモデルを保存
+        if args.save_checkpoints:
+            checkpoint_path = f"models/simple_model_epoch_{epoch+1}.pth"
+            os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+            torch.save({
+                'epoch': epoch + 1,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': avg_epoch_loss,
+            }, checkpoint_path)
+            print(f"💾 Epoch checkpoint saved: {checkpoint_path}")
         
         # wandbにログ
         if args.use_wandb and WANDB_AVAILABLE:
