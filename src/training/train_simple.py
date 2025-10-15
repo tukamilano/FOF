@@ -370,6 +370,9 @@ def main():
     total_examples = 0
     epoch_losses = []
     
+    # 直近log_frequency分の損失を記録するためのキュー
+    recent_losses = []
+    
     for epoch in range(args.num_epochs):
         print(f"\n🚀 Starting epoch {epoch+1}/{args.num_epochs}")
         
@@ -410,15 +413,20 @@ def main():
             num_examples += 1
             total_examples += 1
             
+            # 直近log_frequency分の損失を記録
+            recent_losses.append(loss)
+            if len(recent_losses) > args.log_frequency:
+                recent_losses.pop(0)  # 古い損失を削除
+            
             # プログレスバーを更新
             pbar.set_postfix({'Loss': f'{loss:.4f}', 'Avg Loss': f'{epoch_loss / num_examples:.4f}'})
             
             # 指定された頻度でwandbにログ
             if args.use_wandb and WANDB_AVAILABLE and total_examples % args.log_frequency == 0:
+                recent_avg_loss = sum(recent_losses) / len(recent_losses) if recent_losses else 0.0
                 wandb.log({
-                    "loss": loss,
-                    "avg_loss": epoch_loss / num_examples,
-                    "examples": total_examples
+                    "loss": recent_avg_loss,  # 直近log_frequency分の平均
+                    "avg_loss": epoch_loss / num_examples  # 1エポック全体の平均
                 })
             
             # 指定された頻度でモデルを保存
