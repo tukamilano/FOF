@@ -425,8 +425,7 @@ def main():
             if args.use_wandb and WANDB_AVAILABLE and total_examples % args.log_frequency == 0:
                 recent_avg_loss = sum(recent_losses) / len(recent_losses) if recent_losses else 0.0
                 wandb.log({
-                    "loss": recent_avg_loss,  # 直近log_frequency分の平均
-                    "avg_loss": epoch_loss / num_examples  # 1エポック全体の平均
+                    "loss": recent_avg_loss  # 直近log_frequency分の平均
                 })
             
             # 指定された頻度でモデルを保存
