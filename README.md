@@ -265,7 +265,7 @@ python src/interaction/run_interaction.py --selftest
 python src/interaction/run_interaction.py --count 10
 
 # 難易度を調整
-python src/interaction/run_interaction.py --difficulty 0.5
+python src/interaction/run_interaction.py --difficulty 0.7
 
 # 最大ステップ数を設定
 python src/interaction/run_interaction.py --max_steps 10

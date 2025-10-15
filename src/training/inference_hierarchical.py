@@ -118,7 +118,7 @@ def predict_tactic(
     goal: str,
     label_mappings: Dict[str, Any],
     device: torch.device,
-    max_seq_len: int = 512,
+    max_seq_len: int = 256,
     banned_tactics: set = None,
     temperature: float = 1.0
 ) -> Tuple[str, float, float, float]:
@@ -187,7 +187,7 @@ def evaluate_inference_performance(
     num_examples: int = 50,
     max_steps: int = 5,
     temperature: float = 1.0,
-    difficulty: float = 0.5,
+    difficulty: float = 0.7,
     seed: int = None,
     max_depth: int = None
 ) -> Tuple[float, float]:
@@ -371,7 +371,7 @@ def main():
     parser.add_argument("--use_wandb", action="store_true", help="use wandb for logging")
     parser.add_argument("--wandb_project", type=str, default="fof-inference", help="wandb project name")
     parser.add_argument("--wandb_run_name", type=str, default=None, help="wandb run name")
-    parser.add_argument("--max_seq_len", type=int, default=512, help="maximum sequence length")
+    parser.add_argument("--max_seq_len", type=int, default=256, help="maximum sequence length")
     
     args = parser.parse_args()
     
@@ -453,7 +453,7 @@ def main():
         model.to(device)
         model.eval()
         
-        max_seq_len = args.max_seq_len if hasattr(args, 'max_seq_len') else 512
+        max_seq_len = args.max_seq_len if hasattr(args, 'max_seq_len') else 256
         
         print(f"Created randomly initialized model with {len(main_to_id)} main tactics, {len(arg1_to_id)} arg1 values, {len(arg2_to_id)} arg2 values")
     else:
@@ -462,7 +462,7 @@ def main():
         
         # モデルのmax_seq_lenを取得
         checkpoint = torch.load(args.model_path, map_location=device)
-        max_seq_len = checkpoint.get('max_seq_len', 512)
+        max_seq_len = checkpoint.get('max_seq_len', 256)
         
         # トークナイザーを作成
         root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))

@@ -108,7 +108,7 @@ class CharTokenizer:
         self,
         goal: str,
         premises: List[str],
-        max_seq_len: int = 512,
+        max_seq_len: int = 256,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         エンコード: [CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] ... [EOS]
@@ -169,7 +169,7 @@ class CharTokenizer:
 
 
 class SinusoidalPositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, max_len: int = 512, dropout: float = 0.1) -> None:
+    def __init__(self, d_model: int, max_len: int = 256, dropout: float = 0.1) -> None:
         super().__init__()
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
@@ -194,7 +194,7 @@ class TransformerClassifier(nn.Module):
         self,
         vocab_size: int,
         pad_id: int = 0,
-        max_seq_len: int = 512,
+        max_seq_len: int = 256,
         d_model: int = 128,
         nhead: int = 4,
         num_layers: int = 2,

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-シンプルな学習スクリプト（重複排除済みバッチデータ専用）
+シンプルなバッチなし学習スクリプト（重複排除済みデータ専用）
 """
 from __future__ import annotations
 
@@ -25,9 +25,7 @@ sys.path.insert(0, project_root)
 
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-from torch.nn.parallel import DataParallel
-from torch.cuda.amp import GradScaler, autocast
+from torch.utils.data import Dataset
 from tqdm import tqdm
 
 from src.core.transformer_classifier import (
@@ -35,18 +33,17 @@ from src.core.transformer_classifier import (
     CharTokenizer,
     TransformerClassifier,
     build_hierarchical_label_mappings,
-    hierarchical_collate,
 )
-from src.core.state_encoder import parse_tactic_string, encode_prover_state, format_tactic_string
+from src.core.state_encoder import parse_tactic_string
 from src.core.parameter import (
-    default_params, get_model_params, get_training_params, 
-    get_system_params, get_hierarchical_labels, DeviceType
+    get_model_params, get_training_params, 
+    get_system_params, get_hierarchical_labels
 )
 from src.training.inference_hierarchical import evaluate_inference_performance
 
 
-class DeduplicatedDataDataset(Dataset):
-    """重複排除済みバッチデータセット（シンプル版）"""
+class SimpleDataset(Dataset):
+    """シンプルなデータセット（バッチなし）"""
     
     def __init__(
         self, 
@@ -118,158 +115,71 @@ class DeduplicatedDataDataset(Dataset):
         return input_ids, attention_mask, main_label, arg1_label, arg2_label
 
 
-def train_epoch(
+def train_single_example(
     model: TransformerClassifier,
-    dataloader: DataLoader,
+    input_ids: torch.Tensor,
+    attention_mask: torch.Tensor,
+    main_label: int,
+    arg1_label: int,
+    arg2_label: int,
     optimizer: torch.optim.Optimizer,
     criterion: nn.Module,
-    device: torch.device,
     arg1_loss_weight: float = 0.8,
     arg2_loss_weight: float = 0.8,
-    use_amp: bool = False,
-    scaler: GradScaler = None,
-    gradient_accumulation_steps: int = 1,
-    use_wandb: bool = False,
-    epoch: int = 0,
-    log_frequency: int = 1000
 ) -> float:
-    """1エポックの学習を実行"""
+    """単一の例で学習を実行"""
     model.train()
-    total_loss = 0.0
-    num_batches = 0
     
-    # 直近1000バッチの損失を記録するためのキュー
-    recent_losses = []
+    # オプティマイザーの勾配をリセット
+    optimizer.zero_grad()
     
-    pbar = tqdm(dataloader, desc="Training", unit="batch")
+    # モデル推論
+    main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
     
-    for batch_idx, batch in enumerate(pbar):
-        input_ids, attention_mask, main_labels, arg1_labels, arg2_labels = batch
-        input_ids = input_ids.to(device)
-        attention_mask = attention_mask.to(device)
-        main_labels = main_labels.to(device)
-        arg1_labels = arg1_labels.to(device)
-        arg2_labels = arg2_labels.to(device)
-        
-        # オプティマイザーの勾配をリセット
-        optimizer.zero_grad()
-        
-        # 混合精度での推論
-        if use_amp and scaler is not None:
-            with autocast():
-                # モデル推論
-                main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
-                
-                # シンプルな損失計算（無効値-1を除外）
-                main_loss = criterion(main_logits, main_labels)
-                
-                # arg1の損失計算（無効値-1を除外）
-                arg1_valid_mask = arg1_labels != -1
-                arg1_loss = 0.0
-                if arg1_valid_mask.any():
-                    arg1_loss = criterion(arg1_logits[arg1_valid_mask], arg1_labels[arg1_valid_mask])
-                
-                # arg2の損失計算（無効値-1を除外）
-                arg2_valid_mask = arg2_labels != -1
-                arg2_loss = 0.0
-                if arg2_valid_mask.any():
-                    arg2_loss = criterion(arg2_logits[arg2_valid_mask], arg2_labels[arg2_valid_mask])
-                
-                # 総損失（重み付き）
-                total_loss_batch = main_loss + arg1_loss_weight * arg1_loss + arg2_loss_weight * arg2_loss
-                total_loss_batch = total_loss_batch / gradient_accumulation_steps
-            
-            # 混合精度での逆伝播
-            scaler.scale(total_loss_batch).backward()
-        else:
-            # 通常の推論
-            main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
-            
-            # シンプルな損失計算（無効値-1を除外）
-            main_loss = criterion(main_logits, main_labels)
-            
-            # arg1の損失計算（無効値-1を除外）
-            arg1_valid_mask = arg1_labels != -1
-            arg1_loss = 0.0
-            if arg1_valid_mask.any():
-                arg1_loss = criterion(arg1_logits[arg1_valid_mask], arg1_labels[arg1_valid_mask])
-            
-            # arg2の損失計算（無効値-1を除外）
-            arg2_valid_mask = arg2_labels != -1
-            arg2_loss = 0.0
-            if arg2_valid_mask.any():
-                arg2_loss = criterion(arg2_logits[arg2_valid_mask], arg2_labels[arg2_valid_mask])
-            
-            # 総損失（重み付き）
-            total_loss_batch = main_loss + arg1_loss_weight * arg1_loss + arg2_loss_weight * arg2_loss
-            total_loss_batch = total_loss_batch / gradient_accumulation_steps
-            
-            # 通常の逆伝播
-            total_loss_batch.backward()
-        
-        # 勾配累積のステップが完了したらオプティマイザーを更新
-        if (batch_idx + 1) % gradient_accumulation_steps == 0:
-            if use_amp and scaler is not None:
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                optimizer.step()
-            optimizer.zero_grad()
-        
-        total_loss += total_loss_batch.item() * gradient_accumulation_steps
-        num_batches += 1
-        
-        # 直近1000バッチの損失を記録
-        current_loss = total_loss_batch.item() * gradient_accumulation_steps
-        recent_losses.append(current_loss)
-        if len(recent_losses) > 1000:
-            recent_losses.pop(0)  # 古い損失を削除
-        
-        # プログレスバーを更新
-        pbar.set_postfix({'Loss': f'{total_loss / num_batches:.4f}'})
-        
-        # 指定された頻度でwandbにログ
-        if use_wandb and WANDB_AVAILABLE and batch_idx % log_frequency == 0:
-            recent_avg_loss = sum(recent_losses) / len(recent_losses) if recent_losses else 0.0
-            wandb.log({
-                "recent_avg_loss": recent_avg_loss
-            })
+    # 損失計算（無効値-1を除外）
+    main_loss = criterion(main_logits, torch.tensor([main_label], device=main_logits.device))
     
-    return total_loss / num_batches if num_batches > 0 else 0.0
+    # arg1の損失計算（無効値-1を除外）
+    arg1_loss = 0.0
+    if arg1_label != -1:
+        arg1_loss = criterion(arg1_logits, torch.tensor([arg1_label], device=arg1_logits.device))
+    
+    # arg2の損失計算（無効値-1を除外）
+    arg2_loss = 0.0
+    if arg2_label != -1:
+        arg2_loss = criterion(arg2_logits, torch.tensor([arg2_label], device=arg2_logits.device))
+    
+    # 総損失（重み付き）
+    total_loss = main_loss + arg1_loss_weight * arg1_loss + arg2_loss_weight * arg2_loss
+    
+    # 逆伝播
+    total_loss.backward()
+    optimizer.step()
+    
+    return total_loss.item()
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train hierarchical tactic classifier with deduplicated data")
+    parser = argparse.ArgumentParser(description="Simple training script for hierarchical tactic classifier")
     parser.add_argument("--data_dir", type=str, default="deduplicated_data", help="deduplicated data directory")
-    parser.add_argument("--batch_size", type=int, default=32, help="batch size")
     parser.add_argument("--learning_rate", type=float, default=3e-4, help="learning rate")
     parser.add_argument("--num_epochs", type=int, default=1, help="number of epochs")
     parser.add_argument("--device", type=str, default="auto", help="device")
-    parser.add_argument("--save_path", type=str, default="models/hierarchical_model_generated.pth", help="model save path")
+    parser.add_argument("--save_path", type=str, default="models/simple_model.pth", help="model save path")
     parser.add_argument("--max_seq_len", type=int, default=256, help="maximum sequence length")
     parser.add_argument("--use_wandb", action="store_true", help="use wandb for logging")
-    parser.add_argument("--wandb_project", type=str, default="fof-training", help="wandb project name")
+    parser.add_argument("--wandb_project", type=str, default="fof-simple-training", help="wandb project name")
     parser.add_argument("--wandb_run_name", type=str, default=None, help="wandb run name")
     parser.add_argument("--arg1_loss_weight", type=float, default=0.8, help="weight for arg1 loss")
     parser.add_argument("--arg2_loss_weight", type=float, default=0.8, help="weight for arg2 loss")
     parser.add_argument("--random_seed", type=int, default=42, help="random seed for reproducibility")
-    parser.add_argument("--save_checkpoints", action="store_true", help="save model checkpoint after each epoch")
-    parser.add_argument("--checkpoint_dir", type=str, default="checkpoints", help="directory to save checkpoints")
-    
-    # 並列化関連の引数
-    parser.add_argument("--num_workers", type=int, default=1, help="number of data loading workers")
-    parser.add_argument("--use_data_parallel", action="store_true", help="use DataParallel for multi-GPU training")
-    parser.add_argument("--gpu_ids", type=str, default=None, help="comma-separated GPU IDs to use")
-    parser.add_argument("--use_amp", action="store_true", help="use Automatic Mixed Precision")
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="number of gradient accumulation steps")
+    parser.add_argument("--log_frequency", type=int, default=1000, help="log training loss every n examples")
+    parser.add_argument("--save_frequency", type=int, default=10000, help="save model every n examples")
     
     # 推論評価関連の引数
     parser.add_argument("--inference_eval_examples", type=int, default=100, help="number of examples for inference evaluation")
     parser.add_argument("--inference_max_steps", type=int, default=30, help="max steps for inference evaluation")
     parser.add_argument("--inference_temperature", type=float, default=1.0, help="temperature for inference evaluation")
-    
-    # ログ関連の引数
-    parser.add_argument("--log_frequency", type=int, default=1000, help="log training loss every n batches (default: 1000)")
     
     args = parser.parse_args()
     
@@ -306,29 +216,15 @@ def main():
     # 実行設定の詳細をログ出力
     print("\n📋 Training Configuration:")
     print(f"   Data directory: {args.data_dir}")
-    print(f"   Batch size: {args.batch_size}")
     print(f"   Learning rate: {args.learning_rate}")
     print(f"   Number of epochs: {args.num_epochs}")
     print(f"   Max sequence length: {args.max_seq_len}")
-    print(f"   Number of workers: {args.num_workers}")
-    print(f"   Use AMP: {args.use_amp}")
-    print(f"   Use DataParallel: {args.use_data_parallel}")
-    print(f"   GPU IDs: {args.gpu_ids}")
-    print(f"   Gradient accumulation steps: {args.gradient_accumulation_steps}")
     print(f"   Random seed: {args.random_seed}")
-    print(f"   Save checkpoints: {args.save_checkpoints}")
     print(f"   Use wandb: {args.use_wandb}")
     if args.use_wandb:
         print(f"   Wandb project: {args.wandb_project}")
         print(f"   Wandb run name: {args.wandb_run_name}")
     print("=" * 60)
-    
-    # 混合精度のスケーラー初期化
-    scaler = None
-    use_amp = args.use_amp and device.type == 'cuda'
-    if use_amp:
-        scaler = GradScaler()
-        print("Using Automatic Mixed Precision (AMP)")
     
     # データディレクトリの設定
     data_dir = os.path.join(project_root, args.data_dir)
@@ -372,8 +268,8 @@ def main():
     )
     
     # データセットを作成
-    print("📊 Creating DeduplicatedDataDataset")
-    dataset = DeduplicatedDataDataset(
+    print("📊 Creating SimpleDataset")
+    dataset = SimpleDataset(
         data_dir=data_dir,
         tokenizer=tokenizer,
         main_to_id=main_to_id,
@@ -385,16 +281,6 @@ def main():
     if len(dataset) == 0:
         print("No training data found. Please check the deduplicated data directory.")
         return
-    
-    # データローダーを作成
-    train_loader = DataLoader(
-        dataset,
-        batch_size=args.batch_size,
-        shuffle=True,
-        num_workers=args.num_workers,
-        pin_memory=True if device.type == 'cuda' else False,
-        collate_fn=hierarchical_collate
-    )
     
     # モデルを作成
     model = TransformerClassifier(
@@ -417,53 +303,22 @@ def main():
     # モデルをデバイスに移動
     model = model.to(device)
     
-    # 並列化設定
-    if args.use_data_parallel and device.type == 'cuda':
-        if args.gpu_ids:
-            if args.gpu_ids == "all":
-                gpu_ids = list(range(torch.cuda.device_count()))
-            else:
-                gpu_ids = [int(x.strip()) for x in args.gpu_ids.split(",")]
-            print(f"Using GPU IDs: {gpu_ids}")
-        else:
-            gpu_ids = None
-        
-        if gpu_ids and len(gpu_ids) > 1:
-            model = DataParallel(model, device_ids=gpu_ids)
-            print(f"Using DataParallel with GPU IDs: {gpu_ids}")
-        else:
-            print(f"Only one GPU specified, using single GPU")
-    else:
-        gpu_ids = None
-    
     # オプティマイザーと損失関数を作成
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
     criterion = nn.CrossEntropyLoss()
     
-    # チェックポイントディレクトリの作成
-    if args.save_checkpoints:
-        checkpoint_dir = os.path.join(project_root, args.checkpoint_dir)
-        if not os.path.exists(checkpoint_dir):
-            os.makedirs(checkpoint_dir)
-            print(f"Created checkpoint directory: {checkpoint_dir}")
-        else:
-            print(f"Using existing checkpoint directory: {checkpoint_dir}")
-    
     # wandb初期化
     if args.use_wandb and WANDB_AVAILABLE:
-        run_name = args.wandb_run_name or f"training_{int(time.time())}"
+        run_name = args.wandb_run_name or f"simple_training_{int(time.time())}"
         wandb.init(
             project=args.wandb_project,
             name=run_name,
             config={
                 "data_dir": args.data_dir,
-                "batch_size": args.batch_size,
                 "learning_rate": args.learning_rate,
                 "num_epochs": args.num_epochs,
                 "max_seq_len": args.max_seq_len,
                 "device": str(device),
-                "save_checkpoints": args.save_checkpoints,
-                "checkpoint_dir": args.checkpoint_dir
             }
         )
         print(f"Wandb initialized: {args.wandb_project}/{run_name}")
@@ -481,11 +336,11 @@ def main():
     }
     
     # 学習ループ
-    print(f"\n🚀 Starting training for {args.num_epochs} epochs...")
+    print(f"\n🚀 Starting simple training for {args.num_epochs} epochs...")
     print(f"📊 Training data: {len(dataset)} examples")
-    print(f"📊 Batch size: {args.batch_size}")
     print(f"📊 Learning rate: {args.learning_rate}")
-    print(f"📊 Log frequency: every {args.log_frequency} batches")
+    print(f"📊 Log frequency: every {args.log_frequency} examples")
+    print(f"📊 Save frequency: every {args.save_frequency} examples")
     print("=" * 60)
     
     # 学習開始前のベースライン推論評価
@@ -511,75 +366,104 @@ def main():
     
     print("=" * 60)
     
+    # 学習ループ
+    total_examples = 0
+    epoch_losses = []
+    
     for epoch in range(args.num_epochs):
         print(f"\n🚀 Starting epoch {epoch+1}/{args.num_epochs}")
         
-        # 1エポックの学習を実行
-        avg_loss = train_epoch(
-            model=model,
-            dataloader=train_loader,
-            optimizer=optimizer,
-            criterion=criterion,
-            device=device,
-            arg1_loss_weight=args.arg1_loss_weight,
-            arg2_loss_weight=args.arg2_loss_weight,
-            use_amp=use_amp,
-            scaler=scaler,
-            gradient_accumulation_steps=args.gradient_accumulation_steps,
-            use_wandb=args.use_wandb and WANDB_AVAILABLE,
-            epoch=epoch,
-            log_frequency=args.log_frequency
-        )
+        # エポック内の損失を記録
+        epoch_loss = 0.0
+        num_examples = 0
         
-        print(f"Epoch {epoch+1} completed. Average loss: {avg_loss:.4f}")
+        # データをシャッフル
+        indices = list(range(len(dataset)))
+        random.shuffle(indices)
+        
+        # プログレスバーを作成
+        pbar = tqdm(indices, desc=f"Epoch {epoch+1}", unit="example")
+        
+        for example_idx, data_idx in enumerate(pbar):
+            # データを取得
+            input_ids, attention_mask, main_label, arg1_label, arg2_label = dataset[data_idx]
+            
+            # テンソルに変換してデバイスに移動
+            input_ids = input_ids.unsqueeze(0).to(device)  # バッチ次元を追加
+            attention_mask = attention_mask.unsqueeze(0).to(device)  # バッチ次元を追加
+            
+            # 単一の例で学習
+            loss = train_single_example(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                main_label=main_label,
+                arg1_label=arg1_label,
+                arg2_label=arg2_label,
+                optimizer=optimizer,
+                criterion=criterion,
+                arg1_loss_weight=args.arg1_loss_weight,
+                arg2_loss_weight=args.arg2_loss_weight,
+            )
+            
+            epoch_loss += loss
+            num_examples += 1
+            total_examples += 1
+            
+            # プログレスバーを更新
+            pbar.set_postfix({'Loss': f'{loss:.4f}', 'Avg Loss': f'{epoch_loss / num_examples:.4f}'})
+            
+            # 指定された頻度でwandbにログ
+            if args.use_wandb and WANDB_AVAILABLE and total_examples % args.log_frequency == 0:
+                wandb.log({
+                    "loss": loss,
+                    "avg_loss": epoch_loss / num_examples,
+                    "examples": total_examples
+                })
+            
+            # 指定された頻度でモデルを保存
+            if total_examples % args.save_frequency == 0:
+                checkpoint_path = f"models/simple_model_checkpoint_{total_examples}.pth"
+                os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+                torch.save(model.state_dict(), checkpoint_path)
+                print(f"\n💾 Checkpoint saved: {checkpoint_path}")
+        
+        # エポックの平均損失を計算
+        avg_epoch_loss = epoch_loss / num_examples if num_examples > 0 else 0.0
+        epoch_losses.append(avg_epoch_loss)
+        
+        print(f"Epoch {epoch+1} completed. Average loss: {avg_epoch_loss:.4f}")
         
         # 推論性能を評価（毎エポック）
-        if True:  # 毎エポック実行
-            print(f"\n🔍 Evaluating inference performance after epoch {epoch+1}...")
-            inference_success_rate, inference_avg_steps = evaluate_inference_performance(
-                model, tokenizer, label_mappings, device, args.max_seq_len,
-                num_examples=args.inference_eval_examples, 
-                max_steps=args.inference_max_steps, 
-                temperature=args.inference_temperature,
-                difficulty=0.7,  # デフォルトのdifficulty値を使用
-                max_depth=4  # データ生成時と同じmax_depth値を使用
-            )
-            print(f"  Inference success rate: {inference_success_rate:.3f}")
-            print(f"  Inference avg steps (when solved): {inference_avg_steps:.2f}")
-        else:
-            inference_success_rate = None
-            inference_avg_steps = None
+        print(f"\n🔍 Evaluating inference performance after epoch {epoch+1}...")
+        inference_success_rate, inference_avg_steps = evaluate_inference_performance(
+            model, tokenizer, label_mappings, device, args.max_seq_len,
+            num_examples=args.inference_eval_examples, 
+            max_steps=args.inference_max_steps, 
+            temperature=args.inference_temperature,
+            difficulty=0.7,  # デフォルトのdifficulty値を使用
+            max_depth=4  # データ生成時と同じmax_depth値を使用
+        )
+        print(f"  Inference success rate: {inference_success_rate:.3f}")
+        print(f"  Inference avg steps (when solved): {inference_avg_steps:.2f}")
         
         # wandbにログ
         if args.use_wandb and WANDB_AVAILABLE:
-            log_data = {
-                "loss": avg_loss
-            }
-            if inference_success_rate is not None:
-                log_data.update({
-                    "inference/success_rate": inference_success_rate,
-                    "inference/avg_steps": inference_avg_steps
-                })
-            wandb.log(log_data)
-        
-        # チェックポイント保存
-        if args.save_checkpoints:
-            checkpoint_path = os.path.join(args.checkpoint_dir, f"checkpoint_epoch_{epoch+1}.pth")
-            os.makedirs(args.checkpoint_dir, exist_ok=True)
-            torch.save({
-                'epoch': epoch + 1,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'loss': avg_loss,
-            }, checkpoint_path)
-            print(f"Checkpoint saved: {checkpoint_path}")
+            wandb.log({
+                "epoch": epoch + 1,
+                "epoch_loss": avg_epoch_loss,
+                "inference/success_rate": inference_success_rate,
+                "inference/avg_steps": inference_avg_steps
+            })
     
-    # モデルを保存
+    # 最終モデルを保存
     os.makedirs(os.path.dirname(args.save_path), exist_ok=True)
     torch.save(model.state_dict(), args.save_path)
     
     print(f"\n🎉 Training completed!")
     print(f"📁 Model saved to: {args.save_path}")
+    print(f"📊 Total examples processed: {total_examples}")
+    print(f"📊 Average loss per epoch: {[f'{loss:.4f}' for loss in epoch_losses]}")
     
     # wandb終了
     if args.use_wandb and WANDB_AVAILABLE:
