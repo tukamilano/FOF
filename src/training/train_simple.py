@@ -340,7 +340,6 @@ def main():
     print(f"📊 Training data: {len(dataset)} examples")
     print(f"📊 Learning rate: {args.learning_rate}")
     print(f"📊 Log frequency: every {args.log_frequency} examples")
-    print(f"📊 Save frequency: every {args.save_frequency} examples")
     print("=" * 60)
     
     # 学習開始前のベースライン推論評価
