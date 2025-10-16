@@ -11,6 +11,8 @@ import json
 import time
 import hashlib
 import heapq
+import random
+import numpy as np
 from typing import List, Tuple, Dict, Any
 
 # プロジェクトルートをパスに追加
@@ -31,6 +33,71 @@ from src.core.transformer_classifier import (
     TransformerClassifier,
 )
 from src.core.state_encoder import encode_prover_state, format_tactic_string
+
+
+def load_tautologies_from_generated_data(
+    generated_data_dir: str = "generated_data",
+    max_examples: int = None
+) -> List[str]:
+    """
+    generated_data配下のファイルから論理式を読み出す
+    
+    Args:
+        generated_data_dir: generated_dataディレクトリのパス
+        max_examples: 読み込む最大例数（Noneの場合は全て）
+    
+    Returns:
+        論理式のリスト
+    """
+    tautologies = []
+    
+    # generated_dataディレクトリ内のJSONファイルを検索
+    if not os.path.exists(generated_data_dir):
+        print(f"Warning: Generated data directory not found: {generated_data_dir}")
+        return []
+    
+    json_files = [f for f in os.listdir(generated_data_dir) if f.endswith('.json')]
+    json_files.sort()  # ファイル名でソート
+    
+    if not json_files:
+        print(f"Warning: No JSON files found in {generated_data_dir}")
+        return []
+    
+    print(f"Found {len(json_files)} JSON files in {generated_data_dir}")
+    
+    for json_file in json_files:
+        if max_examples and len(tautologies) >= max_examples:
+            break
+            
+        file_path = os.path.join(generated_data_dir, json_file)
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            if isinstance(data, list):
+                # リスト形式の場合
+                for formula in data:
+                    if max_examples and len(tautologies) >= max_examples:
+                        break
+                    if isinstance(formula, str) and formula.strip():
+                        tautologies.append(formula.strip())
+            elif isinstance(data, dict):
+                # 辞書形式の場合（将来的な拡張に対応）
+                if 'formulas' in data and isinstance(data['formulas'], list):
+                    for formula in data['formulas']:
+                        if max_examples and len(tautologies) >= max_examples:
+                            break
+                        if isinstance(formula, str) and formula.strip():
+                            tautologies.append(formula.strip())
+            
+            print(f"Loaded {len(data) if isinstance(data, list) else 'unknown'} formulas from {json_file}")
+            
+        except Exception as e:
+            print(f"Warning: Failed to load {json_file}: {e}")
+            continue
+    
+    print(f"Total loaded tautologies: {len(tautologies)}")
+    return tautologies
 
 
 def initialize_global_constants():
@@ -241,6 +308,53 @@ def calculate_tactic_probability(
         return main_confidence
 
 
+def select_tactic_probabilistically(
+    tactic_combinations: List[Tuple[str, float]], 
+    temperature: float = 1.0,
+    failed_tactics: set = None
+) -> Tuple[str, float]:
+    """
+    temperatureを使用してタクティクを確率的に選択
+    
+    Args:
+        tactic_combinations: [(tactic_string, probability), ...] のリスト
+        temperature: 温度パラメータ（高いほどランダム、低いほど確率に従う）
+        failed_tactics: 失敗したタクティクのセット
+    
+    Returns:
+        選択されたタクティクとその調整後の確率
+    """
+    if failed_tactics is None:
+        failed_tactics = set()
+    
+    # 失敗していないタクティクのみをフィルタリング
+    available_tactics = [(tactic, prob) for tactic, prob in tactic_combinations 
+                        if tactic not in failed_tactics]
+    
+    if not available_tactics:
+        # 利用可能なタクティクがない場合は空を返す
+        return "", 0.0
+    
+    # 確率を温度で調整
+    tactics, probabilities = zip(*available_tactics)
+    probabilities = np.array(probabilities)
+    
+    # 温度を適用（log確率に変換してから温度で割る）
+    log_probs = np.log(probabilities + 1e-8)  # 数値安定性のため小さな値を追加
+    scaled_log_probs = log_probs / temperature
+    
+    # softmaxで正規化
+    exp_probs = np.exp(scaled_log_probs - np.max(scaled_log_probs))  # 数値安定性のため
+    softmax_probs = exp_probs / np.sum(exp_probs)
+    
+    # 確率的に選択
+    selected_idx = np.random.choice(len(tactics), p=softmax_probs)
+    selected_tactic = tactics[selected_idx]
+    selected_prob = softmax_probs[selected_idx]  # 調整後の確率を返す
+    
+    return selected_tactic, selected_prob
+
+
 def generate_top_k_tactic_combinations(
     model: TransformerClassifier,
     tokenizer: CharTokenizer,
@@ -434,10 +548,15 @@ def collect_self_improvement_data(
     probability_threshold: float = 0.001,
     difficulty: float = 0.5,
     seed: int = None,
-    verbose: bool = False
+    verbose: bool = False,
+    generated_data_dir: str = "generated_data",
+    temperature: float = 1.0
 ) -> List[Dict[str, Any]]:
     """
     Self improvement用のデータを収集
+    
+    Args:
+        generated_data_dir: generated_dataディレクトリのパス
     
     Returns:
         成功したタクティクのリスト（deduplicated_batch形式）
@@ -445,60 +564,17 @@ def collect_self_improvement_data(
     # グローバル定数を初期化
     initialize_global_constants()
     
-    # フォーミュラジェネレーターを作成
-    from src.core.generate_prop import FormulaGenerator, filter_formulas
-    
-    # 利用可能な変数を推論
-    variables = [t for t in ["a", "b", "c"] if t in BASE_TOKENS]
-    if not variables:
-        variables = ["a", "b", "c"]
-    
-    # フォーミュラジェネレーターを作成（inference_hierarchical.pyと同じ方法）
-    # 注意: 実際の生成はgenerate_tautology関数内で行うため、ここでは作成しない
-    
-    # inference_hierarchical.pyと同じ方法でトートロジーを生成
-    def generate_tautology(gen_params, base_tokens, seed_offset=0):
-        """run_interaction.pyと同じ方法でトートロジーを生成する関数"""
-        from src.core.generate_prop import FormulaGenerator, filter_formulas
-        
-        # 変数を取得
-        variables = [t for t in gen_params.variables if t in base_tokens] or gen_params.variables
-        
-        # 予測可能なシードを使用（基本シード + オフセット）
-        dynamic_seed = gen_params.seed + seed_offset
-        
-        # フォーミュラジェネレーターを作成
-        gen = FormulaGenerator(
-            variables=variables, 
-            allow_const=gen_params.allow_const, 
-            difficulty=gen_params.difficulty, 
-            seed=dynamic_seed
-        )
-        
-        # トートロジーを生成
-        goal_list = filter_formulas(gen, max_len=gen_params.max_len, require_tautology=True, limit=1)
-        if not goal_list:
-            # デバッグ情報を追加
-            print(f"Debug: Failed to generate tautology for seed_offset={seed_offset}")
-            print(f"  - difficulty={gen_params.difficulty}")
-            print(f"  - max_len={gen_params.max_len}")
-            print(f"  - variables={variables}")
-            print(f"  - allow_const={gen_params.allow_const}")
-            return None
-        return goal_list[0]
-    
-    # トートロジーを逐次生成
-    tautologies = []
-    for i in range(num_examples):
-        goal_str = generate_tautology(GENERATION_PARAMS, BASE_TOKENS, seed_offset=i)
-        if goal_str:
-            tautologies.append(goal_str)
+    # generated_data配下のファイルから論理式を読み込み
+    tautologies = load_tautologies_from_generated_data(
+        generated_data_dir=generated_data_dir,
+        max_examples=num_examples
+    )
     
     if not tautologies:
-        print("Failed to generate tautologies for self improvement data collection!")
+        print("Failed to load tautologies from generated_data directory!")
         return []
     
-    print(f"Generated {len(tautologies)} tautologies for self improvement data collection")
+    print(f"Loaded {len(tautologies)} tautologies from generated_data directory")
     print("First 5 tautologies:")
     for i in range(min(5, len(tautologies))):
         print(f"  {i+1}: {tautologies[i]}")
@@ -519,9 +595,19 @@ def collect_self_improvement_data(
             
             if verbose:
                 print(f"\nExample {i+1}: {goal_str}")
+                # 初期状態を表示
+                initial_state = encode_prover_state(prover)
+                initial_premises = initial_state["premises"]
+                initial_goal = initial_state["goal"]
+                print(f"  Initial state:")
+                print(f"    Premises: {initial_premises if initial_premises else '[]'}")
+                print(f"    Goal: {initial_goal}")
             
             # このexampleの成功したタクティクを一時的に保存
             example_successful_tactics = []
+            
+            # 失敗したタクティクを記録するセット（このexample内でのみ有効）
+            failed_tactics = set()
             
             # 推論ループ
             step = 0
@@ -535,6 +621,11 @@ def collect_self_improvement_data(
                 current_premises = current_state["premises"]
                 current_goal = current_state["goal"]
                 
+                if verbose:
+                    print(f"\n  Step {step+1}:")
+                    print(f"    Premises: {current_premises if current_premises else '[]'}")
+                    print(f"    Goal: {current_goal}")
+                
                 # 上位k個のタクティク組み合わせを効率的に生成
                 tactic_combinations = generate_top_k_tactic_combinations(
                     model, tokenizer, current_premises, current_goal,
@@ -542,25 +633,43 @@ def collect_self_improvement_data(
                 )
                 
                 if verbose:
-                    print(f"  Step {step+1}: Generated {len(tactic_combinations)} tactic combinations")
+                    print(f"    Generated {len(tactic_combinations)} tactic combinations")
                     print(f"    Top 5: {[(t, f'{p:.3f}') for t, p in tactic_combinations[:5]]}")
+                    print(f"    Failed tactics so far: {failed_tactics}")
                 
-                # 上位top_k個のタクティクを順次適用
+                # 確率的にタクティクを選択して適用
                 success = False
-                step_failures = 0  # このステップでの失敗数
-                total_tactics_in_step = len(tactic_combinations)  # このステップで生成されたタクティク数
+                max_attempts = min(top_k, len(tactic_combinations))  # 最大試行回数
+                attempts = 0
                 
-                for tactic_str, probability in tactic_combinations:
+                # 利用可能なタクティクを事前に計算
+                available_tactics = [tactic for tactic, _ in tactic_combinations 
+                                   if tactic not in failed_tactics]
+                
+                while not success and attempts < max_attempts and not example_terminated and available_tactics:
+                    # 確率的にタクティクを選択
+                    selected_tactic, selected_prob = select_tactic_probabilistically(
+                        tactic_combinations, temperature, failed_tactics
+                    )
+                    
+                    if not selected_tactic:
+                        # 利用可能なタクティクがない場合
+                        if verbose:
+                            print(f"    No available tactics (all failed)")
+                        example_terminated = True
+                        break
+                    
                     # タクティクを適用
-                    success = apply_tactic_from_label(prover, tactic_str)
+                    success = apply_tactic_from_label(prover, selected_tactic)
+                    attempts += 1
                     
                     if verbose:
-                        print(f"    Trying {tactic_str} (prob: {probability:.3f}) - {'Success' if success else 'Failed'}")
+                        print(f"    Attempt {attempts}: {selected_tactic} (prob: {selected_prob:.3f}) - {'Success' if success else 'Failed'}")
                     
                     if success:
                         # 成功したタクティクを一時的に記録
-                        tactic_dict = parse_tactic_string_cached(tactic_str)
-                        state_tactic_hash = create_state_hash(current_premises, current_goal, tactic_str)
+                        tactic_dict = parse_tactic_string_cached(selected_tactic)
+                        state_tactic_hash = create_state_hash(current_premises, current_goal, selected_tactic)
                         
                         example_successful_tactics.append({
                             "step_index": step,
@@ -571,13 +680,27 @@ def collect_self_improvement_data(
                             "state_tactic_hash": state_tactic_hash
                         })
                         consecutive_failures = 0  # 成功したら連続失敗数をリセット
-                        break
+                        
+                        if verbose:
+                            # タクティク適用後の状態を表示
+                            new_state = encode_prover_state(prover)
+                            new_premises = new_state["premises"]
+                            new_goal = new_state["goal"]
+                            print(f"    → New state after {selected_tactic}:")
+                            print(f"      Premises: {new_premises if new_premises else '[]'}")
+                            print(f"      Goal: {new_goal if new_goal else 'SOLVED!'}")
                     else:
-                        step_failures += 1
-                        # このステップで全てのタクティクが失敗した場合、早期終了
-                        if step_failures >= total_tactics_in_step:
+                        # 失敗したタクティクを記録
+                        failed_tactics.add(selected_tactic)
+                        consecutive_failures += 1
+                        
+                        # 利用可能なタクティクリストを更新
+                        available_tactics = [tactic for tactic, _ in tactic_combinations 
+                                           if tactic not in failed_tactics]
+                        
+                        if not available_tactics:
                             if verbose:
-                                print(f"    Early termination: {step_failures} consecutive failures in this step")
+                                print(f"    All tactics failed in this step")
                             example_terminated = True
                             break
                 
@@ -658,6 +781,8 @@ def main():
     parser.add_argument("--seed", type=int, default=None, help="random seed for formula generation")
     parser.add_argument("--output_dir", type=str, default="self_improvement_data", help="output directory for collected data")
     parser.add_argument("--batch_size", type=int, default=1000, help="batch size for saving data")
+    parser.add_argument("--generated_data_dir", type=str, default="generated_data", help="directory containing generated tautology data")
+    parser.add_argument("--temperature", type=float, default=1.0, help="temperature for probabilistic tactic selection (higher = more random)")
     
     args = parser.parse_args()
     
@@ -693,7 +818,9 @@ def main():
     print(f"  Max steps per example: {args.max_steps}")
     print(f"  Top k tactics per step: {args.top_k}")
     print(f"  Probability threshold: {args.probability_threshold}")
+    print(f"  Temperature: {args.temperature}")
     print(f"  Difficulty: {args.difficulty}")
+    print(f"  Generated data directory: {args.generated_data_dir}")
     print(f"  Output directory: {args.output_dir}")
     
     # 既存のデータをクリア
@@ -712,7 +839,9 @@ def main():
         probability_threshold=args.probability_threshold,
         difficulty=args.difficulty,
         seed=args.seed,
-        verbose=args.verbose
+        verbose=args.verbose,
+        generated_data_dir=args.generated_data_dir,
+        temperature=args.temperature
     )
     
     if successful_tactics:
