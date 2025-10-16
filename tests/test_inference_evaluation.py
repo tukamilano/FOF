@@ -235,7 +235,7 @@ def test_tautology_generation_detailed():
 def main():
     parser = argparse.ArgumentParser(description="Test inference evaluation with different difficulty values")
     parser.add_argument("--num_examples", type=int, default=50, help="number of examples for evaluation")
-    parser.add_argument("--max_steps", type=int, default=20, help="max steps for inference")
+    parser.add_argument("--max_steps", type=int, default=30, help="max steps for inference")
     parser.add_argument("--test_generation", action="store_true", help="test tautology generation in detail")
     args = parser.parse_args()
     

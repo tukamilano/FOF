@@ -102,7 +102,7 @@ FOF/
 │   ├── deduplicated_batch_00002.json
 │   └── ...
 ├── models/                       # 学習済みモデル
-│   ├── hierarchical_model.pth
+│   ├── pretrained_model.pth
 │   ├── hierarchical_model_generated.pth
 │   └── test_*.pth                # テスト用モデル
 ├── pyprover/                     # pyprover（既存のまま）

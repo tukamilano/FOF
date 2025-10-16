@@ -89,7 +89,7 @@ class GenerationParameters:
     allow_const: bool = False
     
     # 証明探索設定
-    max_steps: int = 5
+    max_steps: int = 30
     max_depth: int = 8  # auto_classical用
     
     def __post_init__(self):

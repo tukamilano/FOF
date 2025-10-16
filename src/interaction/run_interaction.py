@@ -19,6 +19,7 @@ from src.core.transformer_classifier import (
     TransformerClassifier,
     build_hierarchical_label_mappings,
 )
+from src.training.inference_hierarchical import load_hierarchical_model
 from src.core.generate_prop import FormulaGenerator, filter_formulas
 from src.core.state_encoder import encode_prover_state, format_tactic_string, parse_tactic_string, state_hash, state_tactic_hash
 from src.core.parameter import (
@@ -26,6 +27,56 @@ from src.core.parameter import (
     get_generation_params, get_system_params, DeviceType, DataFilterType
 )
 from src.core.utils import pushd, import_pyprover
+
+
+def sample_from_logits(logits: torch.Tensor, temperature: float = 1.0) -> Tuple[int, float]:
+    """
+    ロジットから確率的にサンプリング
+    
+    Args:
+        logits: ロジットテンソル [batch_size, vocab_size]
+        temperature: 温度パラメータ（高いほどランダム、低いほど確定的）
+    
+    Returns:
+        (sampled_id, confidence)
+    """
+    # 温度を適用
+    if temperature != 1.0:
+        logits = logits / temperature
+    
+    # softmaxで確率に変換
+    probs = torch.softmax(logits, dim=-1)
+    
+    # 確率的サンプリング
+    sampled_id = torch.multinomial(probs, 1).item()
+    confidence = probs[0, sampled_id].item()
+    
+    return sampled_id, confidence
+
+
+def generate_tautology(gen_params, base_tokens, seed_offset=0):
+    """run_interaction.pyと同じ方法でトートロジーを生成する関数"""
+    from src.core.generate_prop import FormulaGenerator, filter_formulas
+    
+    # 変数を取得
+    variables = [t for t in gen_params.variables if t in base_tokens] or gen_params.variables
+    
+    # 予測可能なシードを使用（基本シード + オフセット）
+    dynamic_seed = gen_params.seed + seed_offset
+    
+    # フォーミュラジェネレーターを作成
+    gen = FormulaGenerator(
+        variables=variables, 
+        allow_const=gen_params.allow_const, 
+        difficulty=gen_params.difficulty, 
+        seed=dynamic_seed
+    )
+    
+    # トートロジーを生成
+    goal_list = filter_formulas(gen, max_len=gen_params.max_len, require_tautology=True, limit=1)
+    if not goal_list:
+        return None
+    return goal_list[0]
 
 
 def apply_tactic_from_label(prover, label) -> bool:
@@ -213,6 +264,7 @@ def main() -> None:
     parser.add_argument("--work_file", type=str, default=train_params.work_file, help="temporary work file for data collection")
     parser.add_argument("--dataset_file", type=str, default=train_params.dataset_file, help="dataset file for collected data")
     parser.add_argument("--filter_successful_only", action="store_true", help="only store records where both tactic_apply and is_proved are true")
+    parser.add_argument("--model_path", type=str, default="models/pretrained_model.pth", help="path to pretrained model")
     args = parser.parse_args()
 
     # パラメータを更新
@@ -254,35 +306,57 @@ def main() -> None:
         pad_id=0  # 特殊トークンの最初がPAD
     )
 
-    # Build tokenizer and model
+    # Build tokenizer
     tokenizer = CharTokenizer(base_tokens=base_tokens)
     
-    # 階層分類用のラベルマッピングを取得
-    from src.core.parameter import get_hierarchical_labels
-    hierarchical_labels = get_hierarchical_labels()
-    main_to_id, arg1_to_id, arg2_to_id, id_to_main, id_to_arg1, id_to_arg2 = build_hierarchical_label_mappings(
-        hierarchical_labels.main_tactics,
-        hierarchical_labels.arg1_values,
-        hierarchical_labels.arg2_values
-    )
-    
-    model = TransformerClassifier(
-        vocab_size=tokenizer.vocab_size,
-        pad_id=tokenizer.pad_id,
-        max_seq_len=model_params.max_seq_len,
-        d_model=model_params.d_model,
-        nhead=model_params.nhead,
-        num_layers=model_params.num_layers,
-        dim_feedforward=model_params.dim_feedforward,
-        dropout=model_params.dropout,
-        num_main_classes=len(id_to_main),
-        num_arg1_classes=len(id_to_arg1),
-        num_arg2_classes=len(id_to_arg2),
-    )
-
     device = torch.device(default_params.get_device())
-    model.to(device)
-    model.eval()
+    
+    # 事前学習済みモデルを読み込みまたは初期化
+    if os.path.exists(args.model_path):
+        print(f"Loading pretrained model from {args.model_path}")
+        model, label_mappings = load_hierarchical_model(args.model_path, device)
+        
+        # ラベルマッピングを取得
+        main_to_id = label_mappings['main_to_id']
+        arg1_to_id = label_mappings['arg1_to_id']
+        arg2_to_id = label_mappings['arg2_to_id']
+        id_to_main = label_mappings['id_to_main']
+        id_to_arg1 = label_mappings['id_to_arg1']
+        id_to_arg2 = label_mappings['id_to_arg2']
+        
+        # トークナイザーのvocab_sizeをモデルに合わせる
+        checkpoint = torch.load(args.model_path, map_location=device)
+        vocab_size = checkpoint.get('vocab_size', tokenizer.vocab_size)
+        if vocab_size != tokenizer.vocab_size:
+            print(f"Warning: Model vocab_size ({vocab_size}) doesn't match tokenizer vocab_size ({tokenizer.vocab_size})")
+    else:
+        print(f"Model file not found: {args.model_path}")
+        print("Creating a randomly initialized model...")
+        
+        # 階層分類用のラベルマッピングを取得
+        from src.core.parameter import get_hierarchical_labels
+        hierarchical_labels = get_hierarchical_labels()
+        main_to_id, arg1_to_id, arg2_to_id, id_to_main, id_to_arg1, id_to_arg2 = build_hierarchical_label_mappings(
+            hierarchical_labels.main_tactics,
+            hierarchical_labels.arg1_values,
+            hierarchical_labels.arg2_values
+        )
+        
+        model = TransformerClassifier(
+            vocab_size=tokenizer.vocab_size,
+            pad_id=tokenizer.pad_id,
+            max_seq_len=model_params.max_seq_len,
+            d_model=model_params.d_model,
+            nhead=model_params.nhead,
+            num_layers=model_params.num_layers,
+            dim_feedforward=model_params.dim_feedforward,
+            dropout=model_params.dropout,
+            num_main_classes=len(id_to_main),
+            num_arg1_classes=len(id_to_arg1),
+            num_arg2_classes=len(id_to_arg2),
+        )
+        model.to(device)
+        model.eval()
 
     # Import pyprover robustly
     proposition_mod, prover_mod = import_pyprover(pyprover_dir)
@@ -336,14 +410,17 @@ def main() -> None:
         print("[selftest:apply] apply ok:", ok_apply, " new goal:", prover_apply.goal)
         return
 
+    # Statistics tracking
+    solved_count = 0
+    total_count = gen_params.count
+
     try:
         for i in range(gen_params.count):
-            # Generate an initial state for the prover (we still use generator to seed it)
-            goal_list = filter_formulas(gen, max_len=gen_params.max_len, require_tautology=True, limit=1)
-            if not goal_list:
+            # Generate an initial state for the prover using the shared function
+            seed_goal = generate_tautology(gen_params, base_tokens, seed_offset=i)
+            if not seed_goal:
                 print(f"Warning: No valid formulas generated for example {i+1}, skipping...")
                 continue
-            seed_goal = goal_list[0]
 
             # Pyprover parse and create state
             parse_tree = PropParseTree()
@@ -380,8 +457,7 @@ def main() -> None:
                     with torch.no_grad():
                         outputs = model(
                             ids.unsqueeze(0).to(device),
-                            mask.unsqueeze(0).to(device),
-                            seg.unsqueeze(0).to(device),
+                            mask.unsqueeze(0).to(device)
                         )
                         
                         # 階層分類モデル
@@ -389,33 +465,33 @@ def main() -> None:
                             # 階層分類モデル
                             main_logits, arg1_logits, arg2_logits = outputs
                             
-                            # 禁止されたタクティクをマスキング
-                            if banned:
-                                # 禁止されたタクティクの主タクティクをマスキング
-                                for banned_tactic in banned:
-                                    if banned_tactic in ['assumption', 'intro', 'split', 'left', 'right', 'add_dn']:
-                                        # 引数なしのタクティク
-                                        if banned_tactic in main_to_id:
-                                            main_logits[0, main_to_id[banned_tactic]] = float('-inf')
-                                    elif banned_tactic.startswith('apply ') or banned_tactic.startswith('destruct '):
-                                        # apply/destruct タクティク
-                                        if 'apply' in main_to_id:
-                                            main_logits[0, main_to_id['apply']] = float('-inf')
-                                        if 'destruct' in main_to_id:
-                                            main_logits[0, main_to_id['destruct']] = float('-inf')
-                                    elif banned_tactic.startswith('specialize '):
-                                        # specialize タクティク
-                                        if 'specialize' in main_to_id:
-                                            main_logits[0, main_to_id['specialize']] = float('-inf')
+                            # 禁止されたタクティクをマスキング（inference_hierarchical.pyと同じ動作にするため無効化）
+                            # if banned:
+                            #     # 禁止されたタクティクの主タクティクをマスキング
+                            #     for banned_tactic in banned:
+                            #         if banned_tactic in ['assumption', 'intro', 'split', 'left', 'right', 'add_dn']:
+                            #             # 引数なしのタクティク
+                            #             if banned_tactic in main_to_id:
+                            #                 main_logits[0, main_to_id[banned_tactic]] = float('-inf')
+                            #         elif banned_tactic.startswith('apply ') or banned_tactic.startswith('destruct '):
+                            #             # apply/destruct タクティク
+                            #             if 'apply' in main_to_id:
+                            #                 main_logits[0, main_to_id['apply']] = float('-inf')
+                            #             if 'destruct' in main_to_id:
+                            #                 main_logits[0, main_to_id['destruct']] = float('-inf')
+                            #         elif banned_tactic.startswith('specialize '):
+                            #             # specialize タクティク
+                            #             if 'specialize' in main_to_id:
+                            #                 main_logits[0, main_to_id['specialize']] = float('-inf')
                             
-                            # 主タクティクを予測
-                            main_pred_id = int(torch.argmax(main_logits, dim=-1).item())
+                            # 主タクティクを予測（確率的サンプリング）
+                            main_pred_id, main_confidence = sample_from_logits(main_logits, temperature=1.0)
                             main_tactic = id_to_main[main_pred_id]
                             
-                            # 引数を予測
-                            arg1_pred_id = int(torch.argmax(arg1_logits, dim=-1).item())
+                            # 引数を予測（確率的サンプリング）
+                            arg1_pred_id, arg1_confidence = sample_from_logits(arg1_logits, temperature=1.0)
                             arg1_value = id_to_arg1[arg1_pred_id]
-                            arg2_pred_id = int(torch.argmax(arg2_logits, dim=-1).item())
+                            arg2_pred_id, arg2_confidence = sample_from_logits(arg2_logits, temperature=1.0)
                             arg2_value = id_to_arg2[arg2_pred_id]
                             
                             # タクティク文字列を構築
@@ -431,15 +507,16 @@ def main() -> None:
                         else:
                             # 階層分類モデル
                             main_logits, arg1_logits, arg2_logits = outputs
-                            if banned:
-                                mask_vec = torch.zeros_like(main_logits)
-                                for b in banned:
-                                    if b in main_to_id:
-                                        idx = main_to_id[b]
-                                        if idx < main_logits.size(-1):
-                                            mask_vec[0, idx] = float('-inf')
-                                main_logits = main_logits + mask_vec
-                            pred_id = int(torch.argmax(main_logits, dim=-1).item())
+                            # 禁止されたタクティクをマスキング（inference_hierarchical.pyと同じ動作にするため無効化）
+                            # if banned:
+                            #     mask_vec = torch.zeros_like(main_logits)
+                            #     for b in banned:
+                            #         if b in main_to_id:
+                            #             idx = main_to_id[b]
+                            #             if idx < main_logits.size(-1):
+                            #                 mask_vec[0, idx] = float('-inf')
+                            #     main_logits = main_logits + mask_vec
+                            pred_id, confidence = sample_from_logits(main_logits, temperature=1.0)
                             pred_label = id_to_main[pred_id]
 
                     # Record tactic application for data collection (BEFORE applying tactic)
@@ -478,6 +555,13 @@ def main() -> None:
 
                 solved = prover.goal is None
 
+            # Update solved status after loop (in case of break)
+            solved = prover.goal is None
+
+            # Update statistics
+            if solved:
+                solved_count += 1
+
             # Finish data collection for this example
             if data_collector:
                 data_collector.finish_example(is_proved=solved)
@@ -490,6 +574,11 @@ def main() -> None:
                 print()
             
     finally:
+        # Print final statistics
+        print(f"\n📊 Final Results:")
+        print(f"   Solved: {solved_count}/{total_count} problems")
+        print(f"   Success rate: {solved_count/total_count*100:.1f}%")
+        
         if data_collector:
             data_collector.save_data()
             stats = data_collector.get_stats()

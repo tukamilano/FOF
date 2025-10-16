@@ -8,10 +8,7 @@ from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
 
 # Load input/output tokens
-try:
-    from .transformer_classifier import load_tokens_and_labels_from_token_py
-except ImportError:
-    from transformer_classifier import load_tokens_and_labels_from_token_py
+from .transformer_classifier import load_tokens_and_labels_from_token_py
 
 
 # ----- AST definitions -----
@@ -44,7 +41,7 @@ def expr_to_string(e: Expr) -> str:
     if isinstance(e, Var):
         return e.name
     if isinstance(e, Const):
-        return "True" if e.value else "⊥"  # pyprover互換性のため⊤をTrueに変更
+        return "⊤" if e.value else "⊥"
     if isinstance(e, Not):
         s = expr_to_string(e.expr)
         # Keep parentheses around non-atomic to avoid ambiguity
@@ -91,7 +88,7 @@ class FormulaGenerator:
         self,
         variables: List[str],
         allow_const: bool = True,
-        difficulty: float = 0.7,
+        difficulty: float = 0.5,
         max_depth: int = 4,
         binary_op_weights: Optional[Dict[str, float]] = None,
         unary_weight: float = 0.3,
@@ -100,8 +97,8 @@ class FormulaGenerator:
         self.variables = variables
         self.allow_const = allow_const
         self.difficulty = max(0.0, min(1.0, difficulty))
-        # Scale depth by difficulty (harder => deeper) - より控えめに調整
-        self.max_depth = max(1, int(round(max_depth * (0.3 + 0.4 * self.difficulty))))
+        # Scale depth by difficulty (harder => deeper)
+        self.max_depth = max(1, int(round(max_depth * (0.5 + self.difficulty))))
         self.unary_weight = max(0.0, min(1.0, unary_weight))
         self.rng = random.Random(seed)
 
@@ -137,9 +134,7 @@ class FormulaGenerator:
         return e
 
     def _gen_rec(self, depth: int) -> Expr:
-        # より簡単な式を生成するため、終了確率を上げる
-        termination_prob = 0.4 - 0.2 * (1 - self.difficulty)
-        if depth <= 0 or self.rng.random() < termination_prob:
+        if depth <= 0 or self.rng.random() < (0.25 - 0.2 * (1 - self.difficulty)):
             return self._maybe_negate(self._gen_atom())
 
         op = self._choice(
@@ -177,11 +172,6 @@ def filter_formulas(
         if s in out:
             continue
         out.append(s)
-    
-    # 要求された数に達しない場合は警告を出す
-    if len(out) < limit:
-        print(f"Warning: Only generated {len(out)}/{limit} formulas after {attempts} attempts (max_attempts reached)")
-    
     return out
 
 
@@ -189,7 +179,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Generate random propositional formulas")
     parser.add_argument("--count", type=int, default=10, help="number of formulas to output")
     parser.add_argument("--max_len", type=int, default=50, help="max string length per formula")
-    parser.add_argument("--difficulty", type=float, default=0.7, help="0.0-1.0 depth/negation difficulty")
+    parser.add_argument("--difficulty", type=float, default=0.5, help="0.0-1.0 depth/negation difficulty")
     parser.add_argument("--allow_const", action="store_true", help="allow ⊤ and ⊥ in atoms")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--tautology_only", action="store_true", help="keep only tautologies")

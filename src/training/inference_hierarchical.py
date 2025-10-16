@@ -40,48 +40,95 @@ def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[Tran
     """階層分類モデルを読み込み"""
     checkpoint = torch.load(model_path, map_location=device)
     
-    # モデルパラメータを取得
-    model_params = checkpoint['model_params']
+    # 新しい形式のチェックポイントかどうかを判定
+    if 'model_params' in checkpoint:
+        # 新しい形式のチェックポイント
+        model_params = checkpoint['model_params']
+        vocab_size = checkpoint.get('vocab_size', model_params['vocab_size'])
+        pad_id = checkpoint.get('pad_id', model_params['pad_id'])
+        max_seq_len = checkpoint.get('max_seq_len', model_params['max_seq_len'])
+        
+        # クラス数をチェックポイントから取得
+        num_main_classes = len(checkpoint['id_to_main'])
+        num_arg1_classes = len(checkpoint['id_to_arg1'])
+        num_arg2_classes = len(checkpoint['id_to_arg2'])
+        
+        # ラベルマッピングを取得
+        label_mappings = {
+            'main_to_id': checkpoint['main_to_id'],
+            'arg1_to_id': checkpoint['arg1_to_id'],
+            'arg2_to_id': checkpoint['arg2_to_id'],
+            'id_to_main': checkpoint['id_to_main'],
+            'id_to_arg1': checkpoint['id_to_arg1'],
+            'id_to_arg2': checkpoint['id_to_arg2'],
+        }
+        
+        model = TransformerClassifier(
+            vocab_size=vocab_size,
+            pad_id=pad_id,
+            max_seq_len=max_seq_len,
+            d_model=model_params['d_model'],
+            nhead=model_params['nhead'],
+            num_layers=model_params['num_layers'],
+            dim_feedforward=model_params['dim_feedforward'],
+            dropout=model_params['dropout'],
+            num_main_classes=num_main_classes,
+            num_arg1_classes=num_arg1_classes,
+            num_arg2_classes=num_arg2_classes,
+        )
+        
+        model.load_state_dict(checkpoint['model_state_dict'])
+    else:
+        # 古い形式のチェックポイント（重みのみ）
+        print("Loading old format checkpoint (weights only)")
+        
+        # デフォルトのモデルパラメータを取得
+        from src.core.parameter import get_model_params
+        model_params = get_model_params()
+        
+        # チェックポイントからvocab_sizeを取得（embedding層のサイズから）
+        vocab_size = checkpoint['embedding.weight'].shape[0]
+        print(f"Detected vocab_size from checkpoint: {vocab_size}")
+        
+        # デフォルトのラベルマッピングを取得
+        from src.core.parameter import get_hierarchical_labels
+        from src.core.transformer_classifier import build_hierarchical_label_mappings
+        hierarchical_labels = get_hierarchical_labels()
+        main_to_id, arg1_to_id, arg2_to_id, id_to_main, id_to_arg1, id_to_arg2 = build_hierarchical_label_mappings(
+            hierarchical_labels.main_tactics,
+            hierarchical_labels.arg1_values,
+            hierarchical_labels.arg2_values
+        )
+        
+        label_mappings = {
+            'main_to_id': main_to_id,
+            'arg1_to_id': arg1_to_id,
+            'arg2_to_id': arg2_to_id,
+            'id_to_main': id_to_main,
+            'id_to_arg1': id_to_arg1,
+            'id_to_arg2': id_to_arg2,
+        }
+        
+        # モデルを作成（チェックポイントから取得したvocab_sizeを使用）
+        model = TransformerClassifier(
+            vocab_size=vocab_size,
+            pad_id=model_params.pad_id,
+            max_seq_len=model_params.max_seq_len,
+            d_model=model_params.d_model,
+            nhead=model_params.nhead,
+            num_layers=model_params.num_layers,
+            dim_feedforward=model_params.dim_feedforward,
+            dropout=model_params.dropout,
+            num_main_classes=len(id_to_main),
+            num_arg1_classes=len(id_to_arg1),
+            num_arg2_classes=len(id_to_arg2),
+        )
+        
+        # 重みを読み込み
+        model.load_state_dict(checkpoint)
     
-    # モデルを作成
-    vocab_size = checkpoint.get('vocab_size', model_params['vocab_size'])
-    pad_id = checkpoint.get('pad_id', model_params['pad_id'])
-    
-    # クラス数をチェックポイントから取得
-    num_main_classes = len(checkpoint['id_to_main'])
-    num_arg1_classes = len(checkpoint['id_to_arg1'])
-    num_arg2_classes = len(checkpoint['id_to_arg2'])
-    
-    # max_seq_lenをチェックポイントから取得（後方互換性のため）
-    max_seq_len = checkpoint.get('max_seq_len', model_params['max_seq_len'])
-    
-    model = TransformerClassifier(
-        vocab_size=vocab_size,
-        pad_id=pad_id,
-        max_seq_len=max_seq_len,
-        d_model=model_params['d_model'],
-        nhead=model_params['nhead'],
-        num_layers=model_params['num_layers'],
-        dim_feedforward=model_params['dim_feedforward'],
-        dropout=model_params['dropout'],
-        num_main_classes=num_main_classes,
-        num_arg1_classes=num_arg1_classes,
-        num_arg2_classes=num_arg2_classes,
-    )
-    
-    model.load_state_dict(checkpoint['model_state_dict'])
     model.to(device)
     model.eval()
-    
-    # ラベルマッピングを取得
-    label_mappings = {
-        'main_to_id': checkpoint['main_to_id'],
-        'arg1_to_id': checkpoint['arg1_to_id'],
-        'arg2_to_id': checkpoint['arg2_to_id'],
-        'id_to_main': checkpoint['id_to_main'],
-        'id_to_arg1': checkpoint['id_to_arg1'],
-        'id_to_arg2': checkpoint['id_to_arg2'],
-    }
     
     return model, label_mappings
 
@@ -242,9 +289,9 @@ def evaluate_inference_performance(
     gen = FormulaGenerator(
         variables=variables,
         allow_const=gen_params.allow_const,  # データ生成時と同じ設定
-        difficulty=difficulty,  # 引数で指定された難易度を使用
-        max_depth=max_depth if max_depth is not None else gen_params.max_depth,  # 指定された最大深度またはデータ生成時と同じ最大深度
-        seed=seed if seed is not None else int(time.time() * 1000) % 2**32  # 指定されたシードまたは現在時刻を使用
+        difficulty=args.difficulty,  # 引数で指定された難易度を使用
+        max_depth=args.max_depth if args.max_depth is not None else gen_params.max_depth,  # 指定された最大深度またはデータ生成時と同じ最大深度
+        seed=args.seed if args.seed is not None else int(time.time() * 1000) % 2**32  # 指定されたシードまたは現在時刻を使用
     )
     
     # トートロジーを生成
@@ -362,9 +409,9 @@ def apply_tactic_from_label(prover, label) -> bool:
 
 def main():
     parser = argparse.ArgumentParser(description="Run hierarchical tactic inference")
-    parser.add_argument("--model_path", type=str, default="hierarchical_model.pth", help="model path")
+    parser.add_argument("--model_path", type=str, default="models/pretrained_model.pth", help="model path")
     parser.add_argument("--count", type=int, default=10, help="number of examples to run")
-    parser.add_argument("--max_steps", type=int, default=5, help="max steps per example")
+    parser.add_argument("--max_steps", type=int, default=30, help="max steps per example")
     parser.add_argument("--device", type=str, default="auto", help="device")
     parser.add_argument("--verbose", action="store_true", help="verbose output")
     parser.add_argument("--temperature", type=float, default=1.0, help="sampling temperature (higher = more random)")
@@ -372,6 +419,9 @@ def main():
     parser.add_argument("--wandb_project", type=str, default="fof-inference", help="wandb project name")
     parser.add_argument("--wandb_run_name", type=str, default=None, help="wandb run name")
     parser.add_argument("--max_seq_len", type=int, default=256, help="maximum sequence length")
+    parser.add_argument("--difficulty", type=float, default=0.5, help="difficulty level for formula generation")
+    parser.add_argument("--max_depth", type=int, default=8, help="maximum depth for formula generation")
+    parser.add_argument("--seed", type=int, default=None, help="random seed for formula generation")
     
     args = parser.parse_args()
     
@@ -490,56 +540,31 @@ def main():
     # トートロジーを新規生成
     print(f"\nGenerating {args.count} new tautologies for inference...")
     
-    # generate_propをインポート
-    from src.core.generate_prop import FormulaGenerator, filter_formulas
+    # run_interaction.pyから論理式生成関数をインポート
+    from src.interaction.run_interaction import generate_tautology
     
     # 変数を取得（fof_tokens.pyから）
-    from src.core.transformer_classifier import load_tokens_and_labels_from_token_py
     token_py_path = os.path.join(project_root, "src", "core", "fof_tokens.py")
     base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
-    
-    # 利用可能な変数を推論
-    variables = [t for t in ["a", "b", "c"] if t in base_tokens]
-    if not variables:
-        variables = ["a", "b", "c"]
     
     # データ生成時と同じパラメータを取得
     from src.core.parameter import get_generation_params
     gen_params = get_generation_params()
     
-    # フォーミュラジェネレーターを作成
-    gen = FormulaGenerator(
-        variables=variables,
-        allow_const=gen_params.allow_const,  # データ生成時と同じ設定
-        difficulty=difficulty,  # 引数で指定された難易度を使用
-        max_depth=max_depth if max_depth is not None else gen_params.max_depth,  # 指定された最大深度またはデータ生成時と同じ最大深度
-        seed=seed if seed is not None else int(time.time() * 1000) % 2**32  # 指定されたシードまたは現在時刻を使用
-    )
     
-    # トートロジーを生成
-    tautologies = filter_formulas(
-        gen=gen,
-        max_len=100,  # 最大長を制限
-        require_tautology=True,  # トートロジーのみ
-        limit=args.count
-    )
-    
-    if not tautologies:
-        print("Failed to generate tautologies for inference!")
-        return
-    
-    print(f"Generated {len(tautologies)} tautologies for inference")
-    print("First 5 tautologies:")
-    for i in range(min(5, len(tautologies))):
-        print(f"  {i+1}: {tautologies[i]}")
-    print(f"Running {len(tautologies)} examples (max_steps: {args.max_steps})...")
+    print(f"Running {args.count} examples (max_steps: {args.max_steps})...")
     
     solved_count = 0
     step_counts = []
     tactic_usage = {}
     confidence_scores = []
     
-    for i, goal_str in enumerate(tautologies):
+    for i in range(args.count):
+        # run_interaction.pyと同じ関数を使用して論理式を生成
+        goal_str = generate_tautology(gen_params, base_tokens, seed_offset=i)
+        if not goal_str:
+            print(f"Warning: No valid formulas generated for example {i+1}, skipping...")
+            continue
         try:
             # パースしてproverを作成
             parse_tree = PropParseTree()
@@ -626,7 +651,7 @@ def main():
             continue
     
     # 最終結果を計算
-    total_examples = len(tautologies)
+    total_examples = len(step_counts)  # 実際に処理された問題数
     success_rate = solved_count / total_examples if total_examples > 0 else 0.0
     avg_steps = sum(step_counts) / len(step_counts) if step_counts else 0
     avg_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0
