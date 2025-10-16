@@ -53,14 +53,13 @@ pyproverの詳細な使用方法については、[公式リポジトリ](https:
 ```
 FOF/
 ├── src/                          # メインソースコード
-│   ├── interaction/              # インタラクション（オンライン学習）
-│   │   └── run_interaction.py    # メインの実行ファイル。数式生成、Transformer予測、証明実行の統合ワークフロー
+│   ├── interaction/              # インタラクション（推論・評価）
+│   │   └── inference_hierarchical.py     # 階層分類対応の推論スクリプト（メインの実行ファイル）
 │   ├── data_generation/          # 事前学習データ生成
 │   │   ├── auto_data_collector.py        # auto_classical()を使用したデータ収集システム
 │   │   └── auto_data_parallel_collector.py # 並列処理対応の高速データ収集システム（GCS統合）
 │   ├── training/                 # 学習関連
 │   │   ├── train_with_generated_data.py  # 生成データを使用した学習スクリプト（推奨）
-│   │   ├── inference_hierarchical.py     # 階層分類対応の推論スクリプト
 │   │   ├── analyze_generated_data.py     # 生成データの分析
 │   │   ├── check_duplicates.py           # 重複チェック
 │   │   ├── deduplicate_generated_data.py # 生成データの重複排除
@@ -102,8 +101,7 @@ FOF/
 │   ├── deduplicated_batch_00002.json
 │   └── ...
 ├── models/                       # 学習済みモデル
-│   ├── pretrained_model.pth
-│   ├── hierarchical_model_generated.pth
+│   ├── pretrained_model.pth      # 学習済みモデル（デフォルト）
 │   └── test_*.pth                # テスト用モデル
 ├── pyprover/                     # pyprover（既存のまま）
 ├── test_inference_randomness.py  # 推論ランダム性テスト
@@ -219,7 +217,7 @@ python src/training/train_with_generated_data.py [オプション]
   --learning_rate RATE             学習率 (デフォルト: 3e-4)
   --num_epochs EPOCHS              エポック数 (デフォルト: 1)
   --device DEVICE                  デバイス選択 auto/cpu/cuda (デフォルト: auto)
-  --save_path PATH                 モデル保存パス (デフォルト: models/hierarchical_model_generated.pth)
+  --save_path PATH                 モデル保存パス (デフォルト: models/pretrained_model.pth)
   --max_seq_len LEN                最大シーケンス長 (デフォルト: 512)
   --use_wandb                      wandbを使用した学習追跡
   --wandb_project PROJECT          wandbプロジェクト名 (デフォルト: fof-training)
@@ -234,41 +232,31 @@ python src/training/train_with_generated_data.py [オプション]
 
 ### 3. 推論実行
 
-#### 階層分類推論
+#### 階層分類推論（メインの実行ファイル）
 
 ```bash
 # 基本的な推論
-python src/training/inference_hierarchical.py
+python src/interaction/inference_hierarchical.py
 
 # カスタム設定での推論
-python src/training/inference_hierarchical.py \
-  --model_path models/hierarchical_model_generated.pth \
-  --num_examples 100 \
-  --max_steps 20 \
+python src/interaction/inference_hierarchical.py \
+  --model_path models/pretrained_model.pth \
+  --count 100 \
+  --max_steps 30 \
   --temperature 0.8 \
   --verbose
 
 # wandbを使用した推論追跡
-python src/training/inference_hierarchical.py \
+python src/interaction/inference_hierarchical.py \
   --use_wandb \
   --wandb_project fof-inference \
   --wandb_run_name inference_test
-```
 
-#### インタラクティブ実行
-
-```bash
-# 基本的な実行（selftest）
-python src/interaction/run_interaction.py --selftest
-
-# より多くの例を生成
-python src/interaction/run_interaction.py --count 10
-
-# 難易度を調整
-python src/interaction/run_interaction.py --difficulty 0.7
-
-# 最大ステップ数を設定
-python src/interaction/run_interaction.py --max_steps 10
+# 難易度と深度を調整
+python src/interaction/inference_hierarchical.py \
+  --difficulty 0.7 \
+  --max_depth 10 \
+  --count 50
 ```
 
 ### 4. データ分析
@@ -659,9 +647,9 @@ python src/training/train_with_generated_data.py \
   --wandb_run_name large_scale_experiment
 
 # 4. 推論性能評価
-python src/training/inference_hierarchical.py \
-  --model_path models/hierarchical_model_generated.pth \
-  --num_examples 100 \
+python src/interaction/inference_hierarchical.py \
+  --model_path models/pretrained_model.pth \
+  --count 100 \
   --max_steps 30 \
   --use_wandb \
   --wandb_project fof-inference
@@ -685,7 +673,7 @@ python src/training/train_with_generated_data.py \
   --use_wandb
 
 # 4. 推論
-python src/training/inference_hierarchical.py --verbose
+python src/interaction/inference_hierarchical.py --verbose
 ```
 
 ### 開発・テストワークフロー

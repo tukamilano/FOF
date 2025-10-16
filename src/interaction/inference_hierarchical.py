@@ -129,51 +129,60 @@ def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[Tran
     return model, label_mappings
 
 
-def sample_from_logits(logits: torch.Tensor, temperature: float = 1.0) -> Tuple[int, float]:
+def calculate_tactic_probability(
+    main_tactic: str,
+    arg1_value: str,
+    arg2_value: str,
+    main_confidence: float,
+    arg1_confidence: float,
+    arg2_confidence: float
+) -> float:
     """
-    ロジットから確率的にサンプリング
+    タクティクの種類に応じて適切な確率を計算
     
     Args:
-        logits: ロジットテンソル [batch_size, vocab_size]
-        temperature: 温度パラメータ（高いほどランダム、低いほど確定的）
+        main_tactic: メインタクティク
+        arg1_value: 第1引数
+        arg2_value: 第2引数
+        main_confidence: メインタクティクの確信度
+        arg1_confidence: 第1引数の確信度
+        arg2_confidence: 第2引数の確信度
     
     Returns:
-        (sampled_id, confidence)
+        計算された確率
     """
-    # 温度を適用
-    if temperature != 1.0:
-        logits = logits / temperature
+    # 引数不要なタクティク
+    if main_tactic in ['assumption', 'intro', 'split', 'left', 'right', 'add_dn']:
+        return main_confidence
     
-    # softmaxで確率に変換
-    probs = torch.softmax(logits, dim=-1)
+    # 引数1つのタクティク
+    elif main_tactic in ['apply', 'destruct']:
+        return main_confidence * arg1_confidence
     
-    # 確率的サンプリング
-    sampled_id = torch.multinomial(probs, 1).item()
-    confidence = probs[0, sampled_id].item()
+    # 引数2つのタクティク
+    elif main_tactic == 'specialize':
+        return main_confidence * arg1_confidence * arg2_confidence
     
-    return sampled_id, confidence
+    # その他のタクティク（引数不要として扱う）
+    else:
+        return main_confidence
 
 
-def predict_tactic(
+def generate_all_tactic_combinations(
     model: TransformerClassifier,
     tokenizer: CharTokenizer,
     premises: List[str],
     goal: str,
     label_mappings: Dict[str, Any],
     device: torch.device,
-    max_seq_len: int = 256,
-    banned_tactics: set = None,
-    temperature: float = 1.0
-) -> Tuple[str, float, float, float]:
+    max_seq_len: int = 256
+) -> List[Tuple[str, float]]:
     """
-    タクティクを予測
+    すべての可能なタクティクの組み合わせを生成し、確率の高い順にソート
     
     Returns:
-        (tactic_string, main_confidence, arg1_confidence, arg2_confidence)
+        [(tactic_string, probability), ...] のリスト（確率の高い順）
     """
-    if banned_tactics is None:
-        banned_tactics = set()
-    
     # 入力をエンコード
     input_ids, attention_mask, segment_ids = tokenizer.encode(goal, premises, max_seq_len)
     input_ids = input_ids.unsqueeze(0).to(device)
@@ -183,42 +192,63 @@ def predict_tactic(
     with torch.no_grad():
         main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
         
-        # 禁止されたタクティクをマスク
-        if banned_tactics:
-            for tactic in banned_tactics:
-                if tactic in label_mappings['main_to_id']:
-                    tactic_id = label_mappings['main_to_id'][tactic]
-                    main_logits[0, tactic_id] = float('-inf')
+        # softmaxで確率に変換
+        main_probs = torch.softmax(main_logits, dim=-1)
+        arg1_probs = torch.softmax(arg1_logits, dim=-1)
+        arg2_probs = torch.softmax(arg2_logits, dim=-1)
         
-        # 確率的サンプリングで予測
-        main_pred_id, main_confidence = sample_from_logits(
-            main_logits, temperature
-        )
+        tactic_combinations = []
         
-        arg1_pred_id, arg1_confidence = sample_from_logits(
-            arg1_logits, temperature
-        )
+        # すべての可能な組み合わせを生成
+        for main_id, main_tactic in enumerate(label_mappings['id_to_main']):
+            main_confidence = main_probs[0, main_id].item()
+            
+            # 引数が不要なタクティクの場合
+            if main_tactic in ['assumption', 'intro', 'split', 'left', 'right', 'add_dn']:
+                tactic_string = main_tactic
+                probability = calculate_tactic_probability(
+                    main_tactic, "", "",
+                    main_confidence, 0.0, 0.0
+                )
+                tactic_combinations.append((tactic_string, probability))
+            
+            # 引数1つのタクティクの場合
+            elif main_tactic in ['apply', 'destruct']:
+                for arg1_id, arg1_value in enumerate(label_mappings['id_to_arg1']):
+                    arg1_confidence = arg1_probs[0, arg1_id].item()
+                    tactic_string = f"{main_tactic} {arg1_value}"
+                    probability = calculate_tactic_probability(
+                        main_tactic, arg1_value, "",
+                        main_confidence, arg1_confidence, 0.0
+                    )
+                    tactic_combinations.append((tactic_string, probability))
+            
+            # 引数2つのタクティクの場合
+            elif main_tactic == 'specialize':
+                for arg1_id, arg1_value in enumerate(label_mappings['id_to_arg1']):
+                    arg1_confidence = arg1_probs[0, arg1_id].item()
+                    for arg2_id, arg2_value in enumerate(label_mappings['id_to_arg2']):
+                        arg2_confidence = arg2_probs[0, arg2_id].item()
+                        tactic_string = f"{main_tactic} {arg1_value} {arg2_value}"
+                        probability = calculate_tactic_probability(
+                            main_tactic, arg1_value, arg2_value,
+                            main_confidence, arg1_confidence, arg2_confidence
+                        )
+                        tactic_combinations.append((tactic_string, probability))
+            
+            # その他のタクティク（引数不要として扱う）
+            else:
+                tactic_string = main_tactic
+                probability = calculate_tactic_probability(
+                    main_tactic, "", "",
+                    main_confidence, 0.0, 0.0
+                )
+                tactic_combinations.append((tactic_string, probability))
         
-        arg2_pred_id, arg2_confidence = sample_from_logits(
-            arg2_logits, temperature
-        )
+        # 確率の高い順にソート
+        tactic_combinations.sort(key=lambda x: x[1], reverse=True)
         
-        # タクティク文字列を構築
-        main_tactic = label_mappings['id_to_main'][main_pred_id]
-        arg1_value = label_mappings['id_to_arg1'][arg1_pred_id]
-        arg2_value = label_mappings['id_to_arg2'][arg2_pred_id]
-        
-        # 引数が不要なタクティクの場合は引数を無視
-        if main_tactic in ['assumption', 'intro', 'split', 'left', 'right', 'add_dn']:
-            tactic_string = main_tactic
-        elif main_tactic in ['apply', 'destruct']:
-            tactic_string = f"{main_tactic} {arg1_value}"
-        elif main_tactic == 'specialize':
-            tactic_string = f"{main_tactic} {arg1_value} {arg2_value}"
-        else:
-            tactic_string = main_tactic
-        
-        return tactic_string, main_confidence, arg1_confidence, arg2_confidence
+        return tactic_combinations
 
 
 def evaluate_inference_performance(
@@ -229,7 +259,6 @@ def evaluate_inference_performance(
     max_seq_len: int,
     num_examples: int = 50,
     max_steps: int = 5,
-    temperature: float = 1.0,
     difficulty: float = 0.7,
     seed: int = None,
     max_depth: int = None
@@ -321,7 +350,7 @@ def evaluate_inference_performance(
             # 前提は空（トートロジーなので前提なしで証明可能）
             premises = []
             
-            # 推論ループ（シンプル化：禁止タクティクシステムなし）
+            # 推論ループ（確定的な順序適用）
             step = 0
             solved = prover.goal is None
             
@@ -331,14 +360,19 @@ def evaluate_inference_performance(
                 current_premises = current_state["premises"]
                 current_goal = current_state["goal"]
                 
-                # タクティクを予測（純粋な言語モデル性能）
-                tactic_str, main_conf, arg1_conf, arg2_conf = predict_tactic(
-                    model, tokenizer, current_premises, current_goal, 
-                    label_mappings, device, max_seq_len, None, temperature
+                # すべての可能なタクティクの組み合わせを生成（確率の高い順）
+                tactic_combinations = generate_all_tactic_combinations(
+                    model, tokenizer, current_premises, current_goal,
+                    label_mappings, device, max_seq_len
                 )
                 
-                # タクティクを適用
-                success = apply_tactic_from_label(prover, tactic_str)
+                # 上位max_steps個のタクティクを順次適用
+                success = False
+                for tactic_str, probability in tactic_combinations[:max_steps]:
+                    # タクティクを適用
+                    success = apply_tactic_from_label(prover, tactic_str)
+                    if success:
+                        break
                 
                 step += 1
                 solved = prover.goal is None
@@ -410,7 +444,6 @@ def main():
     parser.add_argument("--max_steps", type=int, default=30, help="max steps per example")
     parser.add_argument("--device", type=str, default="auto", help="device")
     parser.add_argument("--verbose", action="store_true", help="verbose output")
-    parser.add_argument("--temperature", type=float, default=1.0, help="sampling temperature (higher = more random)")
     parser.add_argument("--use_wandb", action="store_true", help="use wandb for logging")
     parser.add_argument("--wandb_project", type=str, default="fof-inference", help="wandb project name")
     parser.add_argument("--wandb_run_name", type=str, default=None, help="wandb run name")
@@ -439,7 +472,6 @@ def main():
                 "model_path": args.model_path,
                 "count": args.count,
                 "max_steps": args.max_steps,
-                "temperature": args.temperature,
                 "device": str(device)
             }
         )
@@ -603,10 +635,9 @@ def main():
                 print(f"  Goal: {goal_str}")
                 print(f"  Premises: {premises}")
             
-            # 推論ループ
+            # 推論ループ（確定的な順序適用）
             step = 0
             solved = prover.goal is None
-            banned_tactics = set()
             example_tactics = []
             example_confidences = []
             
@@ -616,32 +647,32 @@ def main():
                 current_premises = current_state["premises"]
                 current_goal = current_state["goal"]
                 
-                # タクティクを予測
-                tactic_str, main_conf, arg1_conf, arg2_conf = predict_tactic(
-                    model, tokenizer, current_premises, current_goal, 
-                    label_mappings, device, max_seq_len, banned_tactics,
-                    args.temperature
+                # すべての可能なタクティクの組み合わせを生成（確率の高い順）
+                tactic_combinations = generate_all_tactic_combinations(
+                    model, tokenizer, current_premises, current_goal,
+                    label_mappings, device, max_seq_len
                 )
                 
                 if args.verbose:
-                    print(f"  Step {step+1}: {tactic_str} (conf: {main_conf:.3f}, {arg1_conf:.3f}, {arg2_conf:.3f})")
+                    print(f"  Step {step+1}: Generated {len(tactic_combinations)} tactic combinations")
+                    print(f"    Top 5: {[(t, f'{p:.3f}') for t, p in tactic_combinations[:5]]}")
                 
-                # タクティクを適用
-                success = apply_tactic_from_label(prover, tactic_str)
-                
-                # ログ用データを記録
-                example_tactics.append(tactic_str)
-                example_confidences.append(main_conf)
-                tactic_usage[tactic_str] = tactic_usage.get(tactic_str, 0) + 1
-                
-                if success:
+                # 上位max_steps個のタクティクを順次適用
+                success = False
+                for tactic_str, probability in tactic_combinations[:args.max_steps]:
+                    # タクティクを適用
+                    success = apply_tactic_from_label(prover, tactic_str)
+                    
+                    # ログ用データを記録
+                    example_tactics.append(tactic_str)
+                    example_confidences.append(probability)
+                    tactic_usage[tactic_str] = tactic_usage.get(tactic_str, 0) + 1
+                    
                     if args.verbose:
-                        print(f"    Applied successfully")
-                    banned_tactics = set()  # 成功したら禁止リストをリセット
-                else:
-                    if args.verbose:
-                        print(f"    Failed")
-                    banned_tactics.add(tactic_str)
+                        print(f"    Trying {tactic_str} (prob: {probability:.3f}) - {'Success' if success else 'Failed'}")
+                    
+                    if success:
+                        break
                 
                 step += 1
                 solved = prover.goal is None
