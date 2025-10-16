@@ -169,8 +169,6 @@ def filter_formulas(
             continue
         if require_tautology and not is_tautology(e, variables):
             continue
-        if s in out:
-            continue
         out.append(s)
     return out
 

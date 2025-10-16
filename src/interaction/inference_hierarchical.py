@@ -29,11 +29,7 @@ from src.core.transformer_classifier import (
     CharTokenizer,
     TransformerClassifier,
 )
-from src.core.state_encoder import encode_prover_state, format_tactic_string, parse_tactic_string
-from src.core.parameter import (
-    default_params, get_model_params, get_generation_params, 
-    get_system_params, DeviceType
-)
+from src.core.state_encoder import encode_prover_state, format_tactic_string
 
 
 def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[TransformerClassifier, Dict[str, Any]]:
@@ -289,9 +285,9 @@ def evaluate_inference_performance(
     gen = FormulaGenerator(
         variables=variables,
         allow_const=gen_params.allow_const,  # データ生成時と同じ設定
-        difficulty=args.difficulty,  # 引数で指定された難易度を使用
-        max_depth=args.max_depth if args.max_depth is not None else gen_params.max_depth,  # 指定された最大深度またはデータ生成時と同じ最大深度
-        seed=args.seed if args.seed is not None else int(time.time() * 1000) % 2**32  # 指定されたシードまたは現在時刻を使用
+        difficulty=difficulty,  # 引数で指定された難易度を使用
+        max_depth=max_depth if max_depth is not None else gen_params.max_depth,  # 指定された最大深度またはデータ生成時と同じ最大深度
+        seed=seed if seed is not None else int(time.time() * 1000) % 2**32  # 指定されたシードまたは現在時刻を使用
     )
     
     # トートロジーを生成
@@ -540,8 +536,36 @@ def main():
     # トートロジーを新規生成
     print(f"\nGenerating {args.count} new tautologies for inference...")
     
-    # run_interaction.pyから論理式生成関数をインポート
-    from src.interaction.run_interaction import generate_tautology
+    # generate_tautology関数を直接定義
+    def generate_tautology(gen_params, base_tokens, seed_offset=0):
+        """run_interaction.pyと同じ方法でトートロジーを生成する関数"""
+        from src.core.generate_prop import FormulaGenerator, filter_formulas
+        
+        # 変数を取得
+        variables = [t for t in gen_params.variables if t in base_tokens] or gen_params.variables
+        
+        # 予測可能なシードを使用（基本シード + オフセット）
+        dynamic_seed = gen_params.seed + seed_offset
+        
+        # フォーミュラジェネレーターを作成
+        gen = FormulaGenerator(
+            variables=variables, 
+            allow_const=gen_params.allow_const, 
+            difficulty=gen_params.difficulty, 
+            seed=dynamic_seed
+        )
+        
+        # トートロジーを生成
+        goal_list = filter_formulas(gen, max_len=gen_params.max_len, require_tautology=True, limit=1)
+        if not goal_list:
+            # デバッグ情報を追加
+            print(f"Debug: Failed to generate tautology for seed_offset={seed_offset}")
+            print(f"  - difficulty={gen_params.difficulty}")
+            print(f"  - max_len={gen_params.max_len}")
+            print(f"  - variables={variables}")
+            print(f"  - allow_const={gen_params.allow_const}")
+            return None
+        return goal_list[0]
     
     # 変数を取得（fof_tokens.pyから）
     token_py_path = os.path.join(project_root, "src", "core", "fof_tokens.py")
