@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 from tqdm import tqdm
+from google.cloud import storage
 
 # プロジェクトルートをパスに追加
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -313,6 +314,71 @@ def collect_self_improvement_data_parallel(
     return successful_tactics
 
 
+def upload_to_gcs(local_file_path: str, gcs_bucket: str, gcs_prefix: str) -> bool:
+    """Upload a local file to Google Cloud Storage.
+    
+    Args:
+        local_file_path: Path to the local file to upload
+        gcs_bucket: GCS bucket name
+        gcs_prefix: GCS prefix for the uploaded file
+        
+    Returns:
+        True if upload successful, False otherwise
+    """
+    try:
+        client = storage.Client()
+        bucket = client.bucket(gcs_bucket)
+        
+        # Create the blob name by combining prefix and filename
+        filename = os.path.basename(local_file_path)
+        blob_name = f"{gcs_prefix.rstrip('/')}/{filename}" if gcs_prefix else filename
+        
+        blob = bucket.blob(blob_name)
+        
+        print(f"Uploading {local_file_path} to gs://{gcs_bucket}/{blob_name}")
+        blob.upload_from_filename(local_file_path)
+        
+        print(f"✅ Successfully uploaded to gs://{gcs_bucket}/{blob_name}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error uploading {local_file_path} to GCS: {e}")
+        return False
+
+
+def upload_directory_to_gcs(local_dir: str, gcs_bucket: str, gcs_prefix: str) -> int:
+    """Upload all files in a directory to Google Cloud Storage.
+    
+    Args:
+        local_dir: Local directory to upload
+        gcs_bucket: GCS bucket name
+        gcs_prefix: GCS prefix for uploaded files
+        
+    Returns:
+        Number of files successfully uploaded
+    """
+    if not os.path.exists(local_dir):
+        print(f"❌ Directory not found: {local_dir}")
+        return 0
+    
+    uploaded_count = 0
+    files = [f for f in os.listdir(local_dir) if os.path.isfile(os.path.join(local_dir, f))]
+    
+    if not files:
+        print(f"⚠️ No files found in directory: {local_dir}")
+        return 0
+    
+    print(f"📤 Uploading {len(files)} files from {local_dir} to GCS...")
+    
+    for filename in files:
+        local_file_path = os.path.join(local_dir, filename)
+        if upload_to_gcs(local_file_path, gcs_bucket, gcs_prefix):
+            uploaded_count += 1
+    
+    print(f"✅ Uploaded {uploaded_count}/{len(files)} files to GCS")
+    return uploaded_count
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Collect self improvement data from solved examples in parallel"
@@ -362,7 +428,7 @@ def main() -> None:
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=1000,
+        default=10000,
         help="batch size for saving data",
     )
     parser.add_argument(
@@ -382,6 +448,18 @@ def main() -> None:
         type=int,
         default=os.cpu_count() or 1,
         help="number of worker processes",
+    )
+    parser.add_argument(
+        "--gcs_bucket",
+        type=str,
+        default=None,
+        help="GCS bucket name for direct upload (e.g., fof-data-20251010-milano)",
+    )
+    parser.add_argument(
+        "--gcs_prefix",
+        type=str,
+        default="",
+        help="GCS prefix for uploaded files (e.g., generated_data_RL1/)",
     )
 
     args = parser.parse_args()
@@ -411,6 +489,9 @@ def main() -> None:
     print(f"  Temperature: {args.temperature}")
     print(f"  Generated data directory: {args.generated_data_dir}")
     print(f"  Output directory: {args.output_dir}")
+    if args.gcs_bucket:
+        print(f"  GCS bucket: {args.gcs_bucket}")
+        print(f"  GCS prefix: {args.gcs_prefix}")
 
     base_collector.clear_self_improvement_data(args.output_dir)
 
@@ -432,6 +513,19 @@ def main() -> None:
             output_dir=args.output_dir,
             batch_size=args.batch_size,
         )
+        
+        # Upload to GCS if bucket is specified
+        if args.gcs_bucket:
+            print(f"\n📤 Uploading collected data to GCS...")
+            uploaded_count = upload_directory_to_gcs(
+                local_dir=args.output_dir,
+                gcs_bucket=args.gcs_bucket,
+                gcs_prefix=args.gcs_prefix
+            )
+            if uploaded_count > 0:
+                print(f"✅ Successfully uploaded {uploaded_count} files to GCS")
+            else:
+                print("❌ Failed to upload files to GCS")
     else:
         print("No successful tactics collected. Please check your model and parameters.")
 
