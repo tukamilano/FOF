@@ -321,7 +321,10 @@ class StreamingSelfImprovementCollector:
         }
         
         # Limit examples to available tautologies
-        examples_to_process = min(num_examples, len(self.tautologies))
+        if num_examples is None:
+            examples_to_process = len(self.tautologies)
+        else:
+            examples_to_process = min(num_examples, len(self.tautologies))
         tasks = [
             (index, goal, self.max_steps, self.probability_threshold, self.temperature, config)
             for index, goal in enumerate(self.tautologies[:examples_to_process])
@@ -374,6 +377,10 @@ class StreamingSelfImprovementCollector:
 
         tokenizer = CharTokenizer(base_tokens=base_tokens)
         model, label_mappings = base_collector.load_hierarchical_model(self.model_path, self.device)
+        # Handle None case for sequential collection
+        if num_examples is None:
+            num_examples = len(self.tautologies)
+        
         return base_collector.collect_self_improvement_data(
             model=model,
             tokenizer=tokenizer,
@@ -602,8 +609,8 @@ def main() -> None:
     parser.add_argument(
         "--count",
         type=int,
-        default=100,
-        help="number of examples to process",
+        default=None,
+        help="number of examples to process (default: all available)",
     )
     parser.add_argument(
         "--max_steps",
