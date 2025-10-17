@@ -78,7 +78,8 @@ class TautologyGenerator:
                  buffer_size: int = 1000,
                  check_duplicates: bool = True,
                  gcs_bucket: str = None,
-                 gcs_prefix: str = ""):
+                 gcs_prefix: str = "",
+                 output_dir: str = "generated_data"):
         self.dataset_file_path = dataset_file_path
         # Default to CPU count, but allow override via num_workers parameter
         # Conservative limit of 8 to prevent memory issues
@@ -86,6 +87,7 @@ class TautologyGenerator:
         self.examples_per_file = examples_per_file
         self.buffer_size = min(buffer_size, examples_per_file)
         self.check_duplicates = check_duplicates
+        self.output_dir = output_dir
         
         # データ管理
         self.all_formulas = []
@@ -145,13 +147,12 @@ class TautologyGenerator:
         return f"{base_name}_{self.current_file_index:05d}.json"
     
     def clear_generated_data(self):
-        """既存のgenerated_dataディレクトリをクリア"""
-        generated_dir = "generated_data"
-        if os.path.exists(generated_dir):
+        """既存の出力ディレクトリをクリア"""
+        if os.path.exists(self.output_dir):
             import shutil
-            shutil.rmtree(generated_dir)
-            print(f"Cleared: {generated_dir}/")
-        os.makedirs(generated_dir, exist_ok=True)
+            shutil.rmtree(self.output_dir)
+            print(f"Cleared: {self.output_dir}/")
+        os.makedirs(self.output_dir, exist_ok=True)
         
         if self.gcs_bucket:
             print(f"GCS upload: gs://{self.gcs_bucket}/{self.gcs_prefix}")
@@ -343,7 +344,7 @@ class TautologyGenerator:
         num_formulas = len(transformed_data)
         
         # 現在のファイルが存在し、スペースがあるかチェック
-        local_file_path = os.path.join("generated_data", filename)
+        local_file_path = os.path.join(self.output_dir, filename)
         if os.path.exists(local_file_path):
             try:
                 with open(local_file_path, 'r', encoding='utf-8') as f:
@@ -352,7 +353,7 @@ class TautologyGenerator:
                     # 現在のファイルが満杯になるので、新しいファイルを作成
                     self.current_file_index += 1
                     filename = self.get_current_filename()
-                    local_file_path = os.path.join("generated_data", filename)
+                    local_file_path = os.path.join(self.output_dir, filename)
                     existing_data = []
             except (FileNotFoundError, json.JSONDecodeError):
                 existing_data = []
@@ -454,6 +455,8 @@ def main() -> None:
                        help="GCS bucket name for direct upload (e.g., fof-data-20251010-milano)")
     parser.add_argument("--gcs_prefix", type=str, default="tautology/",
                        help="GCS prefix for uploaded files (e.g., tautology/)")
+    parser.add_argument("--output_dir", type=str, default="generated_data",
+                       help="Output directory for generated data files (default: generated_data)")
     parser.add_argument("--keep_global_hashes", action="store_true",
                        help="Keep existing global hashes file (continue from previous run)")
     args = parser.parse_args()
@@ -493,7 +496,8 @@ def main() -> None:
         buffer_size=args.buffer_size,
         check_duplicates=True,
         gcs_bucket=args.gcs_bucket,
-        gcs_prefix=args.gcs_prefix
+        gcs_prefix=args.gcs_prefix,
+        output_dir=args.output_dir
     )
     
     # グローバルハッシュをクリア（--keep_global_hashesが指定されていない場合）
@@ -504,7 +508,7 @@ def main() -> None:
     if args.gcs_bucket:
         print(f"Output: gs://{args.gcs_bucket}/{args.gcs_prefix}{args.dataset_file}_XXXXX.json")
     else:
-        print(f"Output: generated_data/{args.dataset_file}_XXXXX.json")
+        print(f"Output: {args.output_dir}/{args.dataset_file}_XXXXX.json")
     
     # 既存のgenerated_dataをクリア
     tautology_generator.clear_generated_data()
@@ -524,7 +528,7 @@ def main() -> None:
         if args.gcs_bucket:
             print(f"Saved to: gs://{args.gcs_bucket}/{args.gcs_prefix}")
         else:
-            print(f"Saved to: generated_data/")
+            print(f"Saved to: {args.output_dir}/")
 
     finally:
         # 終了前にグローバルハッシュを保存

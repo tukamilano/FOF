@@ -88,7 +88,7 @@ class FormulaGenerator:
         self,
         variables: List[str],
         allow_const: bool = True,
-        difficulty: float = 0.5,
+        difficulty: float = 0.7,
         max_depth: int = 4,
         binary_op_weights: Optional[Dict[str, float]] = None,
         unary_weight: float = 0.3,
@@ -177,7 +177,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Generate random propositional formulas")
     parser.add_argument("--count", type=int, default=10, help="number of formulas to output")
     parser.add_argument("--max_len", type=int, default=50, help="max string length per formula")
-    parser.add_argument("--difficulty", type=float, default=0.5, help="0.0-1.0 depth/negation difficulty")
+    parser.add_argument("--difficulty", type=float, default=0.7, help="0.0-1.0 depth/negation difficulty")
     parser.add_argument("--allow_const", action="store_true", help="allow ⊤ and ⊥ in atoms")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--tautology_only", action="store_true", help="keep only tautologies")

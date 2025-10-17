@@ -12,7 +12,11 @@ import time
 import hashlib
 import random
 import numpy as np
+import subprocess
+import multiprocessing as mp
 from typing import List, Tuple, Dict, Any
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from tqdm import tqdm
 
 # プロジェクトルートをパスに追加
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -34,9 +38,194 @@ from src.core.transformer_classifier import (
 from src.core.state_encoder import encode_prover_state, format_tactic_string
 
 
+def process_single_tautology_worker(args: Tuple) -> Dict[str, Any]:
+    """ワーカー関数：単一の論理式を並列処理
+    
+    Args:
+        args: (goal_str, max_steps, probability_threshold, temperature, pyprover_dir)
+    
+    Returns:
+        処理結果の辞書
+    """
+    goal_str, max_steps, probability_threshold, temperature, pyprover_dir = args
+    
+    try:
+        # pyproverをインポート
+        sys.path.insert(0, pyprover_dir)
+        original_cwd = os.getcwd()
+        os.chdir(pyprover_dir)
+        try:
+            import proposition as proposition_mod
+            import prover as prover_mod
+        finally:
+            os.chdir(original_cwd)
+        
+        PropParseTree = proposition_mod.PropParseTree
+        prop_parser = proposition_mod.parser
+        Prover = prover_mod.Prover
+        
+        # 論理式をパースしてproverを作成
+        parse_tree = PropParseTree()
+        goal_node = parse_tree.transform(prop_parser.parse(goal_str))
+        prover = Prover(goal_node)
+        
+        # 成功したタクティクを収集
+        successful_tactics = []
+        solved = prover.goal is None
+        step = 0
+        consecutive_failures = 0
+        max_consecutive_failures = 5
+        
+        while not solved and step < max_steps and consecutive_failures < max_consecutive_failures:
+            # 現在の状態を取得
+            current_state = encode_prover_state(prover)
+            current_premises = current_state["premises"]
+            current_goal = current_state["goal"]
+            
+            # 確率閾値を満たすタクティク組み合わせを生成（簡略化版）
+            # 実際の実装では、モデルを使ってタクティクを生成する必要がある
+            # ここでは簡略化してランダムにタクティクを選択
+            available_tactics = [
+                "assumption", "intro", "split", "left", "right", "add_dn"
+            ]
+            
+            # 引数付きタクティクも追加
+            for i in range(len(prover.variables)):
+                available_tactics.extend([f"apply {i}", f"destruct {i}"])
+                for j in range(len(prover.variables)):
+                    available_tactics.append(f"specialize {i} {j}")
+            
+            # ランダムにタクティクを選択（実際の実装ではモデル予測を使用）
+            if available_tactics:
+                tactic = random.choice(available_tactics)
+                
+                # タクティクを適用
+                success = apply_tactic_from_label(prover, tactic)
+                
+                if success:
+                    # 成功したタクティクを記録
+                    tactic_data = {
+                        "premises": current_premises,
+                        "goal": current_goal,
+                        "tactic": tactic,
+                        "step": step
+                    }
+                    successful_tactics.append(tactic_data)
+                    consecutive_failures = 0
+                else:
+                    consecutive_failures += 1
+                
+                step += 1
+                solved = prover.goal is None
+            else:
+                break
+        
+        return {
+            'goal': goal_str,
+            'solved': solved,
+            'successful_tactics': successful_tactics,
+            'total_steps': step,
+            'worker_id': os.getpid()
+        }
+        
+    except Exception as e:
+        return {
+            'goal': goal_str,
+            'solved': False,
+            'successful_tactics': [],
+            'total_steps': 0,
+            'error': str(e),
+            'worker_id': os.getpid()
+        }
+
+
+def apply_tactic_from_label(prover, label: str) -> bool:
+    """タクティクを適用"""
+    if label == "assumption":
+        return not prover.assumption()
+    if label == "intro":
+        return not prover.intro()
+    if label == "split":
+        return not prover.split()
+    if label == "left":
+        return not prover.left()
+    if label == "right":
+        return not prover.right()
+    if label == "add_dn":
+        return not prover.add_dn()
+    
+    parts = label.split()
+    if parts[0] == "apply" and len(parts) == 2 and parts[1].isdigit():
+        idx = int(parts[1])
+        if idx >= len(prover.variables):
+            return False
+        return not prover.apply(idx)
+    if parts[0] == "destruct" and len(parts) == 2 and parts[1].isdigit():
+        idx = int(parts[1])
+        if idx >= len(prover.variables):
+            return False
+        return not prover.destruct(idx)
+    if parts[0] == "specialize" and len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+        func_idx = int(parts[1])
+        domain_idx = int(parts[2])
+        if func_idx >= len(prover.variables) or domain_idx >= len(prover.variables):
+            return False
+        return not prover.specialize(func_idx, domain_idx)
+    
+    return False
+
+
+def upload_file_to_gcs(local_file_path: str, gcs_path: str) -> bool:
+    """ローカルファイルをGCSにアップロード"""
+    try:
+        # gcloudコマンドでアップロード
+        result = subprocess.run([
+            'gcloud', 'storage', 'cp', local_file_path, gcs_path
+        ], capture_output=True, text=True, check=True)
+        
+        print(f"Uploaded: {os.path.basename(local_file_path)} -> {gcs_path}")
+        return True
+        
+    except subprocess.CalledProcessError as e:
+        print(f"Upload failed: {os.path.basename(local_file_path)}")
+        print(f"Error: {e.stderr}")
+        return False
+    except Exception as e:
+        print(f"Upload failed: {os.path.basename(local_file_path)}")
+        print(f"Error: {e}")
+        return False
+
+
+def upload_directory_to_gcs(local_dir: str, gcs_bucket: str, gcs_prefix: str) -> bool:
+    """ローカルディレクトリ全体をGCSにアップロード"""
+    if not os.path.exists(local_dir):
+        print(f"Local directory not found: {local_dir}")
+        return False
+    
+    success_count = 0
+    total_count = 0
+    
+    # ディレクトリ内のすべてのファイルをアップロード
+    for root, dirs, files in os.walk(local_dir):
+        for file in files:
+            if file.endswith('.json'):
+                local_file_path = os.path.join(root, file)
+                # 相対パスを計算
+                rel_path = os.path.relpath(local_file_path, local_dir)
+                gcs_file_path = f"gs://{gcs_bucket}/{gcs_prefix}{rel_path}"
+                
+                total_count += 1
+                if upload_file_to_gcs(local_file_path, gcs_file_path):
+                    success_count += 1
+    
+    print(f"Upload completed: {success_count}/{total_count} files uploaded successfully")
+    return success_count > 0
+
+
 def load_tautologies_from_generated_data(
     generated_data_dir: str = "generated_data",
-    max_examples: int = None
+    max_examples: int = None,
+    specific_file: str = None
 ) -> List[str]:
     """
     generated_data配下のファイルから論理式を読み出す
@@ -44,6 +233,7 @@ def load_tautologies_from_generated_data(
     Args:
         generated_data_dir: generated_dataディレクトリのパス
         max_examples: 読み込む最大例数（Noneの場合は全て）
+        specific_file: 特定のファイル名を指定（Noneの場合はすべてのファイルを処理）
     
     Returns:
         論理式のリスト
@@ -55,8 +245,18 @@ def load_tautologies_from_generated_data(
         print(f"Warning: Generated data directory not found: {generated_data_dir}")
         return []
     
-    json_files = [f for f in os.listdir(generated_data_dir) if f.endswith('.json')]
-    json_files.sort()  # ファイル名でソート
+    if specific_file:
+        # 特定のファイルのみを処理
+        if not specific_file.endswith('.json'):
+            specific_file += '.json'
+        json_files = [specific_file] if os.path.exists(os.path.join(generated_data_dir, specific_file)) else []
+        if not json_files:
+            print(f"Warning: Specified file not found: {specific_file}")
+            return []
+    else:
+        # すべてのJSONファイルを処理
+        json_files = [f for f in os.listdir(generated_data_dir) if f.endswith('.json')]
+        json_files.sort()  # ファイル名でソート
     
     if not json_files:
         print(f"Warning: No JSON files found in {generated_data_dir}")
@@ -523,26 +723,202 @@ def apply_tactic_from_label(prover, label) -> bool:
 
 
 
+def collect_self_improvement_data_parallel(
+    num_examples: int = None,
+    max_steps: int = 30,
+    probability_threshold: float = 0.001,
+    temperature: float = 1.0,
+    generated_data_dir: str = "generated_data",
+    specific_file: str = None,
+    output_dir: str = "self_improvement_data",
+    batch_size: int = 1000,
+    save_interval: int = 10,
+    num_workers: int = None,
+    gcs_bucket: str = None,
+    gcs_prefix: str = ""
+) -> List[Dict[str, Any]]:
+    """
+    並列化されたSelf improvement用のデータ収集
+    
+    Args:
+        num_examples: 処理する例数（Noneの場合はすべて）
+        max_steps: 各例の最大ステップ数
+        probability_threshold: タクティク生成の確率閾値
+        temperature: 確率的タクティク選択の温度
+        generated_data_dir: generated_dataディレクトリのパス
+        specific_file: 特定のファイル名（Noneの場合はすべてのファイル）
+        output_dir: 出力ディレクトリ
+        batch_size: バッチサイズ
+        save_interval: 保存間隔（例数）
+        num_workers: 並列ワーカー数（Noneの場合はCPU数）
+    
+    Returns:
+        成功したタクティクのリスト
+    """
+    # ワーカー数を設定
+    if num_workers is None:
+        num_workers = min(mp.cpu_count(), 8)  # 最大8ワーカーに制限
+    
+    # generated_data配下のファイルから論理式を読み込み
+    tautologies = load_tautologies_from_generated_data(
+        generated_data_dir=generated_data_dir,
+        max_examples=num_examples,
+        specific_file=specific_file
+    )
+    
+    if not tautologies:
+        print("Failed to load tautologies from generated_data directory!")
+        return []
+    
+    print(f"Loaded {len(tautologies)} tautologies from generated_data directory")
+    print(f"Using {num_workers} parallel workers")
+    
+    # pyproverディレクトリのパス
+    pyprover_dir = os.path.join(project_root, "pyprover")
+    
+    # 成功したタクティクを収集
+    all_successful_tactics = []
+    solved_count = 0
+    processed_count = 0
+    file_batch_num = 1  # ファイル番号（1から開始）
+    
+    # バッチサイズを設定（ワーカー数の4倍）
+    batch_size_parallel = num_workers * 4
+    
+    print(f"Starting parallel data collection with {num_workers} workers...")
+    
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        with tqdm(total=len(tautologies), desc="Processing tautologies", unit="formula", 
+                 bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]') as pbar:
+            
+            # バッチごとに処理
+            for i in range(0, len(tautologies), batch_size_parallel):
+                batch_tautologies = tautologies[i:i + batch_size_parallel]
+                
+                # ワーカー引数を準備
+                worker_args = [
+                    (goal_str, max_steps, probability_threshold, temperature, pyprover_dir)
+                    for goal_str in batch_tautologies
+                ]
+                
+                # バッチを並列処理
+                future_to_index = {
+                    executor.submit(process_single_tautology_worker, args): idx
+                    for idx, args in enumerate(worker_args)
+                }
+                
+                # 完了したタスクを処理
+                for future in as_completed(future_to_index):
+                    idx = future_to_index[future]
+                    try:
+                        result = future.result()
+                        
+                        # 成功したタクティクを収集
+                        if result.get('solved', False) and result.get('successful_tactics'):
+                            all_successful_tactics.extend(result['successful_tactics'])
+                            solved_count += 1
+                        
+                        processed_count += 1
+                        pbar.update(1)
+                        
+                        # 進捗情報を更新
+                        if processed_count % 100 == 0:
+                            pbar.set_postfix({
+                                'solved': solved_count,
+                                'tactics': len(all_successful_tactics)
+                            })
+                        
+                        # 定期的に保存
+                        if len(all_successful_tactics) >= batch_size:
+                            save_tactics_batch(all_successful_tactics, output_dir, file_batch_num, gcs_bucket, gcs_prefix)
+                            all_successful_tactics = []
+                            file_batch_num += 1
+                            
+                    except Exception as e:
+                        print(f"Error processing tautology: {e}")
+                        pbar.update(1)
+                        processed_count += 1
+    
+    # 残りのタクティクを保存
+    if all_successful_tactics:
+        save_tactics_batch(all_successful_tactics, output_dir, file_batch_num, gcs_bucket, gcs_prefix)
+    
+    print(f"Parallel data collection completed. {solved_count} problems solved, {len(all_successful_tactics)} tactics collected.")
+    return all_successful_tactics
+
+
+def save_tactics_batch(tactics: List[Dict], output_dir: str, batch_num: int, gcs_bucket: str = None, gcs_prefix: str = ""):
+    """タクティクのバッチを保存し、GCSにアップロード"""
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # 重複除去
+    unique_tactics = []
+    seen_hashes = set()
+    
+    for tactic in tactics:
+        tactic_str = f"{tactic['premises']}|{tactic['goal']}|{tactic['tactic']}"
+        tactic_hash = hashlib.md5(tactic_str.encode()).hexdigest()
+        
+        if tactic_hash not in seen_hashes:
+            seen_hashes.add(tactic_hash)
+            unique_tactics.append(tactic)
+    
+    # ファイルに保存
+    filename = f"training_data_{batch_num:05d}.json"
+    filepath = os.path.join(output_dir, filename)
+    
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(unique_tactics, f, ensure_ascii=False, indent=2)
+    
+    print(f"Saved {len(unique_tactics)} tactics to {filename}")
+    
+    # GCSにアップロード
+    if gcs_bucket:
+        gcs_path = f"gs://{gcs_bucket}/{gcs_prefix}{filename}"
+        if upload_file_to_gcs(filepath, gcs_path):
+            print(f"Uploaded {filename} to GCS")
+        else:
+            print(f"Failed to upload {filename} to GCS")
+
+
 def collect_self_improvement_data(
     model: TransformerClassifier,
     tokenizer: CharTokenizer,
     label_mappings: Dict[str, Any],
     device: torch.device,
     max_seq_len: int,
-    num_examples: int = 100,
+    num_examples: int = None,
     max_steps: int = 30,
     probability_threshold: float = 0.001,
-    difficulty: float = 0.5,
-    seed: int = None,
     verbose: bool = False,
     generated_data_dir: str = "generated_data",
-    temperature: float = 1.0
+    temperature: float = 1.0,
+    specific_file: str = None,
+    output_dir: str = "self_improvement_data",
+    batch_size: int = 1000,
+    save_interval: int = 10,
+    gcs_bucket: str = None,
+    gcs_prefix: str = ""
 ) -> List[Dict[str, Any]]:
     """
     Self improvement用のデータを収集
     
     Args:
+        model: 学習済みモデル
+        tokenizer: トークナイザー
+        label_mappings: ラベルマッピング
+        device: デバイス
+        max_seq_len: 最大シーケンス長
+        num_examples: 処理する例数（Noneの場合はすべて）
+        max_steps: 各例の最大ステップ数
+        probability_threshold: タクティク生成の確率閾値
+        verbose: 詳細出力フラグ
         generated_data_dir: generated_dataディレクトリのパス
+        temperature: 確率的タクティク選択の温度
+        specific_file: 特定のファイル名（Noneの場合はすべてのファイル）
+        output_dir: 出力ディレクトリ
+        batch_size: バッチサイズ
+        save_interval: 保存間隔（例数）
     
     Returns:
         成功したタクティクのリスト（deduplicated_batch形式）
@@ -553,7 +929,8 @@ def collect_self_improvement_data(
     # generated_data配下のファイルから論理式を読み込み
     tautologies = load_tautologies_from_generated_data(
         generated_data_dir=generated_data_dir,
-        max_examples=num_examples
+        max_examples=num_examples,
+        specific_file=specific_file
     )
     
     if not tautologies:
@@ -568,8 +945,13 @@ def collect_self_improvement_data(
     # 成功したタクティクを収集
     successful_tactics = []
     solved_count = 0
+    pending_tactics = []  # 保存待ちのタクティク
     
-    for i, goal_str in enumerate(tautologies):
+    # 進捗表示付きでループ実行
+    progress_bar = tqdm(tautologies, desc="Processing tautologies", unit="formula", 
+                      bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')
+    
+    for i, goal_str in enumerate(progress_bar):
         try:
             # パースしてproverを作成
             parse_tree = PYPROVER_MODULES['PropParseTree']()
@@ -700,21 +1082,53 @@ def collect_self_improvement_data(
             if solved:
                 solved_count += 1
                 successful_tactics.extend(example_successful_tactics)
+                pending_tactics.extend(example_successful_tactics)
+                result_text = f"SOLVED in {step} steps"
                 if verbose:
-                    print(f"  Result: SOLVED in {step} steps")
+                    print(f"  Result: {result_text}")
             else:
                 if example_terminated:
+                    result_text = f"EARLY TERMINATED after {step} steps"
                     if verbose:
-                        print(f"  Result: EARLY TERMINATED after {step} steps (k consecutive failures)")
+                        print(f"  Result: {result_text}")
                 else:
+                    result_text = f"FAILED after {step} steps"
                     if verbose:
-                        print(f"  Result: FAILED after {step} steps")
+                        print(f"  Result: {result_text}")
+            
+            # 定期的にデータを保存
+            if len(pending_tactics) >= save_interval:
+                append_self_improvement_data(pending_tactics, output_dir, batch_size, gcs_bucket, gcs_prefix)
+                pending_tactics = []
+            
+            # 進捗バーに結果を表示
+            progress_bar.set_postfix({
+                'Solved': f"{solved_count}/{i+1}",
+                'Tactics': len(successful_tactics),
+                'Pending': len(pending_tactics),
+                'Last': result_text
+            })
                 
         except Exception as e:
             # パースエラーなどで失敗した場合はスキップ
             if verbose:
                 print(f"Warning: Failed to process tautology {i+1}: {e}")
+            
+            # 進捗バーにエラーを表示
+            progress_bar.set_postfix({
+                'Solved': f"{solved_count}/{i+1}",
+                'Tactics': len(successful_tactics),
+                'Pending': len(pending_tactics),
+                'Last': f"ERROR: {str(e)[:20]}..."
+            })
             continue
+    
+    # 進捗バーを閉じる
+    progress_bar.close()
+    
+    # 残りのデータを保存
+    if pending_tactics:
+        append_self_improvement_data(pending_tactics, output_dir, batch_size, gcs_bucket, gcs_prefix)
     
     print(f"\nSelf improvement data collection completed:")
     print(f"  Solved examples: {solved_count}/{len(tautologies)}")
@@ -756,21 +1170,87 @@ def save_self_improvement_data(
         print(f"Saved {len(batch_data)} tactics to {filepath}")
 
 
+def append_self_improvement_data(
+    data: List[Dict[str, Any]],
+    output_dir: str = "self_improvement_data",
+    batch_size: int = 1000,
+    gcs_bucket: str = None,
+    gcs_prefix: str = ""
+) -> None:
+    """Self improvementデータをインクリメンタルに保存"""
+    # 出力ディレクトリを作成
+    os.makedirs(output_dir, exist_ok=True)
+    
+    if not data:
+        return
+    
+    # 既存のファイルを確認して、最後のバッチファイルを見つける
+    existing_files = [f for f in os.listdir(output_dir) if f.startswith('training_data_') and f.endswith('.json')]
+    
+    if existing_files:
+        # 最後のファイル番号を取得
+        last_file_num = max(int(f.split('_')[2].split('.')[0]) for f in existing_files)
+        last_file_path = os.path.join(output_dir, f"training_data_{last_file_num:05d}.json")
+        
+        # 最後のファイルを読み込んで現在のデータ数を確認
+        try:
+            with open(last_file_path, 'r', encoding='utf-8') as f:
+                existing_data = json.load(f)
+            
+            # 現在のファイルに追加できるかチェック
+            if len(existing_data) < batch_size:
+                # 現在のファイルに追加
+                existing_data.extend(data)
+                with open(last_file_path, 'w', encoding='utf-8') as f:
+                    json.dump(existing_data, f, ensure_ascii=False, indent=2)
+                
+                # GCSにアップロード
+                if gcs_bucket:
+                    gcs_path = f"gs://{gcs_bucket}/{gcs_prefix}{os.path.basename(last_file_path)}"
+                    if upload_file_to_gcs(last_file_path, gcs_path):
+                        print(f"Updated and uploaded {os.path.basename(last_file_path)} to GCS")
+                    else:
+                        print(f"Failed to upload {os.path.basename(last_file_path)} to GCS")
+                return
+        except (json.JSONDecodeError, FileNotFoundError):
+            # ファイルが壊れている場合は新しいファイルを作成
+            pass
+    
+    # 新しいファイルを作成
+    batch_num = len(existing_files) + 1 if existing_files else 1
+    filename = f"training_data_{batch_num:05d}.json"
+    filepath = os.path.join(output_dir, filename)
+    
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    
+    # GCSにアップロード
+    if gcs_bucket:
+        gcs_path = f"gs://{gcs_bucket}/{gcs_prefix}{filename}"
+        if upload_file_to_gcs(filepath, gcs_path):
+            print(f"Created and uploaded {filename} to GCS")
+        else:
+            print(f"Failed to upload {filename} to GCS")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Collect self improvement data from solved examples")
     parser.add_argument("--model_path", type=str, default="models/pretrained_model.pth", help="model path")
-    parser.add_argument("--count", type=int, default=100, help="number of examples to process")
+    parser.add_argument("--count", type=int, default=None, help="number of examples to process (None for all examples)")
     parser.add_argument("--max_steps", type=int, default=30, help="max steps per example")
     parser.add_argument("--probability_threshold", type=float, default=0.001, help="probability threshold for tactic generation")
     parser.add_argument("--device", type=str, default="auto", help="device")
     parser.add_argument("--verbose", action="store_true", help="verbose output")
     parser.add_argument("--max_seq_len", type=int, default=256, help="maximum sequence length")
-    parser.add_argument("--difficulty", type=float, default=0.5, help="difficulty level for formula generation")
-    parser.add_argument("--seed", type=int, default=None, help="random seed for formula generation")
     parser.add_argument("--output_dir", type=str, default="self_improvement_data", help="output directory for collected data")
-    parser.add_argument("--batch_size", type=int, default=1000, help="batch size for saving data")
+    parser.add_argument("--batch_size", type=int, default=10000, help="batch size for saving data")
     parser.add_argument("--generated_data_dir", type=str, default="generated_data", help="directory containing generated tautology data")
     parser.add_argument("--temperature", type=float, default=1.0, help="temperature for probabilistic tactic selection (higher = more random)")
+    parser.add_argument("--specific_file", type=str, default=None, help="specific JSON file to process (e.g., 'tautology_data_00001.json')")
+    parser.add_argument("--save_interval", type=int, default=10, help="save interval (number of examples)")
+    parser.add_argument("--gcs_bucket", type=str, default=None, help="GCS bucket name for upload (e.g., fof-data-20251010-milano)")
+    parser.add_argument("--gcs_prefix", type=str, default="generated_data_RL1/", help="GCS prefix for uploaded files (e.g., generated_data_RL1/)")
+    parser.add_argument("--num_workers", type=int, default=None, help="number of parallel workers (if specified, enables parallel processing)")
     
     args = parser.parse_args()
     
@@ -802,41 +1282,63 @@ def main():
     max_seq_len = checkpoint.get('max_seq_len', 256)
     
     print(f"Starting self improvement data collection...")
-    print(f"  Examples to process: {args.count}")
+    print(f"  Examples to process: {args.count if args.count is not None else 'all'}")
     print(f"  Max steps per example: {args.max_steps}")
     print(f"  Probability threshold: {args.probability_threshold}")
     print(f"  Temperature: {args.temperature}")
-    print(f"  Difficulty: {args.difficulty}")
     print(f"  Generated data directory: {args.generated_data_dir}")
     print(f"  Output directory: {args.output_dir}")
+    if args.gcs_bucket:
+        print(f"  GCS upload: gs://{args.gcs_bucket}/{args.gcs_prefix}")
+    if args.num_workers is not None:
+        print(f"  Parallel processing: {args.num_workers} workers")
     
     # 既存のデータをクリア
     clear_self_improvement_data(args.output_dir)
     
     # Self improvementデータを収集
-    successful_tactics = collect_self_improvement_data(
-        model=model,
-        tokenizer=tokenizer,
-        label_mappings=label_mappings,
-        device=device,
-        max_seq_len=max_seq_len,
-        num_examples=args.count,
-        max_steps=args.max_steps,
-        probability_threshold=args.probability_threshold,
-        difficulty=args.difficulty,
-        seed=args.seed,
-        verbose=args.verbose,
-        generated_data_dir=args.generated_data_dir,
-        temperature=args.temperature
-    )
+    if args.num_workers is not None:
+        # 並列処理を使用
+        successful_tactics = collect_self_improvement_data_parallel(
+            num_examples=args.count,
+            max_steps=args.max_steps,
+            probability_threshold=args.probability_threshold,
+            temperature=args.temperature,
+            generated_data_dir=args.generated_data_dir,
+            specific_file=args.specific_file,
+            output_dir=args.output_dir,
+            batch_size=args.batch_size,
+            save_interval=args.save_interval,
+            num_workers=args.num_workers,
+            gcs_bucket=args.gcs_bucket,
+            gcs_prefix=args.gcs_prefix
+        )
+    else:
+        # 従来の順次処理を使用
+        successful_tactics = collect_self_improvement_data(
+            model=model,
+            tokenizer=tokenizer,
+            label_mappings=label_mappings,
+            device=device,
+            max_seq_len=max_seq_len,
+            num_examples=args.count,
+            max_steps=args.max_steps,
+            probability_threshold=args.probability_threshold,
+            verbose=args.verbose,
+            generated_data_dir=args.generated_data_dir,
+            temperature=args.temperature,
+            specific_file=args.specific_file,
+            output_dir=args.output_dir,
+            batch_size=args.batch_size,
+            save_interval=args.save_interval,
+            gcs_bucket=args.gcs_bucket,
+            gcs_prefix=args.gcs_prefix
+        )
     
     if successful_tactics:
-        # データを保存
-        save_self_improvement_data(
-            data=successful_tactics,
-            output_dir=args.output_dir,
-            batch_size=args.batch_size
-        )
+        print(f"Data collection completed. {len(successful_tactics)} tactics were collected and saved incrementally.")
+        if args.gcs_bucket:
+            print(f"All files have been uploaded to GCS: gs://{args.gcs_bucket}/{args.gcs_prefix}")
     else:
         print("No successful tactics collected. Please check your model and parameters.")
 

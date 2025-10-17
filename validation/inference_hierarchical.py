@@ -19,7 +19,7 @@ except ImportError:
     print("Warning: wandb not available. Install with: pip install wandb")
 
 # プロジェクトルートをパスに追加
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+project_root = os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0, project_root)
 
 import torch
@@ -251,146 +251,46 @@ def generate_all_tactic_combinations(
         return tactic_combinations
 
 
-def evaluate_inference_performance(
-    model: TransformerClassifier,
-    tokenizer: CharTokenizer,
-    label_mappings: Dict[str, Any],
-    device: torch.device,
-    max_seq_len: int,
-    num_examples: int = 50,
-    max_steps: int = 5,
-    difficulty: float = 0.7,
-    seed: int = None,
-    max_depth: int = None
-) -> Tuple[float, float]:
+def load_validation_data(validation_file: str, num_examples: int = None) -> List[str]:
     """
-    推論性能を評価（トートロジーを新規生成）
+    バリデーションデータを読み込み
+    
+    Args:
+        validation_file: バリデーションファイルのパス
+        num_examples: 読み込む例の数（Noneの場合はすべて）
     
     Returns:
-        (success_rate, avg_steps_when_solved)
+        論理式のリスト
     """
-    import sys
-    import random
-    import time
-    
-    # pyproverをインポート
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    pyprover_dir = os.path.join(project_root, "pyprover")
-    sys.path.insert(0, pyprover_dir)
-    
-    original_cwd = os.getcwd()
-    os.chdir(pyprover_dir)
     try:
-        import proposition as proposition_mod
-        import prover as prover_mod
-    finally:
-        os.chdir(original_cwd)
-    
-    PropParseTree = proposition_mod.PropParseTree
-    prop_parser = proposition_mod.parser
-    Prover = prover_mod.Prover
-    
-    # generate_propをインポート
-    from src.core.generate_prop import FormulaGenerator, filter_formulas
-    
-    # トートロジーを新規生成
-    print(f"Generating {num_examples} new tautologies for validation...")
-    
-    # 変数を取得（fof_tokens.pyから）
-    from src.core.transformer_classifier import load_tokens_and_labels_from_token_py
-    token_py_path = os.path.join(project_root, "src", "core", "fof_tokens.py")
-    base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
-    
-    # 利用可能な変数を推論
-    variables = [t for t in ["a", "b", "c"] if t in base_tokens]
-    if not variables:
-        variables = ["a", "b", "c"]
-    
-    # データ生成時と同じパラメータを取得
-    from src.core.parameter import get_generation_params
-    gen_params = get_generation_params()
-    
-    # フォーミュラジェネレーターを作成
-    gen = FormulaGenerator(
-        variables=variables,
-        allow_const=gen_params.allow_const,  # データ生成時と同じ設定
-        difficulty=difficulty,  # 引数で指定された難易度を使用
-        max_depth=max_depth if max_depth is not None else gen_params.max_depth,  # 指定された最大深度またはデータ生成時と同じ最大深度
-        seed=seed if seed is not None else int(time.time() * 1000) % 2**32  # 指定されたシードまたは現在時刻を使用
-    )
-    
-    # トートロジーを生成
-    tautologies = filter_formulas(
-        gen=gen,
-        max_len=100,  # 最大長を制限
-        require_tautology=True,  # トートロジーのみ
-        limit=num_examples
-    )
-    
-    if not tautologies:
-        print("Failed to generate tautologies for validation!")
-        return 0.0, 0.0
-    
-    print(f"Generated {len(tautologies)} tautologies for validation")
-    print("First 5 tautologies:")
-    for i in range(min(5, len(tautologies))):
-        print(f"  {i+1}: {tautologies[i]}")
-    
-    # 推論性能評価を実行
-    solved_count = 0
-    solved_steps = []
-    
-    for i, goal_str in enumerate(tautologies):
-        try:
-            # パースしてproverを作成
-            parse_tree = PropParseTree()
-            goal_node = parse_tree.transform(prop_parser.parse(goal_str))
-            prover = Prover(goal_node)
-            
-            # 前提は空（トートロジーなので前提なしで証明可能）
-            premises = []
-            
-            # 推論ループ（確定的な順序適用）
-            step = 0
-            solved = prover.goal is None
-            
-            while not solved and step < max_steps:
-                # 現在の状態を取得
-                current_state = encode_prover_state(prover)
-                current_premises = current_state["premises"]
-                current_goal = current_state["goal"]
-                
-                # すべての可能なタクティクの組み合わせを生成（確率の高い順）
-                tactic_combinations = generate_all_tactic_combinations(
-                    model, tokenizer, current_premises, current_goal,
-                    label_mappings, device, max_seq_len
-                )
-                
-                # 上位max_steps個のタクティクを順次適用
-                success = False
-                for tactic_str, probability in tactic_combinations[:max_steps]:
-                    # タクティクを適用
-                    success = apply_tactic_from_label(prover, tactic_str)
-                    if success:
-                        break
-                
-                step += 1
-                solved = prover.goal is None
-            
-            if solved:
-                solved_count += 1
-                solved_steps.append(step)
-                
-        except Exception as e:
-            # パースエラーなどで失敗した場合はスキップ
-            print(f"Warning: Failed to process tautology {i+1}: {e}")
-            continue
-    
-    # 統計を計算
-    success_rate = solved_count / len(tautologies) if tautologies else 0.0
-    avg_steps_when_solved = sum(solved_steps) / len(solved_steps) if solved_steps else 0.0
-    
-    return success_rate, avg_steps_when_solved
+        with open(validation_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        if isinstance(data, list):
+            tautologies = data
+        else:
+            print(f"Warning: Unexpected data format in {validation_file}")
+            return []
+        
+        if num_examples is not None:
+            tautologies = tautologies[:num_examples]
+        
+        print(f"Loaded {len(tautologies)} tautologies from {validation_file}")
+        print("First 5 tautologies:")
+        for i in range(min(5, len(tautologies))):
+            print(f"  {i+1}: {tautologies[i]}")
+        
+        return tautologies
+        
+    except FileNotFoundError:
+        print(f"Error: Validation file not found: {validation_file}")
+        return []
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON in validation file: {e}")
+        return []
+    except Exception as e:
+        print(f"Error loading validation data: {e}")
+        return []
 
 
 def apply_tactic_from_label(prover, label) -> bool:
@@ -440,7 +340,7 @@ def apply_tactic_from_label(prover, label) -> bool:
 def main():
     parser = argparse.ArgumentParser(description="Run hierarchical tactic inference")
     parser.add_argument("--model_path", type=str, default="models/pretrained_model.pth", help="model path")
-    parser.add_argument("--count", type=int, default=10, help="number of examples to run")
+    parser.add_argument("--count", type=int, default=None, help="number of examples to run (default: all in validation file)")
     parser.add_argument("--max_steps", type=int, default=30, help="max steps per example")
     parser.add_argument("--device", type=str, default="auto", help="device")
     parser.add_argument("--verbose", action="store_true", help="verbose output")
@@ -448,9 +348,7 @@ def main():
     parser.add_argument("--wandb_project", type=str, default="fof-inference", help="wandb project name")
     parser.add_argument("--wandb_run_name", type=str, default=None, help="wandb run name")
     parser.add_argument("--max_seq_len", type=int, default=256, help="maximum sequence length")
-    parser.add_argument("--difficulty", type=float, default=0.5, help="difficulty level for formula generation")
-    parser.add_argument("--max_depth", type=int, default=8, help="maximum depth for formula generation")
-    parser.add_argument("--seed", type=int, default=None, help="random seed for formula generation")
+    parser.add_argument("--validation_file", type=str, default="validation_tautology.json", help="validation file path")
     
     args = parser.parse_args()
     
@@ -508,7 +406,7 @@ def main():
         }
         
         # トークナイザーを作成
-        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        root_dir = os.path.dirname(os.path.dirname(__file__))
         token_py_path = os.path.join(root_dir, "src", "core", "fof_tokens.py")
         base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
         tokenizer = CharTokenizer(base_tokens=base_tokens)
@@ -543,7 +441,7 @@ def main():
         max_seq_len = checkpoint.get('max_seq_len', 256)
         
         # トークナイザーを作成
-        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        root_dir = os.path.dirname(os.path.dirname(__file__))
         token_py_path = os.path.join(root_dir, "src", "core", "fof_tokens.py")
         base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
         tokenizer = CharTokenizer(base_tokens=base_tokens)
@@ -565,61 +463,27 @@ def main():
     prop_parser = proposition_mod.parser
     Prover = prover_mod.Prover
     
-    # トートロジーを新規生成
-    print(f"\nGenerating {args.count} new tautologies for inference...")
+    # バリデーションデータを読み込み
+    validation_file = os.path.join(os.path.dirname(__file__), args.validation_file)
+    print(f"\nLoading validation data from {validation_file}...")
     
-    # generate_tautology関数を直接定義
-    def generate_tautology(gen_params, base_tokens, seed_offset=0):
-        """run_interaction.pyと同じ方法でトートロジーを生成する関数"""
-        from src.core.generate_prop import FormulaGenerator, filter_formulas
-        
-        # 変数を取得
-        variables = [t for t in gen_params.variables if t in base_tokens] or gen_params.variables
-        
-        # 予測可能なシードを使用（基本シード + オフセット）
-        dynamic_seed = gen_params.seed + seed_offset
-        
-        # フォーミュラジェネレーターを作成
-        gen = FormulaGenerator(
-            variables=variables, 
-            allow_const=gen_params.allow_const, 
-            difficulty=gen_params.difficulty, 
-            seed=dynamic_seed
-        )
-        
-        # トートロジーを生成
-        goal_list = filter_formulas(gen, max_len=gen_params.max_len, require_tautology=True, limit=1)
-        if not goal_list:
-            # デバッグ情報を追加
-            print(f"Debug: Failed to generate tautology for seed_offset={seed_offset}")
-            print(f"  - difficulty={gen_params.difficulty}")
-            print(f"  - max_len={gen_params.max_len}")
-            print(f"  - variables={variables}")
-            print(f"  - allow_const={gen_params.allow_const}")
-            return None
-        return goal_list[0]
+    tautologies = load_validation_data(validation_file, args.count)
     
-    # 変数を取得（fof_tokens.pyから）
-    token_py_path = os.path.join(project_root, "src", "core", "fof_tokens.py")
-    base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
-    
-    # データ生成時と同じパラメータを取得
-    from src.core.parameter import get_generation_params
-    gen_params = get_generation_params()
+    if not tautologies:
+        print("Error: No validation data loaded!")
+        return
     
     
-    print(f"Running {args.count} examples (max_steps: {args.max_steps})...")
+    print(f"Running {len(tautologies)} examples (max_steps: {args.max_steps})...")
     
     solved_count = 0
     step_counts = []
     tactic_usage = {}
     confidence_scores = []
     
-    for i in range(args.count):
-        # run_interaction.pyと同じ関数を使用して論理式を生成
-        goal_str = generate_tautology(gen_params, base_tokens, seed_offset=i)
+    for i, goal_str in enumerate(tautologies):
         if not goal_str:
-            print(f"Warning: No valid formulas generated for example {i+1}, skipping...")
+            print(f"Warning: Empty formula for example {i+1}, skipping...")
             continue
         try:
             # パースしてproverを作成
