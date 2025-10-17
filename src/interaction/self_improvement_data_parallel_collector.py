@@ -11,6 +11,7 @@ ensuring each process owns its resources.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -213,6 +214,181 @@ def _process_tautology_worker(args: Tuple[Any, ...]) -> Dict[str, Any]:
         }
 
 
+class StreamingSelfImprovementCollector:
+    """Streaming self improvement data collector with real-time GCS upload"""
+    
+    def __init__(self, 
+                 model_path: str,
+                 max_steps: int,
+                 probability_threshold: float,
+                 temperature: float,
+                 device: torch.device,
+                 generated_data_dir: str,
+                 max_seq_len: int,
+                 num_workers: int,
+                 output_dir: str = "self_improvement_data",
+                 batch_size: int = 1000,
+                 gcs_bucket: str = None,
+                 gcs_prefix: str = ""):
+        self.model_path = model_path
+        self.max_steps = max_steps
+        self.probability_threshold = probability_threshold
+        self.temperature = temperature
+        self.device = device
+        self.generated_data_dir = generated_data_dir
+        self.max_seq_len = max_seq_len
+        self.num_workers = num_workers
+        self.output_dir = output_dir
+        self.batch_size = batch_size
+        self.gcs_bucket = gcs_bucket
+        self.gcs_prefix = gcs_prefix
+        
+        # Buffer management
+        self.all_successful_tactics = []
+        self.current_file_index = 0
+        self.total_solved = 0
+        self.total_tactics = 0
+        
+        # Initialize global constants
+        base_collector.initialize_global_constants()
+        
+        # Load tautologies
+        self.tautologies = base_collector.load_tautologies_from_generated_data(
+            generated_data_dir=generated_data_dir,
+            max_examples=None  # Load all available
+        )
+        
+        if not self.tautologies:
+            raise ValueError("Failed to load tautologies from generated_data directory!")
+        
+        print(f"Loaded {len(self.tautologies)} tautologies from generated_data directory")
+        
+        # Clear output directory
+        base_collector.clear_self_improvement_data(output_dir)
+        
+        if gcs_bucket:
+            print(f"GCS upload: gs://{gcs_bucket}/{gcs_prefix}")
+    
+    def add_tactics_and_check_save(self, tactics: List[Dict[str, Any]]):
+        """Add tactics to buffer and save if buffer is full"""
+        if not tactics:
+            return
+            
+        self.all_successful_tactics.extend(tactics)
+        self.total_tactics += len(tactics)
+        
+        # Save if buffer is full
+        if len(self.all_successful_tactics) >= self.batch_size:
+            self.save_current_data()
+    
+    def save_current_data(self):
+        """Save current buffer to file and upload to GCS"""
+        if not self.all_successful_tactics:
+            return
+            
+        # Save to local file
+        filename = f"training_data_{self.current_file_index:05d}.json"
+        filepath = os.path.join(self.output_dir, filename)
+        
+        os.makedirs(self.output_dir, exist_ok=True)
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(self.all_successful_tactics, f, ensure_ascii=False, indent=2)
+        
+        print(f"Saved {len(self.all_successful_tactics)} tactics to {filepath}")
+        
+        # Upload to GCS if configured
+        if self.gcs_bucket:
+            if upload_to_gcs(filepath, self.gcs_bucket, self.gcs_prefix):
+                print(f"✅ Uploaded {filename} to GCS")
+            else:
+                print(f"❌ Failed to upload {filename} to GCS")
+        
+        # Reset buffer
+        self.all_successful_tactics = []
+        self.current_file_index += 1
+    
+    def collect_data_streaming(self, num_examples: int) -> List[Dict[str, Any]]:
+        """Collect data using streaming approach with real-time saves"""
+        if self.num_workers <= 1:
+            # Fallback to sequential implementation
+            return self._collect_sequential(num_examples)
+        
+        config = {
+            "model_path": self.model_path,
+            "device": str(self.device),
+            "max_seq_len": self.max_seq_len,
+        }
+        
+        # Limit examples to available tautologies
+        examples_to_process = min(num_examples, len(self.tautologies))
+        tasks = [
+            (index, goal, self.max_steps, self.probability_threshold, self.temperature, config)
+            for index, goal in enumerate(self.tautologies[:examples_to_process])
+        ]
+        
+        print(f"Starting streaming parallel self improvement data collection with {self.num_workers} workers...")
+        print(f"Processing {examples_to_process} examples...")
+        
+        with ProcessPoolExecutor(max_workers=self.num_workers) as executor:
+            futures = [executor.submit(_process_tautology_worker, task) for task in tasks]
+            
+            with tqdm(
+                total=len(futures),
+                desc="Processing tautologies",
+                unit="formula",
+            ) as progress:
+                for future in as_completed(futures):
+                    result = future.result()
+                    
+                    if result.get("error"):
+                        print(f"Warning: failed to process tautology {result['index'] + 1}: {result['error']}")
+                        progress.update(1)
+                        continue
+                    
+                    if result.get("solved"):
+                        self.total_solved += 1
+                        tactics = result.get("successful_tactics", [])
+                        self.add_tactics_and_check_save(tactics)
+                    
+                    progress.update(1)
+        
+        # Save any remaining data
+        if self.all_successful_tactics:
+            self.save_current_data()
+        
+        print(f"\nSelf improvement data collection completed:")
+        print(f"  Solved examples: {self.total_solved}/{examples_to_process}")
+        print(f"  Total tactics collected: {self.total_tactics}")
+        
+        return []  # Data is saved incrementally, not returned
+    
+    def _collect_sequential(self, num_examples: int) -> List[Dict[str, Any]]:
+        """Fallback to sequential implementation"""
+        base_collector.initialize_global_constants()
+        if base_collector.BASE_TOKENS is None:
+            token_py_path = os.path.join(project_root, "src", "core", "fof_tokens.py")
+            base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
+        else:
+            base_tokens = base_collector.BASE_TOKENS
+
+        tokenizer = CharTokenizer(base_tokens=base_tokens)
+        model, label_mappings = base_collector.load_hierarchical_model(self.model_path, self.device)
+        return base_collector.collect_self_improvement_data(
+            model=model,
+            tokenizer=tokenizer,
+            label_mappings=label_mappings,
+            device=self.device,
+            max_seq_len=self.max_seq_len,
+            num_examples=num_examples,
+            max_steps=self.max_steps,
+            probability_threshold=self.probability_threshold,
+            verbose=False,
+            generated_data_dir=self.generated_data_dir,
+            temperature=self.temperature,
+        )
+
+
 def collect_self_improvement_data_parallel(
     model_path: str,
     num_examples: int,
@@ -344,6 +520,40 @@ def upload_to_gcs(local_file_path: str, gcs_bucket: str, gcs_prefix: str) -> boo
     except Exception as e:
         print(f"❌ Error uploading {local_file_path} to GCS: {e}")
         return False
+
+
+def save_self_improvement_data_with_gcs(
+    data: List[Dict[str, Any]],
+    output_dir: str = "self_improvement_data",
+    batch_size: int = 1000,
+    gcs_bucket: str = None,
+    gcs_prefix: str = ""
+) -> None:
+    """Self improvementデータをファイルに保存し、GCSに逐次アップロード"""
+    import json
+    
+    # 出力ディレクトリを作成
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # バッチごとに分割して保存
+    for i in range(0, len(data), batch_size):
+        batch_data = data[i:i + batch_size]
+        batch_num = i // batch_size
+        
+        filename = f"training_data_{batch_num:05d}.json"
+        filepath = os.path.join(output_dir, filename)
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(batch_data, f, ensure_ascii=False, indent=2)
+        
+        print(f"Saved {len(batch_data)} tactics to {filepath}")
+        
+        # GCSに逐次アップロード
+        if gcs_bucket:
+            if upload_to_gcs(filepath, gcs_bucket, gcs_prefix):
+                print(f"✅ Uploaded {filename} to GCS")
+            else:
+                print(f"❌ Failed to upload {filename} to GCS")
 
 
 def upload_directory_to_gcs(local_dir: str, gcs_bucket: str, gcs_prefix: str) -> int:
@@ -493,11 +703,9 @@ def main() -> None:
         print(f"  GCS bucket: {args.gcs_bucket}")
         print(f"  GCS prefix: {args.gcs_prefix}")
 
-    base_collector.clear_self_improvement_data(args.output_dir)
-
-    successful_tactics = collect_self_improvement_data_parallel(
+    # Initialize streaming collector
+    collector = StreamingSelfImprovementCollector(
         model_path=args.model_path,
-        num_examples=args.count,
         max_steps=args.max_steps,
         probability_threshold=args.probability_threshold,
         temperature=args.temperature,
@@ -505,29 +713,14 @@ def main() -> None:
         generated_data_dir=args.generated_data_dir,
         max_seq_len=max_seq_len,
         num_workers=max(args.num_workers, 1),
+        output_dir=args.output_dir,
+        batch_size=args.batch_size,
+        gcs_bucket=args.gcs_bucket,
+        gcs_prefix=args.gcs_prefix
     )
 
-    if successful_tactics:
-        base_collector.save_self_improvement_data(
-            data=successful_tactics,
-            output_dir=args.output_dir,
-            batch_size=args.batch_size,
-        )
-        
-        # Upload to GCS if bucket is specified
-        if args.gcs_bucket:
-            print(f"\n📤 Uploading collected data to GCS...")
-            uploaded_count = upload_directory_to_gcs(
-                local_dir=args.output_dir,
-                gcs_bucket=args.gcs_bucket,
-                gcs_prefix=args.gcs_prefix
-            )
-            if uploaded_count > 0:
-                print(f"✅ Successfully uploaded {uploaded_count} files to GCS")
-            else:
-                print("❌ Failed to upload files to GCS")
-    else:
-        print("No successful tactics collected. Please check your model and parameters.")
+    # Collect data with streaming approach
+    collector.collect_data_streaming(num_examples=args.count)
 
 
 if __name__ == "__main__":
