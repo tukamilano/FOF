@@ -10,7 +10,6 @@ import sys
 import json
 import time
 import hashlib
-import heapq
 import random
 import numpy as np
 from typing import List, Tuple, Dict, Any
@@ -107,21 +106,33 @@ def initialize_global_constants():
     if PYPROVER_MODULES is None:
         # pyproverモジュールを初期化
         pyprover_dir = os.path.join(project_root, "pyprover")
-        sys.path.insert(0, pyprover_dir)
         
+        # パスを追加
+        if pyprover_dir not in sys.path:
+            sys.path.insert(0, pyprover_dir)
+        
+        # ディレクトリを変更してからモジュールをインポート
         original_cwd = os.getcwd()
         os.chdir(pyprover_dir)
+        
         try:
+            # モジュールをインポート
             import proposition as proposition_mod
             import prover as prover_mod
+            
+            PYPROVER_MODULES = {
+                'PropParseTree': proposition_mod.PropParseTree,
+                'prop_parser': proposition_mod.parser,
+                'Prover': prover_mod.Prover
+            }
+            print(f"PYPROVER_MODULES initialized successfully")
+        except Exception as e:
+            print(f"Error initializing PYPROVER_MODULES: {e}")
+            import traceback
+            traceback.print_exc()
+            PYPROVER_MODULES = None
         finally:
             os.chdir(original_cwd)
-        
-        PYPROVER_MODULES = {
-            'PropParseTree': proposition_mod.PropParseTree,
-            'prop_parser': proposition_mod.parser,
-            'Prover': prover_mod.Prover
-        }
     
     if GENERATION_PARAMS is None:
         from src.core.parameter import get_generation_params
@@ -355,7 +366,7 @@ def select_tactic_probabilistically(
     return selected_tactic, selected_prob
 
 
-def generate_top_k_tactic_combinations(
+def generate_tactic_combinations(
     model: TransformerClassifier,
     tokenizer: CharTokenizer,
     premises: List[str],
@@ -363,14 +374,12 @@ def generate_top_k_tactic_combinations(
     label_mappings: Dict[str, Any],
     device: torch.device,
     max_seq_len: int = 256,
-    top_k: int = 10,
     probability_threshold: float = 0.001
 ) -> List[Tuple[str, float]]:
     """
-    上位k個のタクティク組み合わせを効率的に生成（ヒープソート使用）
+    確率閾値を満たすタクティク組み合わせを生成
     
     Args:
-        top_k: 返すタクティクの最大数
         probability_threshold: 確率の閾値（これ以下の組み合わせは生成しない）
     
     Returns:
@@ -391,8 +400,8 @@ def generate_top_k_tactic_combinations(
         arg1_probs = torch.softmax(arg1_logits, dim=-1)
         arg2_probs = torch.softmax(arg2_logits, dim=-1)
         
-        # 最小ヒープ（確率の低い順）で上位k個を保持
-        min_heap = []
+        # 確率閾値を満たすタクティクを収集
+        tactic_combinations = []
         
         # 引数が不要なタクティクを処理
         for main_id, main_tactic in enumerate(label_mappings['id_to_main']):
@@ -409,11 +418,7 @@ def generate_top_k_tactic_combinations(
                     main_confidence, 0.0, 0.0
                 )
                 
-                # ヒープに追加（確率の低い順で保持）
-                if len(min_heap) < top_k:
-                    heapq.heappush(min_heap, (probability, tactic_string))
-                elif probability > min_heap[0][0]:
-                    heapq.heapreplace(min_heap, (probability, tactic_string))
+                tactic_combinations.append((tactic_string, probability))
             
             # 引数1つのタクティクの場合
             elif main_tactic in ['apply', 'destruct']:
@@ -430,11 +435,7 @@ def generate_top_k_tactic_combinations(
                         main_confidence, arg1_confidence, 0.0
                     )
                     
-                    # ヒープに追加
-                    if len(min_heap) < top_k:
-                        heapq.heappush(min_heap, (probability, tactic_string))
-                    elif probability > min_heap[0][0]:
-                        heapq.heapreplace(min_heap, (probability, tactic_string))
+                    tactic_combinations.append((tactic_string, probability))
             
             # 引数2つのタクティクの場合
             elif main_tactic == 'specialize':
@@ -458,11 +459,7 @@ def generate_top_k_tactic_combinations(
                             main_confidence, arg1_confidence, arg2_confidence
                         )
                         
-                        # ヒープに追加
-                        if len(min_heap) < top_k:
-                            heapq.heappush(min_heap, (probability, tactic_string))
-                        elif probability > min_heap[0][0]:
-                            heapq.heapreplace(min_heap, (probability, tactic_string))
+                        tactic_combinations.append((tactic_string, probability))
             
             # その他のタクティク（引数不要として扱う）
             else:
@@ -472,20 +469,10 @@ def generate_top_k_tactic_combinations(
                     main_confidence, 0.0, 0.0
                 )
                 
-                # ヒープに追加
-                if len(min_heap) < top_k:
-                    heapq.heappush(min_heap, (probability, tactic_string))
-                elif probability > min_heap[0][0]:
-                    heapq.heapreplace(min_heap, (probability, tactic_string))
+                tactic_combinations.append((tactic_string, probability))
         
-        # ヒープから確率の高い順に取り出してリストに変換
-        tactic_combinations = []
-        while min_heap:
-            probability, tactic_string = heapq.heappop(min_heap)
-            tactic_combinations.append((tactic_string, probability))
-        
-        # 確率の高い順にソート（ヒープから取り出した順序を逆転）
-        tactic_combinations.reverse()
+        # 確率の高い順にソート
+        tactic_combinations.sort(key=lambda x: x[1], reverse=True)
         
         return tactic_combinations
 
@@ -544,7 +531,6 @@ def collect_self_improvement_data(
     max_seq_len: int,
     num_examples: int = 100,
     max_steps: int = 30,
-    top_k: int = 20,
     probability_threshold: float = 0.001,
     difficulty: float = 0.5,
     seed: int = None,
@@ -626,20 +612,23 @@ def collect_self_improvement_data(
                     print(f"    Premises: {current_premises if current_premises else '[]'}")
                     print(f"    Goal: {current_goal}")
                 
-                # 上位k個のタクティク組み合わせを効率的に生成
-                tactic_combinations = generate_top_k_tactic_combinations(
+                # 確率閾値を満たすタクティク組み合わせを生成
+                tactic_combinations = generate_tactic_combinations(
                     model, tokenizer, current_premises, current_goal,
-                    label_mappings, device, max_seq_len, top_k, probability_threshold
+                    label_mappings, device, max_seq_len, probability_threshold
                 )
                 
                 if verbose:
                     print(f"    Generated {len(tactic_combinations)} tactic combinations")
-                    print(f"    Top 5: {[(t, f'{p:.3f}') for t, p in tactic_combinations[:5]]}")
+                    if tactic_combinations:
+                        print(f"    Threshold filtered tactics: {[(t, f'{p:.3f}') for t, p in tactic_combinations]}")
+                    else:
+                        print(f"    Threshold filtered tactics: []")
                     print(f"    Failed tactics so far: {failed_tactics}")
                 
                 # 確率的にタクティクを選択して適用
                 success = False
-                max_attempts = min(top_k, len(tactic_combinations))  # 最大試行回数
+                max_attempts = len(tactic_combinations)  # 利用可能なタクティク数
                 attempts = 0
                 
                 # 利用可能なタクティクを事前に計算
@@ -772,7 +761,6 @@ def main():
     parser.add_argument("--model_path", type=str, default="models/pretrained_model.pth", help="model path")
     parser.add_argument("--count", type=int, default=100, help="number of examples to process")
     parser.add_argument("--max_steps", type=int, default=30, help="max steps per example")
-    parser.add_argument("--top_k", type=int, default=20, help="top k tactics to generate and try per step")
     parser.add_argument("--probability_threshold", type=float, default=0.001, help="probability threshold for tactic generation")
     parser.add_argument("--device", type=str, default="auto", help="device")
     parser.add_argument("--verbose", action="store_true", help="verbose output")
@@ -816,7 +804,6 @@ def main():
     print(f"Starting self improvement data collection...")
     print(f"  Examples to process: {args.count}")
     print(f"  Max steps per example: {args.max_steps}")
-    print(f"  Top k tactics per step: {args.top_k}")
     print(f"  Probability threshold: {args.probability_threshold}")
     print(f"  Temperature: {args.temperature}")
     print(f"  Difficulty: {args.difficulty}")
@@ -835,7 +822,6 @@ def main():
         max_seq_len=max_seq_len,
         num_examples=args.count,
         max_steps=args.max_steps,
-        top_k=args.top_k,
         probability_threshold=args.probability_threshold,
         difficulty=args.difficulty,
         seed=args.seed,
