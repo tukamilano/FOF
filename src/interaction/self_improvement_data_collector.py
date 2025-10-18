@@ -375,13 +375,10 @@ def generate_tactic_combinations(
     label_mappings: Dict[str, Any],
     device: torch.device,
     max_seq_len: int = 256,
-    probability_threshold: float = 0.001
+    temperature: float = 1.0
 ) -> List[Tuple[str, float]]:
     """
-    確率閾値を満たすタクティク組み合わせを生成
-    
-    Args:
-        probability_threshold: 確率の閾値（これ以下の組み合わせは生成しない）
+    すべての可能なタクティク組み合わせを生成
     
     Returns:
         [(tactic_string, probability), ...] のリスト（確率の高い順）
@@ -396,10 +393,17 @@ def generate_tactic_combinations(
     with torch.no_grad():
         main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
         
-        # softmaxで確率に変換
-        main_probs = torch.softmax(main_logits, dim=-1)
-        arg1_probs = torch.softmax(arg1_logits, dim=-1)
-        arg2_probs = torch.softmax(arg2_logits, dim=-1)
+        # temperatureを適用してsoftmaxで確率に変換
+        if temperature == 0.0:
+            # temperature=0の場合は確定的（softmaxで確率を計算し、確率の高い順に試す）
+            main_probs = torch.softmax(main_logits, dim=-1)
+            arg1_probs = torch.softmax(arg1_logits, dim=-1)
+            arg2_probs = torch.softmax(arg2_logits, dim=-1)
+        else:
+            # temperature>0の場合はsoftmax
+            main_probs = torch.softmax(main_logits / temperature, dim=-1)
+            arg1_probs = torch.softmax(arg1_logits / temperature, dim=-1)
+            arg2_probs = torch.softmax(arg2_logits / temperature, dim=-1)
         
         # 確率閾値を満たすタクティクを収集
         tactic_combinations = []
@@ -408,10 +412,6 @@ def generate_tactic_combinations(
         for main_id, main_tactic in enumerate(label_mappings['id_to_main']):
             main_confidence = main_probs[0, main_id].item()
             
-            # 確率閾値チェック
-            if main_confidence < probability_threshold:
-                continue
-                
             if main_tactic in ['assumption', 'intro', 'split', 'left', 'right', 'add_dn']:
                 tactic_string = main_tactic
                 probability = calculate_tactic_probability(
@@ -426,10 +426,6 @@ def generate_tactic_combinations(
                 for arg1_id, arg1_value in enumerate(label_mappings['id_to_arg1']):
                     arg1_confidence = arg1_probs[0, arg1_id].item()
                     
-                    # 確率閾値チェック（main * arg1）
-                    if main_confidence * arg1_confidence < probability_threshold:
-                        continue
-                        
                     tactic_string = f"{main_tactic} {arg1_value}"
                     probability = calculate_tactic_probability(
                         main_tactic, arg1_value, "",
@@ -443,17 +439,9 @@ def generate_tactic_combinations(
                 for arg1_id, arg1_value in enumerate(label_mappings['id_to_arg1']):
                     arg1_confidence = arg1_probs[0, arg1_id].item()
                     
-                    # 確率閾値チェック（main * arg1）
-                    if main_confidence * arg1_confidence < probability_threshold:
-                        continue
-                        
                     for arg2_id, arg2_value in enumerate(label_mappings['id_to_arg2']):
                         arg2_confidence = arg2_probs[0, arg2_id].item()
                         
-                        # 確率閾値チェック（main * arg1 * arg2）
-                        if main_confidence * arg1_confidence * arg2_confidence < probability_threshold:
-                            continue
-                            
                         tactic_string = f"{main_tactic} {arg1_value} {arg2_value}"
                         probability = calculate_tactic_probability(
                             main_tactic, arg1_value, arg2_value,
@@ -532,7 +520,6 @@ def collect_self_improvement_data(
     max_seq_len: int,
     num_examples: int = 100,
     max_steps: int = 30,
-    probability_threshold: float = 0.001,
     verbose: bool = False,
     generated_data_dir: str = "generated_data",
     temperature: float = 1.0
@@ -617,7 +604,7 @@ def collect_self_improvement_data(
                 # 確率閾値を満たすタクティク組み合わせを生成
                 tactic_combinations = generate_tactic_combinations(
                     model, tokenizer, current_premises, current_goal,
-                    label_mappings, device, max_seq_len, probability_threshold
+                    label_mappings, device, max_seq_len, temperature
                 )
                 
                 if verbose:
@@ -771,7 +758,6 @@ def main():
     parser.add_argument("--model_path", type=str, default="models/pretrained_model.pth", help="model path")
     parser.add_argument("--count", type=int, default=100, help="number of examples to process")
     parser.add_argument("--max_steps", type=int, default=30, help="max steps per example")
-    parser.add_argument("--probability_threshold", type=float, default=0.001, help="probability threshold for tactic generation")
     parser.add_argument("--device", type=str, default="auto", help="device")
     parser.add_argument("--verbose", action="store_true", help="verbose output")
     parser.add_argument("--max_seq_len", type=int, default=256, help="maximum sequence length")
@@ -812,7 +798,6 @@ def main():
     print(f"Starting self improvement data collection...")
     print(f"  Examples to process: {args.count}")
     print(f"  Max steps per example: {args.max_steps}")
-    print(f"  Probability threshold: {args.probability_threshold}")
     print(f"  Temperature: {args.temperature}")
     print(f"  Generated data directory: {args.generated_data_dir}")
     print(f"  Output directory: {args.output_dir}")
@@ -829,7 +814,6 @@ def main():
         max_seq_len=max_seq_len,
         num_examples=args.count,
         max_steps=args.max_steps,
-        probability_threshold=args.probability_threshold,
         verbose=args.verbose,
         generated_data_dir=args.generated_data_dir,
         temperature=args.temperature

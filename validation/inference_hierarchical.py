@@ -11,12 +11,6 @@ import json
 import time
 from typing import List, Tuple, Dict, Any
 
-try:
-    import wandb
-    WANDB_AVAILABLE = True
-except ImportError:
-    WANDB_AVAILABLE = False
-    print("Warning: wandb not available. Install with: pip install wandb")
 
 # プロジェクトルートをパスに追加
 project_root = os.path.dirname(os.path.dirname(__file__))
@@ -129,6 +123,55 @@ def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[Tran
     return model, label_mappings
 
 
+def select_tactic_probabilistically(
+    tactic_combinations: List[Tuple[str, float]], 
+    temperature: float = 1.0,
+    failed_tactics: set = None
+) -> Tuple[str, float]:
+    """
+    temperatureを使用してタクティクを確率的に選択
+    
+    Args:
+        tactic_combinations: [(tactic_string, probability), ...] のリスト
+        temperature: 温度パラメータ（高いほどランダム、低いほど確率に従う）
+        failed_tactics: 失敗したタクティクのセット
+    
+    Returns:
+        選択されたタクティクとその調整後の確率
+    """
+    import numpy as np
+    
+    if failed_tactics is None:
+        failed_tactics = set()
+    
+    # 失敗していないタクティクのみをフィルタリング
+    available_tactics = [(tactic, prob) for tactic, prob in tactic_combinations
+                        if tactic not in failed_tactics]
+    
+    if not available_tactics:
+        # 利用可能なタクティクがない場合は空を返す
+        return "", 0.0
+    
+    # 確率を温度で調整
+    tactics, probabilities = zip(*available_tactics)
+    probabilities = np.array(probabilities)
+    
+    # 温度を適用（log確率に変換してから温度で割る）
+    log_probs = np.log(probabilities + 1e-8)  # 数値安定性のため小さな値を追加
+    scaled_log_probs = log_probs / temperature
+    
+    # softmaxで正規化
+    exp_probs = np.exp(scaled_log_probs - np.max(scaled_log_probs))  # 数値安定性のため
+    softmax_probs = exp_probs / np.sum(exp_probs)
+    
+    # 確率的に選択
+    selected_idx = np.random.choice(len(tactics), p=softmax_probs)
+    selected_tactic = tactics[selected_idx]
+    selected_prob = softmax_probs[selected_idx]  # 調整後の確率を返す
+    
+    return selected_tactic, selected_prob
+
+
 def calculate_tactic_probability(
     main_tactic: str,
     arg1_value: str,
@@ -175,7 +218,8 @@ def generate_all_tactic_combinations(
     goal: str,
     label_mappings: Dict[str, Any],
     device: torch.device,
-    max_seq_len: int = 256
+    max_seq_len: int = 256,
+    temperature: float = 1.0
 ) -> List[Tuple[str, float]]:
     """
     すべての可能なタクティクの組み合わせを生成し、確率の高い順にソート
@@ -192,10 +236,17 @@ def generate_all_tactic_combinations(
     with torch.no_grad():
         main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
         
-        # softmaxで確率に変換
-        main_probs = torch.softmax(main_logits, dim=-1)
-        arg1_probs = torch.softmax(arg1_logits, dim=-1)
-        arg2_probs = torch.softmax(arg2_logits, dim=-1)
+        # temperatureを適用してsoftmaxで確率に変換
+        if temperature == 0.0:
+            # temperature=0の場合は確定的（softmaxで確率を計算し、確率の高い順に試す）
+            main_probs = torch.softmax(main_logits, dim=-1)
+            arg1_probs = torch.softmax(arg1_logits, dim=-1)
+            arg2_probs = torch.softmax(arg2_logits, dim=-1)
+        else:
+            # temperature>0の場合はsoftmax
+            main_probs = torch.softmax(main_logits / temperature, dim=-1)
+            arg1_probs = torch.softmax(arg1_logits / temperature, dim=-1)
+            arg2_probs = torch.softmax(arg2_logits / temperature, dim=-1)
         
         tactic_combinations = []
         
@@ -293,6 +344,152 @@ def load_validation_data(validation_file: str, num_examples: int = None) -> List
         return []
 
 
+def evaluate_inference_performance(
+    model: TransformerClassifier,
+    tokenizer: CharTokenizer,
+    label_mappings: Dict[str, Any],
+    device: torch.device,
+    max_seq_len: int,
+    num_examples: int = 100,
+    max_steps: int = 30,
+    seed: int = 42,
+    temperature: float = 1.0
+) -> Tuple[float, float]:
+    """
+    推論性能を評価する関数（inference_hierarchical.pyのmain関数と同じ方法）
+    
+    Args:
+        model: 評価するモデル
+        tokenizer: トークナイザー
+        label_mappings: ラベルマッピング
+        device: デバイス
+        max_seq_len: 最大シーケンス長
+        num_examples: 評価する例の数
+        max_steps: 最大ステップ数
+        seed: ランダムシード
+        temperature: softmax計算の温度パラメータ
+    
+    Returns:
+        (success_rate, avg_steps): 成功率と平均ステップ数
+    """
+    import random
+    import numpy as np
+    
+    # シードを設定
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    
+    # バリデーションデータを読み込み
+    validation_file = os.path.join(os.path.dirname(__file__), "validation_tautology.json")
+    tautologies = load_validation_data(validation_file, num_examples)
+    
+    if not tautologies:
+        print("Warning: No validation data available for inference evaluation")
+        return 0.0, 0.0
+    
+    # pyproverをインポート
+    root_dir = os.path.dirname(os.path.dirname(__file__))
+    pyprover_dir = os.path.join(root_dir, "pyprover")
+    sys.path.insert(0, pyprover_dir)
+    
+    # ディレクトリを変更してからインポート
+    original_cwd = os.getcwd()
+    os.chdir(pyprover_dir)
+    try:
+        import proposition as proposition_mod
+        import prover as prover_mod
+    finally:
+        os.chdir(original_cwd)
+    
+    PropParseTree = proposition_mod.PropParseTree
+    prop_parser = proposition_mod.parser
+    Prover = prover_mod.Prover
+    
+    print(f"Running {len(tautologies)} examples (max_steps: {max_steps})...")
+    
+    solved_count = 0
+    step_counts = []
+    tactic_usage = {}
+    confidence_scores = []
+    
+    for i, goal_str in enumerate(tautologies):
+        if not goal_str:
+            print(f"Warning: Empty formula for example {i+1}, skipping...")
+            continue
+        try:
+            # パースしてproverを作成
+            parse_tree = PropParseTree()
+            goal_node = parse_tree.transform(prop_parser.parse(goal_str))
+            prover = Prover(goal_node)
+            
+            # 前提は空（トートロジーなので前提なしで証明可能）
+            premises = []
+            
+            # 推論ループ（確定的な順序適用）
+            step = 0
+            solved = prover.goal is None
+            example_tactics = []
+            example_confidences = []
+            
+            while not solved and step < max_steps:
+                # 現在の状態を取得
+                current_state = encode_prover_state(prover)
+                current_premises = current_state["premises"]
+                current_goal = current_state["goal"]
+                
+                # すべての可能なタクティクの組み合わせを生成（確率の高い順）
+                tactic_combinations = generate_all_tactic_combinations(
+                    model, tokenizer, current_premises, current_goal,
+                    label_mappings, device, max_seq_len, temperature
+                )
+                
+                # 上位max_steps個のタクティクを順次適用
+                success = False
+                for tactic_str, probability in tactic_combinations[:max_steps]:
+                    # タクティクを適用
+                    success = apply_tactic_from_label(prover, tactic_str)
+                    
+                    # ログ用データを記録
+                    example_tactics.append(tactic_str)
+                    example_confidences.append(probability)
+                    tactic_usage[tactic_str] = tactic_usage.get(tactic_str, 0) + 1
+                    
+                    if success:
+                        break
+                
+                step += 1
+                solved = prover.goal is None
+            
+            # 例の結果を記録
+            step_counts.append(step)
+            confidence_scores.extend(example_confidences)
+            
+            if solved:
+                solved_count += 1
+            
+        except Exception as e:
+            # パースエラーなどで失敗した場合はスキップ
+            print(f"Warning: Failed to process tautology {i+1}: {e}")
+            step_counts.append(max_steps)  # 失敗として記録
+            continue
+    
+    # 最終結果を計算
+    total_examples = len(step_counts)  # 実際に処理された問題数
+    success_rate = solved_count / total_examples if total_examples > 0 else 0.0
+    avg_steps = sum(step_counts) / len(step_counts) if step_counts else 0
+    avg_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0
+    
+    print(f"Results: {solved_count}/{total_examples} examples solved ({success_rate*100:.1f}%)")
+    print(f"Average steps: {avg_steps:.2f}")
+    print(f"Average confidence: {avg_confidence:.3f}")
+    
+    return success_rate, avg_steps
+
+
 def apply_tactic_from_label(prover, label) -> bool:
     """タクティクを適用"""
     if isinstance(label, dict):
@@ -344,11 +541,9 @@ def main():
     parser.add_argument("--max_steps", type=int, default=30, help="max steps per example")
     parser.add_argument("--device", type=str, default="auto", help="device")
     parser.add_argument("--verbose", action="store_true", help="verbose output")
-    parser.add_argument("--use_wandb", action="store_true", help="use wandb for logging")
-    parser.add_argument("--wandb_project", type=str, default="fof-inference", help="wandb project name")
-    parser.add_argument("--wandb_run_name", type=str, default=None, help="wandb run name")
     parser.add_argument("--max_seq_len", type=int, default=256, help="maximum sequence length")
     parser.add_argument("--validation_file", type=str, default="validation_tautology.json", help="validation file path")
+    parser.add_argument("--temperature", type=float, default=None, help="temperature for softmax calculation (default: None for deterministic, 1.0 for normal)")
     
     args = parser.parse_args()
     
@@ -360,22 +555,13 @@ def main():
     
     print(f"Using device: {device}")
     
-    # wandb初期化
-    if args.use_wandb and WANDB_AVAILABLE:
-        run_name = args.wandb_run_name or f"inference_{int(time.time())}"
-        wandb.init(
-            project=args.wandb_project,
-            name=run_name,
-            config={
-                "model_path": args.model_path,
-                "count": args.count,
-                "max_steps": args.max_steps,
-                "device": str(device)
-            }
-        )
-        print(f"Wandb initialized: {args.wandb_project}/{run_name}")
-    elif args.use_wandb and not WANDB_AVAILABLE:
-        print("Warning: wandb requested but not available. Continuing without logging.")
+    # temperatureの設定（Noneの場合は確定的に）
+    if args.temperature is None:
+        temperature = 0.0
+        print("Using deterministic mode (temperature=0.0)")
+    else:
+        temperature = args.temperature
+        print(f"Using temperature: {temperature}")
     
     # モデルを読み込みまたは初期化
     if not os.path.exists(args.model_path):
@@ -499,11 +685,12 @@ def main():
                 print(f"  Goal: {goal_str}")
                 print(f"  Premises: {premises}")
             
-            # 推論ループ（確定的な順序適用）
+            # 推論ループ
             step = 0
             solved = prover.goal is None
             example_tactics = []
             example_confidences = []
+            failed_tactics = set()
             
             while not solved and step < args.max_steps:
                 # 現在の状態を取得
@@ -514,29 +701,61 @@ def main():
                 # すべての可能なタクティクの組み合わせを生成（確率の高い順）
                 tactic_combinations = generate_all_tactic_combinations(
                     model, tokenizer, current_premises, current_goal,
-                    label_mappings, device, max_seq_len
+                    label_mappings, device, max_seq_len, temperature
                 )
                 
                 if args.verbose:
                     print(f"  Step {step+1}: Generated {len(tactic_combinations)} tactic combinations")
                     print(f"    Top 5: {[(t, f'{p:.3f}') for t, p in tactic_combinations[:5]]}")
                 
-                # 上位max_steps個のタクティクを順次適用
-                success = False
-                for tactic_str, probability in tactic_combinations[:args.max_steps]:
-                    # タクティクを適用
-                    success = apply_tactic_from_label(prover, tactic_str)
+                # temperatureに応じて選択方法を変更
+                if temperature == 0.0:
+                    # 確定的：確率の高い順に順番に試す
+                    success = False
+                    for tactic_str, probability in tactic_combinations[:args.max_steps]:
+                        # タクティクを適用
+                        success = apply_tactic_from_label(prover, tactic_str)
+                        
+                        # ログ用データを記録
+                        example_tactics.append(tactic_str)
+                        example_confidences.append(probability)
+                        tactic_usage[tactic_str] = tactic_usage.get(tactic_str, 0) + 1
+                        
+                        if args.verbose:
+                            print(f"    Trying {tactic_str} (prob: {probability:.3f}) - {'Success' if success else 'Failed'}")
+                        
+                        if success:
+                            break
+                else:
+                    # 確率的：確率的に選択して試す
+                    success = False
+                    max_attempts = min(len(tactic_combinations), args.max_steps)
+                    attempts = 0
                     
-                    # ログ用データを記録
-                    example_tactics.append(tactic_str)
-                    example_confidences.append(probability)
-                    tactic_usage[tactic_str] = tactic_usage.get(tactic_str, 0) + 1
-                    
-                    if args.verbose:
-                        print(f"    Trying {tactic_str} (prob: {probability:.3f}) - {'Success' if success else 'Failed'}")
-                    
-                    if success:
-                        break
+                    while not success and attempts < max_attempts:
+                        selected_tactic, selected_prob = select_tactic_probabilistically(
+                            tactic_combinations, temperature, failed_tactics
+                        )
+                        
+                        if not selected_tactic:
+                            # 利用可能なタクティクがない場合は終了
+                            break
+                        
+                        # タクティクを適用
+                        success = apply_tactic_from_label(prover, selected_tactic)
+                        attempts += 1
+                        
+                        # ログ用データを記録
+                        example_tactics.append(selected_tactic)
+                        example_confidences.append(selected_prob)
+                        tactic_usage[selected_tactic] = tactic_usage.get(selected_tactic, 0) + 1
+                        
+                        if args.verbose:
+                            print(f"    Trying {selected_tactic} (prob: {selected_prob:.3f}) - {'Success' if success else 'Failed'}")
+                        
+                        if not success:
+                            # 失敗したタクティクを記録
+                            failed_tactics.add(selected_tactic)
                 
                 step += 1
                 solved = prover.goal is None
@@ -553,15 +772,6 @@ def main():
                 if args.verbose:
                     print(f"  Result: FAILED after {step} steps")
             
-            # wandbに例の結果をログ
-            if args.use_wandb and WANDB_AVAILABLE:
-                wandb.log({
-                    f"example_{i+1}/solved": 1 if solved else 0,
-                    f"example_{i+1}/steps": step,
-                    f"example_{i+1}/avg_confidence": sum(example_confidences) / len(example_confidences) if example_confidences else 0,
-                    f"example_{i+1}/goal_length": len(goal_str),
-                    f"example_{i+1}/premises_count": len(premises)
-                })
                 
         except Exception as e:
             # パースエラーなどで失敗した場合はスキップ
@@ -578,23 +788,6 @@ def main():
     print(f"\nResults: {solved_count}/{total_examples} examples solved ({success_rate*100:.1f}%)")
     print(f"Average steps: {avg_steps:.2f}")
     print(f"Average confidence: {avg_confidence:.3f}")
-    
-    # wandbに最終結果をログ
-    if args.use_wandb and WANDB_AVAILABLE:
-        wandb.log({
-            "final/success_rate": success_rate,
-            "final/avg_steps": avg_steps,
-            "final/avg_confidence": avg_confidence,
-            "final/solved_count": solved_count,
-            "final/total_examples": total_examples
-        })
-        
-        # タクティク使用頻度をログ
-        for tactic, count in tactic_usage.items():
-            wandb.log({f"tactics/{tactic}": count})
-        
-        wandb.finish()
-        print("Wandb logging completed!")
 
 
 if __name__ == "__main__":

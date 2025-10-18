@@ -86,7 +86,6 @@ def _process_tautology_worker(args: Tuple[Any, ...]) -> Dict[str, Any]:
         index,
         goal_str,
         max_steps,
-        probability_threshold,
         temperature,
         config,
     ) = args
@@ -135,59 +134,75 @@ def _process_tautology_worker(args: Tuple[Any, ...]) -> Dict[str, Any]:
                 _WORKER_LABEL_MAPPINGS,
                 _WORKER_DEVICE,
                 _WORKER_MAX_SEQ_LEN,
-                probability_threshold,
+                temperature,
             )
 
             success = False
             max_attempts = len(tactic_combinations)
             attempts = 0
-            available_tactics = [
-                tactic for tactic, _ in tactic_combinations if tactic not in failed_tactics
-            ]
 
-            while (
-                not success
-                and attempts < max_attempts
-                and not example_terminated
-                and available_tactics
-            ):
-                selected_tactic, _ = base_collector.select_tactic_probabilistically(
-                    tactic_combinations, temperature, failed_tactics
-                )
-
-                if not selected_tactic:
-                    example_terminated = True
-                    break
-
-                success = base_collector.apply_tactic_from_label(prover, selected_tactic)
-                attempts += 1
-
-                if success:
-                    tactic_dict = base_collector.parse_tactic_string_cached(selected_tactic)
-                    state_tactic_hash = base_collector.create_state_hash(
-                        current_premises, current_goal, selected_tactic
+            if temperature == 0.0:
+                # 確定的：確率の高い順に順番に試す
+                for tactic_str, probability in tactic_combinations[:max_attempts]:
+                    if tactic_str in failed_tactics:
+                        continue
+                    
+                    success = base_collector.apply_tactic_from_label(prover, tactic_str)
+                    attempts += 1
+                    
+                    if success:
+                        tactic_dict = base_collector.parse_tactic_string_cached(tactic_str)
+                        state_tactic_hash = base_collector.create_state_hash(
+                            current_premises, current_goal, tactic_str
+                        )
+                        example_successful_tactics.append(
+                            {
+                                "step_index": step,
+                                "premises": list(current_premises or []),
+                                "goal": current_goal,
+                                "tactic": tactic_dict,
+                                "tactic_apply": True,
+                                "state_tactic_hash": state_tactic_hash,
+                            }
+                        )
+                        break
+                    else:
+                        failed_tactics.add(tactic_str)
+            else:
+                # 確率的：確率的に選択して試す
+                while (
+                    not success
+                    and attempts < max_attempts
+                    and not example_terminated
+                ):
+                    selected_tactic, _ = base_collector.select_tactic_probabilistically(
+                        tactic_combinations, temperature, failed_tactics
                     )
-                    example_successful_tactics.append(
-                        {
-                            "step_index": step,
-                            "premises": list(current_premises or []),
-                            "goal": current_goal,
-                            "tactic": tactic_dict,
-                            "tactic_apply": True,
-                            "state_tactic_hash": state_tactic_hash,
-                        }
-                    )
-                else:
-                    failed_tactics.add(selected_tactic)
-                    available_tactics = [
-                        tactic
-                        for tactic, _ in tactic_combinations
-                        if tactic not in failed_tactics
-                    ]
 
-                    if not available_tactics:
+                    if not selected_tactic:
                         example_terminated = True
                         break
+
+                    success = base_collector.apply_tactic_from_label(prover, selected_tactic)
+                    attempts += 1
+
+                    if success:
+                        tactic_dict = base_collector.parse_tactic_string_cached(selected_tactic)
+                        state_tactic_hash = base_collector.create_state_hash(
+                            current_premises, current_goal, selected_tactic
+                        )
+                        example_successful_tactics.append(
+                            {
+                                "step_index": step,
+                                "premises": list(current_premises or []),
+                                "goal": current_goal,
+                                "tactic": tactic_dict,
+                                "tactic_apply": True,
+                                "state_tactic_hash": state_tactic_hash,
+                            }
+                        )
+                    else:
+                        failed_tactics.add(selected_tactic)
 
             step += 1
             solved = prover.goal is None
@@ -220,7 +235,6 @@ class StreamingSelfImprovementCollector:
     def __init__(self, 
                  model_path: str,
                  max_steps: int,
-                 probability_threshold: float,
                  temperature: float,
                  device: torch.device,
                  generated_data_dir: str,
@@ -232,7 +246,6 @@ class StreamingSelfImprovementCollector:
                  gcs_prefix: str = ""):
         self.model_path = model_path
         self.max_steps = max_steps
-        self.probability_threshold = probability_threshold
         self.temperature = temperature
         self.device = device
         self.generated_data_dir = generated_data_dir
@@ -326,7 +339,7 @@ class StreamingSelfImprovementCollector:
         else:
             examples_to_process = min(num_examples, len(self.tautologies))
         tasks = [
-            (index, goal, self.max_steps, self.probability_threshold, self.temperature, config)
+            (index, goal, self.max_steps, self.temperature, config)
             for index, goal in enumerate(self.tautologies[:examples_to_process])
         ]
         
@@ -389,7 +402,6 @@ class StreamingSelfImprovementCollector:
             max_seq_len=self.max_seq_len,
             num_examples=num_examples,
             max_steps=self.max_steps,
-            probability_threshold=self.probability_threshold,
             verbose=False,
             generated_data_dir=self.generated_data_dir,
             temperature=self.temperature,
@@ -400,7 +412,6 @@ def collect_self_improvement_data_parallel(
     model_path: str,
     num_examples: int,
     max_steps: int,
-    probability_threshold: float,
     temperature: float,
     device: torch.device,
     generated_data_dir: str,
@@ -428,7 +439,6 @@ def collect_self_improvement_data_parallel(
             max_seq_len=max_seq_len,
             num_examples=num_examples,
             max_steps=max_steps,
-            probability_threshold=probability_threshold,
             verbose=False,
             generated_data_dir=generated_data_dir,
             temperature=temperature,
@@ -456,7 +466,7 @@ def collect_self_improvement_data_parallel(
     }
 
     tasks = [
-        (index, goal, max_steps, probability_threshold, temperature, config)
+        (index, goal, max_steps, temperature, config)
         for index, goal in enumerate(tautologies)
     ]
 
@@ -619,12 +629,6 @@ def main() -> None:
         help="max steps per example",
     )
     parser.add_argument(
-        "--probability_threshold",
-        type=float,
-        default=0.001,
-        help="probability threshold for tactic generation",
-    )
-    parser.add_argument(
         "--device",
         type=str,
         default="auto",
@@ -702,7 +706,6 @@ def main() -> None:
     print(f"Starting parallel self improvement data collection with {args.num_workers} workers...")
     print(f"  Examples to process: {args.count}")
     print(f"  Max steps per example: {args.max_steps}")
-    print(f"  Probability threshold: {args.probability_threshold}")
     print(f"  Temperature: {args.temperature}")
     print(f"  Generated data directory: {args.generated_data_dir}")
     print(f"  Output directory: {args.output_dir}")
@@ -714,7 +717,6 @@ def main() -> None:
     collector = StreamingSelfImprovementCollector(
         model_path=args.model_path,
         max_steps=args.max_steps,
-        probability_threshold=args.probability_threshold,
         temperature=args.temperature,
         device=device,
         generated_data_dir=args.generated_data_dir,

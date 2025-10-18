@@ -39,7 +39,7 @@ from src.core.parameter import (
     get_model_params, get_training_params, 
     get_system_params, get_hierarchical_labels
 )
-from src.training.inference_hierarchical import evaluate_inference_performance
+from validation.inference_hierarchical import evaluate_inference_performance
 
 
 class SimpleDataset(Dataset):
@@ -175,6 +175,7 @@ def main():
     parser.add_argument("--random_seed", type=int, default=42, help="random seed for reproducibility")
     parser.add_argument("--log_frequency", type=int, default=1000, help="log training loss every n examples")
     parser.add_argument("--save_checkpoints", action="store_true", help="save model checkpoint after each epoch")
+    parser.add_argument("--load_model_path", type=str, default=None, help="path to pretrained model to load")
     
     # 推論評価関連の引数
     parser.add_argument("--inference_eval_examples", type=int, default=100, help="number of examples for inference evaluation")
@@ -300,6 +301,35 @@ def main():
     print(f"Model vocab_size: {tokenizer.vocab_size}")
     print(f"Model pad_id: {tokenizer.pad_id}")
     
+    # 事前学習済みモデルを読み込み（指定されている場合）
+    if args.load_model_path:
+        load_model_path = os.path.join(project_root, args.load_model_path)
+        if os.path.exists(load_model_path):
+            print(f"🔄 Loading pretrained model from: {load_model_path}")
+            try:
+                # state_dictを読み込み
+                state_dict = torch.load(load_model_path, map_location=device)
+                
+                # モデルのstate_dictを読み込み
+                model.load_state_dict(state_dict)
+                print("✅ Pretrained model loaded successfully!")
+                
+                # モデル構造の互換性をチェック
+                print(f"   Loaded model vocab_size: {model.vocab_size}")
+                print(f"   Loaded model pad_id: {model.pad_id}")
+                print(f"   Loaded model num_main_classes: {model.num_main_classes}")
+                print(f"   Loaded model num_arg1_classes: {model.num_arg1_classes}")
+                print(f"   Loaded model num_arg2_classes: {model.num_arg2_classes}")
+                
+            except Exception as e:
+                print(f"❌ Error loading pretrained model: {e}")
+                print("   Continuing with randomly initialized model...")
+        else:
+            print(f"❌ Pretrained model not found: {load_model_path}")
+            print("   Continuing with randomly initialized model...")
+    else:
+        print("🆕 Using randomly initialized model")
+    
     # モデルをデバイスに移動
     model = model.to(device)
     
@@ -348,9 +378,6 @@ def main():
         model, tokenizer, label_mappings, device, args.max_seq_len,
         num_examples=args.inference_eval_examples, 
         max_steps=args.inference_max_steps, 
-        temperature=args.inference_temperature,
-        difficulty=0.7,  # デフォルトのdifficulty値を使用
-        max_depth=4,  # データ生成時と同じmax_depth値を使用
         seed=42  # 再現性のため固定シードを使用
     )
     print(f"  Baseline inference success rate: {baseline_success_rate:.3f}")
@@ -440,9 +467,7 @@ def main():
             model, tokenizer, label_mappings, device, args.max_seq_len,
             num_examples=args.inference_eval_examples, 
             max_steps=args.inference_max_steps, 
-            temperature=args.inference_temperature,
-            difficulty=0.7,  # デフォルトのdifficulty値を使用
-            max_depth=4  # データ生成時と同じmax_depth値を使用
+            seed=42  # 再現性のため固定シードを使用
         )
         print(f"  Inference success rate: {inference_success_rate:.3f}")
         print(f"  Inference avg steps (when solved): {inference_avg_steps:.2f}")
