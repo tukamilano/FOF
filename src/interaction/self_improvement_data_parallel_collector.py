@@ -16,6 +16,7 @@ import os
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Tuple
+import multiprocessing
 
 import torch
 from tqdm import tqdm
@@ -607,6 +608,9 @@ def upload_directory_to_gcs(local_dir: str, gcs_bucket: str, gcs_prefix: str) ->
 
 
 def main() -> None:
+    # Set multiprocessing start method to 'spawn' to avoid CUDA issues
+    multiprocessing.set_start_method('spawn', force=True)
+    
     parser = argparse.ArgumentParser(
         description="Collect self improvement data from solved examples in parallel"
     )

@@ -11,6 +11,8 @@ import json
 import time
 from typing import List, Tuple, Dict, Any
 
+from tqdm import tqdm
+
 
 # プロジェクトルートをパスに追加
 project_root = os.path.dirname(os.path.dirname(__file__))
@@ -667,117 +669,124 @@ def main():
     tactic_usage = {}
     confidence_scores = []
     
-    for i, goal_str in enumerate(tautologies):
-        if not goal_str:
-            print(f"Warning: Empty formula for example {i+1}, skipping...")
-            continue
-        try:
-            # パースしてproverを作成
-            parse_tree = PropParseTree()
-            goal_node = parse_tree.transform(prop_parser.parse(goal_str))
-            prover = Prover(goal_node)
-            
-            # 前提は空（トートロジーなので前提なしで証明可能）
-            premises = []
-            
-            if args.verbose:
-                print(f"\nExample {i+1}:")
-                print(f"  Goal: {goal_str}")
-                print(f"  Premises: {premises}")
-            
-            # 推論ループ
-            step = 0
-            solved = prover.goal is None
-            example_tactics = []
-            example_confidences = []
-            failed_tactics = set()
-            
-            while not solved and step < args.max_steps:
-                # 現在の状態を取得
-                current_state = encode_prover_state(prover)
-                current_premises = current_state["premises"]
-                current_goal = current_state["goal"]
+    with tqdm(
+        total=len(tautologies),
+        desc="Processing examples",
+        unit="example",
+    ) as progress:
+        for i, goal_str in enumerate(tautologies):
+            if not goal_str:
+                print(f"Warning: Empty formula for example {i+1}, skipping...")
+                progress.update(1)
+                continue
+            try:
+                # パースしてproverを作成
+                parse_tree = PropParseTree()
+                goal_node = parse_tree.transform(prop_parser.parse(goal_str))
+                prover = Prover(goal_node)
                 
-                # すべての可能なタクティクの組み合わせを生成（確率の高い順）
-                tactic_combinations = generate_all_tactic_combinations(
-                    model, tokenizer, current_premises, current_goal,
-                    label_mappings, device, max_seq_len, temperature
-                )
+                # 前提は空（トートロジーなので前提なしで証明可能）
+                premises = []
                 
                 if args.verbose:
-                    print(f"  Step {step+1}: Generated {len(tactic_combinations)} tactic combinations")
-                    print(f"    Top 5: {[(t, f'{p:.3f}') for t, p in tactic_combinations[:5]]}")
+                    print(f"\nExample {i+1}:")
+                    print(f"  Goal: {goal_str}")
+                    print(f"  Premises: {premises}")
                 
-                # temperatureに応じて選択方法を変更
-                if temperature == 0.0:
-                    # 確定的：確率の高い順に順番に試す
-                    success = False
-                    for tactic_str, probability in tactic_combinations[:args.max_steps]:
-                        # タクティクを適用
-                        success = apply_tactic_from_label(prover, tactic_str)
-                        
-                        # ログ用データを記録
-                        example_tactics.append(tactic_str)
-                        example_confidences.append(probability)
-                        tactic_usage[tactic_str] = tactic_usage.get(tactic_str, 0) + 1
-                        
-                        if args.verbose:
-                            print(f"    Trying {tactic_str} (prob: {probability:.3f}) - {'Success' if success else 'Failed'}")
-                        
-                        if success:
-                            break
-                else:
-                    # 確率的：確率的に選択して試す
-                    success = False
-                    max_attempts = min(len(tactic_combinations), args.max_steps)
-                    attempts = 0
-                    
-                    while not success and attempts < max_attempts:
-                        selected_tactic, selected_prob = select_tactic_probabilistically(
-                            tactic_combinations, temperature, failed_tactics
-                        )
-                        
-                        if not selected_tactic:
-                            # 利用可能なタクティクがない場合は終了
-                            break
-                        
-                        # タクティクを適用
-                        success = apply_tactic_from_label(prover, selected_tactic)
-                        attempts += 1
-                        
-                        # ログ用データを記録
-                        example_tactics.append(selected_tactic)
-                        example_confidences.append(selected_prob)
-                        tactic_usage[selected_tactic] = tactic_usage.get(selected_tactic, 0) + 1
-                        
-                        if args.verbose:
-                            print(f"    Trying {selected_tactic} (prob: {selected_prob:.3f}) - {'Success' if success else 'Failed'}")
-                        
-                        if not success:
-                            # 失敗したタクティクを記録
-                            failed_tactics.add(selected_tactic)
-                
-                step += 1
+                # 推論ループ
+                step = 0
                 solved = prover.goal is None
-            
-            # 例の結果を記録
-            step_counts.append(step)
-            confidence_scores.extend(example_confidences)
-            
-            if solved:
-                solved_count += 1
-                if args.verbose:
-                    print(f"  Result: SOLVED in {step} steps")
-            else:
-                if args.verbose:
-                    print(f"  Result: FAILED after {step} steps")
-            
+                example_tactics = []
+                example_confidences = []
+                failed_tactics = set()
                 
-        except Exception as e:
-            # パースエラーなどで失敗した場合はスキップ
-            print(f"Warning: Failed to process tautology {i+1}: {e}")
-            step_counts.append(args.max_steps)  # 失敗として記録
-            continue
+                while not solved and step < args.max_steps:
+                    # 現在の状態を取得
+                    current_state = encode_prover_state(prover)
+                    current_premises = current_state["premises"]
+                    current_goal = current_state["goal"]
+                    
+                    # すべての可能なタクティクの組み合わせを生成（確率の高い順）
+                    tactic_combinations = generate_all_tactic_combinations(
+                        model, tokenizer, current_premises, current_goal,
+                        label_mappings, device, max_seq_len, temperature
+                    )
+                    
+                    if args.verbose:
+                        print(f"  Step {step+1}: Generated {len(tactic_combinations)} tactic combinations")
+                        print(f"    Top 5: {[(t, f'{p:.3f}') for t, p in tactic_combinations[:5]]}")
+                    
+                    # temperatureに応じて選択方法を変更
+                    if temperature == 0.0:
+                        # 確定的：確率の高い順に順番に試す
+                        success = False
+                        for tactic_str, probability in tactic_combinations[:args.max_steps]:
+                            # タクティクを適用
+                            success = apply_tactic_from_label(prover, tactic_str)
+                            
+                            # ログ用データを記録
+                            example_tactics.append(tactic_str)
+                            example_confidences.append(probability)
+                            tactic_usage[tactic_str] = tactic_usage.get(tactic_str, 0) + 1
+                            
+                            if args.verbose:
+                                print(f"    Trying {tactic_str} (prob: {probability:.3f}) - {'Success' if success else 'Failed'}")
+                            
+                            if success:
+                                break
+                    else:
+                        # 確率的：確率的に選択して試す
+                        success = False
+                        max_attempts = min(len(tactic_combinations), args.max_steps)
+                        attempts = 0
+                        
+                        while not success and attempts < max_attempts:
+                            selected_tactic, selected_prob = select_tactic_probabilistically(
+                                tactic_combinations, temperature, failed_tactics
+                            )
+                            
+                            if not selected_tactic:
+                                # 利用可能なタクティクがない場合は終了
+                                break
+                            
+                            # タクティクを適用
+                            success = apply_tactic_from_label(prover, selected_tactic)
+                            attempts += 1
+                            
+                            # ログ用データを記録
+                            example_tactics.append(selected_tactic)
+                            example_confidences.append(selected_prob)
+                            tactic_usage[selected_tactic] = tactic_usage.get(selected_tactic, 0) + 1
+                            
+                            if args.verbose:
+                                print(f"    Trying {selected_tactic} (prob: {selected_prob:.3f}) - {'Success' if success else 'Failed'}")
+                            
+                            if not success:
+                                # 失敗したタクティクを記録
+                                failed_tactics.add(selected_tactic)
+                    
+                    step += 1
+                    solved = prover.goal is None
+                
+                # 例の結果を記録
+                step_counts.append(step)
+                confidence_scores.extend(example_confidences)
+                
+                if solved:
+                    solved_count += 1
+                    if args.verbose:
+                        print(f"  Result: SOLVED in {step} steps")
+                else:
+                    if args.verbose:
+                        print(f"  Result: FAILED after {step} steps")
+                
+            except Exception as e:
+                # パースエラーなどで失敗した場合はスキップ
+                print(f"Warning: Failed to process tautology {i+1}: {e}")
+                step_counts.append(args.max_steps)  # 失敗として記録
+            
+            # プログレスバーを更新
+            progress.update(1)
     
     # 最終結果を計算
     total_examples = len(step_counts)  # 実際に処理された問題数
