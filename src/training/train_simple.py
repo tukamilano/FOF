@@ -165,7 +165,7 @@ def main():
     parser.add_argument("--learning_rate", type=float, default=3e-4, help="learning rate")
     parser.add_argument("--num_epochs", type=int, default=1, help="number of epochs")
     parser.add_argument("--device", type=str, default="auto", help="device")
-    parser.add_argument("--save_path", type=str, default="models/simple_model.pth", help="model save path")
+    parser.add_argument("--save_path", type=str, default=None, help="model save path (auto-generated from data_dir if not specified)")
     parser.add_argument("--max_seq_len", type=int, default=256, help="maximum sequence length")
     parser.add_argument("--use_wandb", action="store_true", help="use wandb for logging")
     parser.add_argument("--wandb_project", type=str, default="fof-simple-training", help="wandb project name")
@@ -229,6 +229,13 @@ def main():
     
     # データディレクトリの設定
     data_dir = os.path.join(project_root, args.data_dir)
+    
+    # 保存パスの自動生成（指定されていない場合）
+    if args.save_path is None:
+        # データディレクトリ名から保存名を生成
+        data_dir_name = os.path.basename(args.data_dir.rstrip('/'))
+        args.save_path = f"models/{data_dir_name}.pth"
+        print(f"Auto-generated save path: {args.save_path}")
     
     # データディレクトリの存在確認
     if not os.path.exists(data_dir):
