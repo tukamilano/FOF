@@ -60,24 +60,47 @@ class SimpleDataset(Dataset):
         self.arg2_to_id = arg2_to_id
         self.max_seq_len = max_seq_len
         
-        # 重複排除済みバッチデータを読み込み
+        # データを読み込み
         self.data = self._load_batch_data(data_dir)
     
     def _load_batch_data(self, data_dir: str) -> List[Dict[str, Any]]:
-        """重複排除済みバッチデータを読み込み"""
+        """データを読み込み（ディレクトリ配下のすべてのJSONファイル）"""
         data = []
-        json_files = glob.glob(os.path.join(data_dir, "deduplicated_batch_*.json"))
-        json_files.sort()  # バッチファイルを順序よく読み込み
         
-        print(f"Found {len(json_files)} batch files in {data_dir}")
+        # ディレクトリ配下のすべてのJSONファイルを探す
+        json_files = glob.glob(os.path.join(data_dir, "*.json"))
+        json_files.sort()  # ファイルを順序よく読み込み
+        
+        print(f"Found {len(json_files)} JSON files in {data_dir}")
         
         for json_file in json_files:
             print(f"Loading {os.path.basename(json_file)}...")
             with open(json_file, 'r') as f:
-                batch_data = json.load(f)
+                file_data = json.load(f)
             
-            # バッチデータを直接追加（既に重複排除済み）
-            data.extend(batch_data)
+            # データの形式に応じて処理
+            if isinstance(file_data, list):
+                # リスト形式の場合（重複排除済みバッチデータまたはsteps形式）
+                if file_data and isinstance(file_data[0], dict):
+                    # 各要素が辞書の場合
+                    if 'premises' in file_data[0] and 'goal' in file_data[0] and 'tactic' in file_data[0]:
+                        # 既に学習用形式の場合
+                        data.extend(file_data)
+                    else:
+                        # steps形式の場合、各stepを抽出
+                        for example in file_data:
+                            steps = example.get('steps', [])
+                            for step in steps:
+                                data.append(step)
+                else:
+                    # 空のリストの場合
+                    continue
+            else:
+                # 単一の辞書形式の場合
+                if isinstance(file_data, dict) and 'steps' in file_data:
+                    steps = file_data.get('steps', [])
+                    for step in steps:
+                        data.append(step)
         
         print(f"Loaded {len(data)} training examples")
         return data
@@ -243,15 +266,15 @@ def main():
         print("Please run: python src/training/deduplicate_generated_data.py")
         return
     
-    # バッチファイルの存在確認
-    batch_files = glob.glob(os.path.join(data_dir, "deduplicated_batch_*.json"))
-    if not batch_files:
-        print(f"❌ No deduplicated batch files found in {data_dir}")
-        print("Please run: python src/training/deduplicate_generated_data.py")
+    # データファイルの存在確認
+    json_files = glob.glob(os.path.join(data_dir, "*.json"))
+    if not json_files:
+        print(f"❌ No JSON files found in {data_dir}")
+        print("Please ensure the directory contains JSON files with training data")
         return
     
-    print(f"✅ Using deduplicated data from: {data_dir}")
-    print(f"   Found {len(batch_files)} batch files")
+    print(f"✅ Using data from: {data_dir}")
+    print(f"   Found {len(json_files)} JSON files")
     
     # トークンとラベルを読み込み
     token_py_path = os.path.join(project_root, "src", "core", "fof_tokens.py")
@@ -287,7 +310,7 @@ def main():
     )
     
     if len(dataset) == 0:
-        print("No training data found. Please check the deduplicated data directory.")
+        print("No training data found. Please check the data directory.")
         return
     
     # モデルを作成
