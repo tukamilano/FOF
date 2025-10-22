@@ -20,6 +20,7 @@ for T in "${TEMPS[@]}"; do
         --num_workers ${NUM_WORKERS} \
         --gcs_bucket ${BUCKET} \
         --gcs_prefix "${PREFIX}" \
+        --generated_data_dir "generated_data_${CYCLE}/temperature_${T}_mixture" \
         --temperature ${T} \
         > /dev/null 2>&1 &
 done

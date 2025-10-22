@@ -1,5 +1,5 @@
 #!/bin/bash
-# 使い方: ./create_mixtures.sh RL3
+# 使い方: ./create_temperature_mixture.sh RL3
 # RL3などのサイクル名を引数に指定すると、自動的にtemperature_1〜2まで実行されます
 
 CYCLE=${1:-RL1}
@@ -14,6 +14,7 @@ for T in "${TEMPS[@]}"; do
     python3 create_temperature_mixtures.py \
         --temperatures ${T} \
         --output-dir ${OUTPUT_DIR} \
+        --input-dir generated_data_RL1 \
         --base-dir ${BASE_DIR}
 done
 

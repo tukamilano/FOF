@@ -107,6 +107,8 @@ def main():
     parser = argparse.ArgumentParser(description="Create temperature mixture datasets")
     parser.add_argument("--base-dir", default="/Users/milano/FOF", 
                        help="Base directory containing generated_data_RL1 and deduplicated_data")
+    parser.add_argument("--input-dir", default="generated_data_RL1",
+                       help="Input directory containing temperature data (default: generated_data_RL1)")
     parser.add_argument("--output-dir", required=True,
                        help="Output directory for mixture datasets")
     parser.add_argument("--ratio", type=float, default=0.7, 
@@ -136,7 +138,7 @@ def main():
         print(f"{'='*60}")
         
         # Load temperature data
-        temp_path = os.path.join(args.base_dir, "generated_data_RL1", temp_dir)
+        temp_path = os.path.join(args.base_dir, args.input_dir, temp_dir)
         if not os.path.exists(temp_path):
             print(f"Warning: {temp_path} does not exist, skipping...")
             continue
