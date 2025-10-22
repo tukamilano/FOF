@@ -18,8 +18,8 @@ TEMPS=("1" "1.25" "1.5" "2")
 LOG_DIR="logs_${DST_LOOP}"
 mkdir -p "${LOG_DIR}"
 
-# === トレーニング実行 ===
-echo "=== Launching training jobs for ${DST_LOOP} ==="
+# === トレーニング実行（順次実行） ===
+echo "=== Starting sequential training for ${DST_LOOP} ==="
 
 for TEMP in "${TEMPS[@]}"; do
   DATA_DIR="generated_data_${DST_LOOP}/temperature_${TEMP}_mixture"
@@ -28,7 +28,7 @@ for TEMP in "${TEMPS[@]}"; do
   LOG_FILE="${LOG_DIR}/train_${TEMP}.log"
 
   echo "→ Starting training for temperature=${TEMP}"
-  nohup python src/training/train_simple.py \
+  python src/training/train_simple.py \
     --data_dir "${DATA_DIR}" \
     --num_epochs 1 \
     --learning_rate 1e-7 \
@@ -36,13 +36,11 @@ for TEMP in "${TEMPS[@]}"; do
     --use_wandb \
     --load_model_path "${LOAD_MODEL}" \
     --save_path "${SAVE_MODEL}" \
-    > "${LOG_FILE}" 2>&1 &
+    > "${LOG_FILE}" 2>&1
+  
+  echo "✓ Completed training for temperature=${TEMP}"
 done
 
-echo "All training jobs launched. Waiting for them to finish..."
-
-# === 全ジョブの終了を待機 ===
-wait
 echo "All training jobs completed."
 
 # === GCSへアップロード ===
