@@ -39,7 +39,6 @@ from src.core.parameter import (
     get_model_params, get_training_params, 
     get_system_params, get_hierarchical_labels
 )
-from validation.inference_hierarchical import evaluate_inference_performance
 
 
 class SimpleDataset(Dataset):
@@ -199,11 +198,6 @@ def main():
     parser.add_argument("--log_frequency", type=int, default=1000, help="log training loss every n examples")
     parser.add_argument("--save_checkpoints", action="store_true", help="save model checkpoint after each epoch")
     parser.add_argument("--load_model_path", type=str, default=None, help="path to pretrained model to load")
-    
-    # 推論評価関連の引数
-    parser.add_argument("--inference_eval_examples", type=int, default=100, help="number of examples for inference evaluation")
-    parser.add_argument("--inference_max_steps", type=int, default=30, help="max steps for inference evaluation")
-    parser.add_argument("--inference_temperature", type=float, default=1.0, help="temperature for inference evaluation")
     
     args = parser.parse_args()
     
@@ -402,26 +396,6 @@ def main():
     print(f"📊 Log frequency: every {args.log_frequency} examples")
     print("=" * 60)
     
-    # 学習開始前のベースライン推論評価
-    print(f"\n🔍 Evaluating baseline inference performance (before training)...")
-    baseline_success_rate, baseline_avg_steps = evaluate_inference_performance(
-        model, tokenizer, label_mappings, device, args.max_seq_len,
-        num_examples=args.inference_eval_examples, 
-        max_steps=args.inference_max_steps, 
-        seed=42  # 再現性のため固定シードを使用
-    )
-    print(f"  Baseline inference success rate: {baseline_success_rate:.3f}")
-    print(f"  Baseline inference avg steps (when solved): {baseline_avg_steps:.2f}")
-    
-    # ベースライン結果をwandbに記録
-    if args.use_wandb and WANDB_AVAILABLE:
-        wandb.log({
-            "inference/success_rate": baseline_success_rate,
-            "inference/avg_steps": baseline_avg_steps
-        })
-    
-    print("=" * 60)
-    
     # 学習ループ
     total_examples = 0
     epoch_losses = []
@@ -491,17 +465,6 @@ def main():
         
         print(f"Epoch {epoch+1} completed. Average loss: {avg_epoch_loss:.4f}")
         
-        # 推論性能を評価（毎エポック）
-        print(f"\n🔍 Evaluating inference performance after epoch {epoch+1}...")
-        inference_success_rate, inference_avg_steps = evaluate_inference_performance(
-            model, tokenizer, label_mappings, device, args.max_seq_len,
-            num_examples=args.inference_eval_examples, 
-            max_steps=args.inference_max_steps, 
-            seed=42  # 再現性のため固定シードを使用
-        )
-        print(f"  Inference success rate: {inference_success_rate:.3f}")
-        print(f"  Inference avg steps (when solved): {inference_avg_steps:.2f}")
-        
         # エポックごとにモデルを保存
         if args.save_checkpoints:
             checkpoint_path = f"models/simple_model_epoch_{epoch+1}.pth"
@@ -518,9 +481,7 @@ def main():
         if args.use_wandb and WANDB_AVAILABLE:
             wandb.log({
                 "epoch": epoch + 1,
-                "epoch_loss": avg_epoch_loss,
-                "inference/success_rate": inference_success_rate,
-                "inference/avg_steps": inference_avg_steps
+                "epoch_loss": avg_epoch_loss
             })
     
     # 最終モデルを保存
