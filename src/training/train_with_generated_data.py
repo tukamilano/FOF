@@ -10,6 +10,7 @@ import os
 import sys
 import glob
 import time
+import math
 from typing import List, Tuple, Dict, Any
 
 try:
@@ -152,6 +153,8 @@ def train_epoch(
     device: torch.device,
     arg1_loss_weight: float = 0.8,
     arg2_loss_weight: float = 0.8,
+    entropy_reg_weight: float = 0.0,
+    kl_penalty_weight: float = 0.0,
     use_amp: bool = False,
     scaler: GradScaler = None,
     gradient_accumulation_steps: int = 1,
@@ -166,9 +169,77 @@ def train_epoch(
     
     # 直近1000バッチの損失を記録するためのキュー
     recent_losses = []
-    
+    recent_entropy_reg_losses = []
+    recent_kl_penalties = []
+
     pbar = tqdm(dataloader, desc="Training", unit="batch")
-    
+
+    def compute_entropy(logits: torch.Tensor) -> torch.Tensor:
+        """Compute mean entropy for the provided logits."""
+        if logits.numel() == 0:
+            return torch.tensor(0.0, device=device)
+        log_probs = torch.log_softmax(logits, dim=-1)
+        probs = torch.softmax(logits, dim=-1)
+        entropy = -(probs * log_probs).sum(dim=-1)
+        return entropy.mean()
+
+    def compute_kl_to_uniform(logits: torch.Tensor) -> torch.Tensor:
+        """Compute mean KL divergence from predictions to uniform distribution."""
+        if logits.numel() == 0:
+            return torch.tensor(0.0, device=device)
+        log_probs = torch.log_softmax(logits, dim=-1)
+        probs = torch.softmax(logits, dim=-1)
+        log_uniform = -math.log(logits.size(-1))
+        kl = (probs * (log_probs - log_uniform)).sum(dim=-1)
+        return kl.mean()
+
+    def compute_batch_loss(main_logits, arg1_logits, arg2_logits):
+        main_loss = criterion(main_logits, main_labels)
+
+        arg1_valid_mask = arg1_labels != -1
+        if arg1_valid_mask.any():
+            arg1_loss = criterion(arg1_logits[arg1_valid_mask], arg1_labels[arg1_valid_mask])
+        else:
+            arg1_loss = torch.tensor(0.0, device=device)
+
+        arg2_valid_mask = arg2_labels != -1
+        if arg2_valid_mask.any():
+            arg2_loss = criterion(arg2_logits[arg2_valid_mask], arg2_labels[arg2_valid_mask])
+        else:
+            arg2_loss = torch.tensor(0.0, device=device)
+
+        total_loss_local = main_loss + arg1_loss_weight * arg1_loss + arg2_loss_weight * arg2_loss
+
+        entropy_loss = torch.tensor(0.0, device=device)
+        if entropy_reg_weight != 0.0:
+            entropy_terms = [compute_entropy(main_logits)]
+            if arg1_valid_mask.any():
+                entropy_terms.append(compute_entropy(arg1_logits[arg1_valid_mask]))
+            if arg2_valid_mask.any():
+                entropy_terms.append(compute_entropy(arg2_logits[arg2_valid_mask]))
+            entropy_loss = -torch.stack(entropy_terms).mean()
+            total_loss_local = total_loss_local + entropy_reg_weight * entropy_loss
+
+        kl_penalty_loss = torch.tensor(0.0, device=device)
+        if kl_penalty_weight != 0.0:
+            kl_terms = [compute_kl_to_uniform(main_logits)]
+            if arg1_valid_mask.any():
+                kl_terms.append(compute_kl_to_uniform(arg1_logits[arg1_valid_mask]))
+            if arg2_valid_mask.any():
+                kl_terms.append(compute_kl_to_uniform(arg2_logits[arg2_valid_mask]))
+            kl_penalty_loss = torch.stack(kl_terms).mean()
+            total_loss_local = total_loss_local + kl_penalty_weight * kl_penalty_loss
+
+        loss_components = {
+            "main_loss": main_loss.detach(),
+            "arg1_loss": arg1_loss.detach(),
+            "arg2_loss": arg2_loss.detach(),
+            "entropy_reg": (entropy_reg_weight * entropy_loss).detach() if entropy_reg_weight != 0.0 else torch.tensor(0.0, device=device),
+            "kl_penalty": (kl_penalty_weight * kl_penalty_loss).detach() if kl_penalty_weight != 0.0 else torch.tensor(0.0, device=device),
+        }
+
+        return total_loss_local, loss_components
+
     for batch_idx, batch in enumerate(pbar):
         input_ids, attention_mask, main_labels, arg1_labels, arg2_labels = batch
         input_ids = input_ids.to(device)
@@ -176,63 +247,33 @@ def train_epoch(
         main_labels = main_labels.to(device)
         arg1_labels = arg1_labels.to(device)
         arg2_labels = arg2_labels.to(device)
-        
+
         # オプティマイザーの勾配をリセット
         optimizer.zero_grad()
-        
+
         # 混合精度での推論
         if use_amp and scaler is not None:
             with autocast():
                 # モデル推論
                 main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
-                
-                # シンプルな損失計算（無効値-1を除外）
-                main_loss = criterion(main_logits, main_labels)
-                
-                # arg1の損失計算（無効値-1を除外）
-                arg1_valid_mask = arg1_labels != -1
-                arg1_loss = 0.0
-                if arg1_valid_mask.any():
-                    arg1_loss = criterion(arg1_logits[arg1_valid_mask], arg1_labels[arg1_valid_mask])
-                
-                # arg2の損失計算（無効値-1を除外）
-                arg2_valid_mask = arg2_labels != -1
-                arg2_loss = 0.0
-                if arg2_valid_mask.any():
-                    arg2_loss = criterion(arg2_logits[arg2_valid_mask], arg2_labels[arg2_valid_mask])
-                
-                # 総損失（重み付き）
-                total_loss_batch = main_loss + arg1_loss_weight * arg1_loss + arg2_loss_weight * arg2_loss
+
+                # 正則化込みの損失計算
+                total_loss_batch, loss_components = compute_batch_loss(main_logits, arg1_logits, arg2_logits)
                 total_loss_batch = total_loss_batch / gradient_accumulation_steps
-            
+
             # 混合精度での逆伝播
             scaler.scale(total_loss_batch).backward()
         else:
             # 通常の推論
             main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
-            
-            # シンプルな損失計算（無効値-1を除外）
-            main_loss = criterion(main_logits, main_labels)
-            
-            # arg1の損失計算（無効値-1を除外）
-            arg1_valid_mask = arg1_labels != -1
-            arg1_loss = 0.0
-            if arg1_valid_mask.any():
-                arg1_loss = criterion(arg1_logits[arg1_valid_mask], arg1_labels[arg1_valid_mask])
-            
-            # arg2の損失計算（無効値-1を除外）
-            arg2_valid_mask = arg2_labels != -1
-            arg2_loss = 0.0
-            if arg2_valid_mask.any():
-                arg2_loss = criterion(arg2_logits[arg2_valid_mask], arg2_labels[arg2_valid_mask])
-            
-            # 総損失（重み付き）
-            total_loss_batch = main_loss + arg1_loss_weight * arg1_loss + arg2_loss_weight * arg2_loss
+
+            # 正則化込みの損失計算
+            total_loss_batch, loss_components = compute_batch_loss(main_logits, arg1_logits, arg2_logits)
             total_loss_batch = total_loss_batch / gradient_accumulation_steps
-            
+
             # 通常の逆伝播
             total_loss_batch.backward()
-        
+
         # 勾配累積のステップが完了したらオプティマイザーを更新
         if (batch_idx + 1) % gradient_accumulation_steps == 0:
             if use_amp and scaler is not None:
@@ -244,23 +285,40 @@ def train_epoch(
         
         total_loss += total_loss_batch.item() * gradient_accumulation_steps
         num_batches += 1
-        
+
         # 直近1000バッチの損失を記録
         current_loss = total_loss_batch.item() * gradient_accumulation_steps
         recent_losses.append(current_loss)
         if len(recent_losses) > 1000:
             recent_losses.pop(0)  # 古い損失を削除
-        
+
+        if entropy_reg_weight != 0.0:
+            entropy_contribution = loss_components["entropy_reg"].item()
+            recent_entropy_reg_losses.append(entropy_contribution)
+            if len(recent_entropy_reg_losses) > 1000:
+                recent_entropy_reg_losses.pop(0)
+
+        if kl_penalty_weight != 0.0:
+            kl_contribution = loss_components["kl_penalty"].item()
+            recent_kl_penalties.append(kl_contribution)
+            if len(recent_kl_penalties) > 1000:
+                recent_kl_penalties.pop(0)
+
         # プログレスバーを更新
         pbar.set_postfix({'Loss': f'{total_loss / num_batches:.4f}'})
-        
+
         # 指定された頻度でwandbにログ
         if use_wandb and WANDB_AVAILABLE and batch_idx % log_frequency == 0:
             recent_avg_loss = sum(recent_losses) / len(recent_losses) if recent_losses else 0.0
-            wandb.log({
+            log_payload = {
                 "recent_avg_loss": recent_avg_loss
-            })
-    
+            }
+            if entropy_reg_weight != 0.0 and recent_entropy_reg_losses:
+                log_payload["recent_entropy_reg_loss"] = sum(recent_entropy_reg_losses) / len(recent_entropy_reg_losses)
+            if kl_penalty_weight != 0.0 and recent_kl_penalties:
+                log_payload["recent_kl_penalty"] = sum(recent_kl_penalties) / len(recent_kl_penalties)
+            wandb.log(log_payload)
+
     return total_loss / num_batches if num_batches > 0 else 0.0
 
 
@@ -278,6 +336,8 @@ def main():
     parser.add_argument("--wandb_run_name", type=str, default=None, help="wandb run name")
     parser.add_argument("--arg1_loss_weight", type=float, default=0.8, help="weight for arg1 loss")
     parser.add_argument("--arg2_loss_weight", type=float, default=0.8, help="weight for arg2 loss")
+    parser.add_argument("--entropy_reg_weight", type=float, default=0.0, help="weight for entropy regularization (positive values penalize high entropy)")
+    parser.add_argument("--kl_penalty_weight", type=float, default=0.0, help="weight for KL penalty against uniform distribution")
     parser.add_argument("--random_seed", type=int, default=42, help="random seed for reproducibility")
     parser.add_argument("--log_frequency", type=int, default=1000, help="log training loss every n batches")
     parser.add_argument("--save_checkpoints", action="store_true", help="save model checkpoint after each epoch")
@@ -339,6 +399,8 @@ def main():
     print(f"   Use DataParallel: {args.use_data_parallel}")
     print(f"   GPU IDs: {args.gpu_ids}")
     print(f"   Gradient accumulation steps: {args.gradient_accumulation_steps}")
+    print(f"   Entropy regularization weight: {args.entropy_reg_weight}")
+    print(f"   KL penalty weight: {args.kl_penalty_weight}")
     print(f"   Random seed: {args.random_seed}")
     print(f"   Save checkpoints: {args.save_checkpoints}")
     print(f"   Use wandb: {args.use_wandb}")
@@ -521,6 +583,10 @@ def main():
                 "learning_rate": args.learning_rate,
                 "num_epochs": args.num_epochs,
                 "max_seq_len": args.max_seq_len,
+                "arg1_loss_weight": args.arg1_loss_weight,
+                "arg2_loss_weight": args.arg2_loss_weight,
+                "entropy_reg_weight": args.entropy_reg_weight,
+                "kl_penalty_weight": args.kl_penalty_weight,
                 "device": str(device),
                 "save_checkpoints": args.save_checkpoints,
                 "checkpoint_dir": args.checkpoint_dir
@@ -584,6 +650,8 @@ def main():
             device=device,
             arg1_loss_weight=args.arg1_loss_weight,
             arg2_loss_weight=args.arg2_loss_weight,
+            entropy_reg_weight=args.entropy_reg_weight,
+            kl_penalty_weight=args.kl_penalty_weight,
             use_amp=use_amp,
             scaler=scaler,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
