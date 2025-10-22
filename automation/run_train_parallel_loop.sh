@@ -1,8 +1,10 @@
 #!/bin/bash
-# Usage: ./run_train_parallel_loop.sh <SRC_LOOP> <DST_LOOP> <BUCKET_NAME> [BATCH_SIZE] [--batch-size <N>] [--entropy-reg-weight <V>] \
-#        [--kl-penalty-weight <V>] [--kl-reference-model-template <PATH>] [--arg1-loss-weight <V>] [--arg2-loss-weight <V>] [--extra-arg <ARG>]...
-# Example: ./run_train_parallel_loop.sh RL1 RL2 fof-data-20251010-milano 32 --entropy-reg-weight 0.05 --kl-penalty-weight 0.1 \
-#          --kl-reference-model-template "models/{SRC_LOOP}_temperature_{TEMP}_low_lr.pth"
+# Usage: ./run_train_parallel_loop.sh <SRC_LOOP> <DST_LOOP> <BUCKET_NAME> [BATCH_SIZE]
+#        [--entropy-reg-weight <V>] [--kl-penalty-weight <V>]
+#        [--kl-reference-model-template <PATH>] [--arg1-loss-weight <V>] [--arg2-loss-weight <V>]
+#        [-- <additional python args...>]
+# Example: ./run_train_parallel_loop.sh RL1 RL2 bucket 32 --entropy-reg-weight 0.05 --kl-penalty-weight 0.1 \
+#          --kl-reference-model-template "models/{SRC_LOOP}_temperature_{TEMP}_low_lr.pth" -- --num-epochs 2
 
 set -e  # 途中でエラーが出たら終了
 
@@ -32,61 +34,25 @@ fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --batch-size)
-      BATCH_SIZE=$2
-      shift 2
-      ;;
-    --batch-size=*)
-      BATCH_SIZE="${1#*=}"
-      shift
-      ;;
     --entropy-reg-weight)
       ENTROPY_REG_WEIGHT=$2
       shift 2
-      ;;
-    --entropy-reg-weight=*)
-      ENTROPY_REG_WEIGHT="${1#*=}"
-      shift
       ;;
     --kl-penalty-weight)
       KL_PENALTY_WEIGHT=$2
       shift 2
       ;;
-    --kl-penalty-weight=*)
-      KL_PENALTY_WEIGHT="${1#*=}"
-      shift
-      ;;
     --kl-reference-model-template)
       KL_REFERENCE_MODEL_TEMPLATE=$2
       shift 2
-      ;;
-    --kl-reference-model-template=*)
-      KL_REFERENCE_MODEL_TEMPLATE="${1#*=}"
-      shift
       ;;
     --arg1-loss-weight)
       ARG1_LOSS_WEIGHT=$2
       shift 2
       ;;
-    --arg1-loss-weight=*)
-      ARG1_LOSS_WEIGHT="${1#*=}"
-      shift
-      ;;
     --arg2-loss-weight)
       ARG2_LOSS_WEIGHT=$2
       shift 2
-      ;;
-    --arg2-loss-weight=*)
-      ARG2_LOSS_WEIGHT="${1#*=}"
-      shift
-      ;;
-    --extra-arg)
-      EXTRA_PYTHON_ARGS+=("$2")
-      shift 2
-      ;;
-    --extra-arg=*)
-      EXTRA_PYTHON_ARGS+=("${1#*=}")
-      shift
       ;;
     --)
       shift
