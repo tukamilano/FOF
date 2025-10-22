@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-シンプルな学習スクリプト（重複排除済みバッチデータ専用）
+並列化バッチ学習スクリプト（重複排除済みデータ専用）
 """
 from __future__ import annotations
 
@@ -45,8 +45,8 @@ from src.core.parameter import (
 from src.training.inference_hierarchical import evaluate_inference_performance
 
 
-class DeduplicatedDataDataset(Dataset):
-    """重複排除済みバッチデータセット（シンプル版）"""
+class BatchDataset(Dataset):
+    """バッチデータセット（並列化対応版）"""
     
     def __init__(
         self, 
@@ -67,20 +67,46 @@ class DeduplicatedDataDataset(Dataset):
         self.data = self._load_batch_data(data_dir)
     
     def _load_batch_data(self, data_dir: str) -> List[Dict[str, Any]]:
-        """重複排除済みバッチデータを読み込み"""
+        """データを読み込み（バッチファイルまたは通常のJSONファイル）"""
         data = []
-        json_files = glob.glob(os.path.join(data_dir, "deduplicated_batch_*.json"))
-        json_files.sort()  # バッチファイルを順序よく読み込み
         
-        print(f"Found {len(json_files)} batch files in {data_dir}")
-        
-        for json_file in json_files:
-            print(f"Loading {os.path.basename(json_file)}...")
-            with open(json_file, 'r') as f:
-                batch_data = json.load(f)
+        # まずバッチファイルを探す
+        batch_files = glob.glob(os.path.join(data_dir, "deduplicated_batch_*.json"))
+        if batch_files:
+            # バッチファイルが存在する場合
+            batch_files.sort()
+            print(f"Found {len(batch_files)} batch files in {data_dir}")
             
-            # バッチデータを直接追加（既に重複排除済み）
-            data.extend(batch_data)
+            for json_file in batch_files:
+                print(f"Loading {os.path.basename(json_file)}...")
+                with open(json_file, 'r') as f:
+                    batch_data = json.load(f)
+                data.extend(batch_data)
+        else:
+            # バッチファイルがない場合は通常のJSONファイルを探す
+            json_files = glob.glob(os.path.join(data_dir, "*.json"))
+            json_files.sort()
+            print(f"Found {len(json_files)} JSON files in {data_dir}")
+            
+            for json_file in json_files:
+                print(f"Loading {os.path.basename(json_file)}...")
+                with open(json_file, 'r') as f:
+                    file_data = json.load(f)
+                
+                # データの形式に応じて処理
+                if isinstance(file_data, list):
+                    if file_data and isinstance(file_data[0], dict):
+                        if 'premises' in file_data[0] and 'goal' in file_data[0] and 'tactic' in file_data[0]:
+                            data.extend(file_data)
+                        else:
+                            for example in file_data:
+                                steps = example.get('steps', [])
+                                for step in steps:
+                                    data.append(step)
+                elif isinstance(file_data, dict) and 'steps' in file_data:
+                    steps = file_data.get('steps', [])
+                    for step in steps:
+                        data.append(step)
         
         print(f"Loaded {len(data)} training examples")
         return data
@@ -239,37 +265,35 @@ def train_epoch(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train hierarchical tactic classifier with deduplicated data")
-    parser.add_argument("--data_dir", type=str, default="deduplicated_data", help="deduplicated data directory")
+    parser = argparse.ArgumentParser(description="Parallel batch training script for hierarchical tactic classifier")
+    parser.add_argument("--data_dir", type=str, default="deduplicated_data", help="data directory")
     parser.add_argument("--batch_size", type=int, default=32, help="batch size")
     parser.add_argument("--learning_rate", type=float, default=3e-4, help="learning rate")
     parser.add_argument("--num_epochs", type=int, default=1, help="number of epochs")
     parser.add_argument("--device", type=str, default="auto", help="device")
-    parser.add_argument("--save_path", type=str, default="models/hierarchical_model_generated.pth", help="model save path")
+    parser.add_argument("--save_path", type=str, default=None, help="model save path (auto-generated from data_dir if not specified)")
     parser.add_argument("--max_seq_len", type=int, default=256, help="maximum sequence length")
     parser.add_argument("--use_wandb", action="store_true", help="use wandb for logging")
-    parser.add_argument("--wandb_project", type=str, default="fof-training", help="wandb project name")
+    parser.add_argument("--wandb_project", type=str, default="fof-parallel-training", help="wandb project name")
     parser.add_argument("--wandb_run_name", type=str, default=None, help="wandb run name")
     parser.add_argument("--arg1_loss_weight", type=float, default=0.8, help="weight for arg1 loss")
     parser.add_argument("--arg2_loss_weight", type=float, default=0.8, help="weight for arg2 loss")
     parser.add_argument("--random_seed", type=int, default=42, help="random seed for reproducibility")
+    parser.add_argument("--log_frequency", type=int, default=1000, help="log training loss every n batches")
     parser.add_argument("--save_checkpoints", action="store_true", help="save model checkpoint after each epoch")
-    parser.add_argument("--checkpoint_dir", type=str, default="checkpoints", help="directory to save checkpoints")
+    parser.add_argument("--load_model_path", type=str, default=None, help="path to pretrained model to load")
     
-    # 並列化関連の引数
-    parser.add_argument("--num_workers", type=int, default=1, help="number of data loading workers")
+    # 並列化関連の引数（オプション）
+    parser.add_argument("--num_workers", type=int, default=4, help="number of data loading workers")
     parser.add_argument("--use_data_parallel", action="store_true", help="use DataParallel for multi-GPU training")
     parser.add_argument("--gpu_ids", type=str, default=None, help="comma-separated GPU IDs to use")
     parser.add_argument("--use_amp", action="store_true", help="use Automatic Mixed Precision")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="number of gradient accumulation steps")
     
-    # 推論評価関連の引数
+    # 推論評価関連の引数（オプション）
     parser.add_argument("--inference_eval_examples", type=int, default=100, help="number of examples for inference evaluation")
     parser.add_argument("--inference_max_steps", type=int, default=30, help="max steps for inference evaluation")
     parser.add_argument("--inference_temperature", type=float, default=1.0, help="temperature for inference evaluation")
-    
-    # ログ関連の引数
-    parser.add_argument("--log_frequency", type=int, default=1000, help="log training loss every n batches (default: 1000)")
     
     args = parser.parse_args()
     
@@ -333,21 +357,28 @@ def main():
     # データディレクトリの設定
     data_dir = os.path.join(project_root, args.data_dir)
     
+    # 保存パスの自動生成（指定されていない場合）
+    if args.save_path is None:
+        # データディレクトリ名から保存名を生成
+        data_dir_name = os.path.basename(args.data_dir.rstrip('/'))
+        args.save_path = f"models/{data_dir_name}_parallel.pth"
+        print(f"Auto-generated save path: {args.save_path}")
+    
     # データディレクトリの存在確認
     if not os.path.exists(data_dir):
         print(f"❌ Data directory not found: {data_dir}")
-        print("Please run: python src/training/deduplicate_generated_data.py")
+        print("Please ensure the directory contains training data")
         return
     
-    # バッチファイルの存在確認
-    batch_files = glob.glob(os.path.join(data_dir, "deduplicated_batch_*.json"))
-    if not batch_files:
-        print(f"❌ No deduplicated batch files found in {data_dir}")
-        print("Please run: python src/training/deduplicate_generated_data.py")
+    # データファイルの存在確認
+    json_files = glob.glob(os.path.join(data_dir, "*.json"))
+    if not json_files:
+        print(f"❌ No JSON files found in {data_dir}")
+        print("Please ensure the directory contains JSON files with training data")
         return
     
-    print(f"✅ Using deduplicated data from: {data_dir}")
-    print(f"   Found {len(batch_files)} batch files")
+    print(f"✅ Using data from: {data_dir}")
+    print(f"   Found {len(json_files)} JSON files")
     
     # トークンとラベルを読み込み
     token_py_path = os.path.join(project_root, "src", "core", "fof_tokens.py")
@@ -372,8 +403,8 @@ def main():
     )
     
     # データセットを作成
-    print("📊 Creating DeduplicatedDataDataset")
-    dataset = DeduplicatedDataDataset(
+    print("📊 Creating BatchDataset")
+    dataset = BatchDataset(
         data_dir=data_dir,
         tokenizer=tokenizer,
         main_to_id=main_to_id,
@@ -383,7 +414,7 @@ def main():
     )
     
     if len(dataset) == 0:
-        print("No training data found. Please check the deduplicated data directory.")
+        print("No training data found. Please check the data directory.")
         return
     
     # データローダーを作成
@@ -413,6 +444,35 @@ def main():
     
     print(f"Model vocab_size: {tokenizer.vocab_size}")
     print(f"Model pad_id: {tokenizer.pad_id}")
+    
+    # 事前学習済みモデルを読み込み（指定されている場合）
+    if args.load_model_path:
+        load_model_path = os.path.join(project_root, args.load_model_path)
+        if os.path.exists(load_model_path):
+            print(f"🔄 Loading pretrained model from: {load_model_path}")
+            try:
+                # state_dictを読み込み
+                state_dict = torch.load(load_model_path, map_location=device)
+                
+                # モデルのstate_dictを読み込み
+                model.load_state_dict(state_dict)
+                print("✅ Pretrained model loaded successfully!")
+                
+                # モデル構造の互換性をチェック
+                print(f"   Loaded model vocab_size: {model.vocab_size}")
+                print(f"   Loaded model pad_id: {model.pad_id}")
+                print(f"   Loaded model num_main_classes: {model.num_main_classes}")
+                print(f"   Loaded model num_arg1_classes: {model.num_arg1_classes}")
+                print(f"   Loaded model num_arg2_classes: {model.num_arg2_classes}")
+                
+            except Exception as e:
+                print(f"❌ Error loading pretrained model: {e}")
+                print("   Continuing with randomly initialized model...")
+        else:
+            print(f"❌ Pretrained model not found: {load_model_path}")
+            print("   Continuing with randomly initialized model...")
+    else:
+        print("🆕 Using randomly initialized model")
     
     # モデルをデバイスに移動
     model = model.to(device)
@@ -481,10 +541,11 @@ def main():
     }
     
     # 学習ループ
-    print(f"\n🚀 Starting training for {args.num_epochs} epochs...")
+    print(f"\n🚀 Starting parallel training for {args.num_epochs} epochs...")
     print(f"📊 Training data: {len(dataset)} examples")
     print(f"📊 Batch size: {args.batch_size}")
     print(f"📊 Learning rate: {args.learning_rate}")
+    print(f"📊 Number of workers: {args.num_workers}")
     print(f"📊 Log frequency: every {args.log_frequency} batches")
     print("=" * 60)
     
@@ -562,23 +623,23 @@ def main():
                 })
             wandb.log(log_data)
         
-        # チェックポイント保存
+        # エポックごとにモデルを保存
         if args.save_checkpoints:
-            checkpoint_path = os.path.join(args.checkpoint_dir, f"checkpoint_epoch_{epoch+1}.pth")
-            os.makedirs(args.checkpoint_dir, exist_ok=True)
+            checkpoint_path = f"models/parallel_model_epoch_{epoch+1}.pth"
+            os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
             torch.save({
                 'epoch': epoch + 1,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': avg_loss,
             }, checkpoint_path)
-            print(f"Checkpoint saved: {checkpoint_path}")
+            print(f"💾 Epoch checkpoint saved: {checkpoint_path}")
     
     # モデルを保存
     os.makedirs(os.path.dirname(args.save_path), exist_ok=True)
     torch.save(model.state_dict(), args.save_path)
     
-    print(f"\n🎉 Training completed!")
+    print(f"\n🎉 Parallel training completed!")
     print(f"📁 Model saved to: {args.save_path}")
     
     # wandb終了

@@ -240,27 +240,9 @@ def main():
     
     if results:
         print(f"\n{'='*60}")
-        print(f"RECOMMENDATION")
+        print(f"ANALYSIS COMPLETED")
         print(f"{'='*60}")
-        
-        cycle_num = int(args.target_cycle[2:])
-        source_cycle = f"RL{cycle_num - 1}" if cycle_num > 1 else "RL1"
-        
-        # Use lower thresholds due to data structure differences
-        if results['overlap_temp1_percent'] > 2:
-            print(f"✅ {args.target_cycle} mixture data is correctly sourced from {source_cycle} temperature_1")
-            print("   No regeneration needed.")
-            print("   Note: Low overlap percentages are normal due to different data structures.")
-        elif results['overlap_temp2_percent'] > 2:
-            print(f"❌ {args.target_cycle} mixture data incorrectly sourced from {source_cycle} temperature_2")
-            print("   Consider regenerating with correct temperature_1 source.")
-        elif results['overlap_target_temp1_percent'] > 2:
-            print(f"❌ {args.target_cycle} mixture data incorrectly sourced from {args.target_cycle} temperature_1")
-            print("   This suggests the mixture was created from the wrong cycle's data.")
-            print("   Consider regenerating with correct source cycle.")
-        else:
-            print(f"❓ {args.target_cycle} mixture data source is unclear")
-            print("   Consider regenerating to ensure correct source.")
+        print("Data source analysis completed. Check the overlap percentages above for details.")
 
 
 if __name__ == "__main__":

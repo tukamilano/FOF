@@ -1,6 +1,6 @@
 #!/bin/bash
-# Usage: ./run_train_simple_loop.sh <SRC_LOOP> <DST_LOOP> <BUCKET_NAME> [BATCH_SIZE]
-# Example: ./run_train_simple_loop.sh RL1 RL2 fof-data-20251010-milano 32
+# Usage: ./run_train_parallel_loop.sh <SRC_LOOP> <DST_LOOP> <BUCKET_NAME> [BATCH_SIZE]
+# Example: ./run_train_parallel_loop.sh RL1 RL2 fof-data-20251010-milano 32
 
 set -e  # 途中でエラーが出たら終了
 
@@ -20,7 +20,7 @@ LOG_DIR="logs_${DST_LOOP}"
 mkdir -p "${LOG_DIR}"
 
 # === トレーニング実行（順次実行） ===
-echo "=== Starting sequential training for ${DST_LOOP} ==="
+echo "=== Starting parallel training for ${DST_LOOP} ==="
 echo "Using batch size: ${BATCH_SIZE}"
 
 for TEMP in "${TEMPS[@]}"; do
