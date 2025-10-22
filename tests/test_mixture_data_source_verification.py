@@ -108,14 +108,23 @@ def analyze_data_sources(base_dir: str = "/Users/milano/FOF", target_cycle: str 
     
     print(f"{source_cycle} temperature_2 data: {len(source_temp2_data)} samples, {len(source_temp2_hashes)} unique hashes")
     
-    # Load deduplicated data for comparison
+    # Load deduplicated data for comparison (larger sample for better accuracy)
     dedup_path = os.path.join(base_dir, "deduplicated_data")
-    dedup_data = load_json_files(dedup_path, max_files=10)  # Sample first 10 files
+    dedup_data = load_json_files(dedup_path, max_files=50)  # Sample more files for better accuracy
     dedup_hashes = set()
     for item in dedup_data:
         dedup_hashes.add(create_data_hash(item))
     
     print(f"Deduplicated data (sample): {len(dedup_data)} samples, {len(dedup_hashes)} unique hashes")
+    
+    # Load target cycle's own temperature_1 data for comparison
+    target_temp1_path = os.path.join(base_dir, f"generated_data_{target_cycle}", "temperature_1")
+    target_temp1_data = load_json_files(target_temp1_path)
+    target_temp1_hashes = set()
+    for item in target_temp1_data:
+        target_temp1_hashes.add(create_data_hash(item))
+    
+    print(f"{target_cycle} temperature_1 data: {len(target_temp1_data)} samples, {len(target_temp1_hashes)} unique hashes")
     
     # Analyze overlaps
     print(f"\n{'='*60}")
@@ -134,11 +143,17 @@ def analyze_data_sources(base_dir: str = "/Users/milano/FOF", target_cycle: str 
     
     print(f"{target_cycle} mixture ∩ {source_cycle} temperature_2: {len(overlap_temp2)} samples ({overlap_temp2_percent:.2f}%)")
     
-    # Target mixture vs deduplicated data
+    # Target mixture vs deduplicated data (note: this is just a sample comparison)
     overlap_dedup = target_hashes.intersection(dedup_hashes)
     overlap_dedup_percent = len(overlap_dedup) / len(target_hashes) * 100 if target_hashes else 0
     
-    print(f"{target_cycle} mixture ∩ Deduplicated data: {len(overlap_dedup)} samples ({overlap_dedup_percent:.2f}%)")
+    print(f"{target_cycle} mixture ∩ Deduplicated data (sample): {len(overlap_dedup)} samples ({overlap_dedup_percent:.2f}%)")
+    
+    # Target mixture vs target cycle's own temperature_1 data
+    overlap_target_temp1 = target_hashes.intersection(target_temp1_hashes)
+    overlap_target_temp1_percent = len(overlap_target_temp1) / len(target_hashes) * 100 if target_hashes else 0
+    
+    print(f"{target_cycle} mixture ∩ {target_cycle} temperature_1: {len(overlap_target_temp1)} samples ({overlap_target_temp1_percent:.2f}%)")
     
     # Source temperature_1 vs source temperature_2 (check if they're different)
     overlap_temp1_temp2 = source_temp1_hashes.intersection(source_temp2_hashes)
@@ -151,12 +166,13 @@ def analyze_data_sources(base_dir: str = "/Users/milano/FOF", target_cycle: str 
     print(f"ANALYSIS SUMMARY")
     print(f"{'='*60}")
     
+    # Check if mixture comes from correct source cycle
     if overlap_temp1_percent > 50:
         print(f"✅ {target_cycle} mixture data appears to come primarily from {source_cycle} temperature_1 ({overlap_temp1_percent:.2f}% overlap)")
     elif overlap_temp2_percent > 50:
-        print(f"✅ {target_cycle} mixture data appears to come primarily from {source_cycle} temperature_2 ({overlap_temp2_percent:.2f}% overlap)")
-    elif overlap_dedup_percent > 30:
-        print(f"✅ {target_cycle} mixture data appears to be a proper mixture with deduplicated data ({overlap_dedup_percent:.2f}% overlap)")
+        print(f"❌ {target_cycle} mixture data incorrectly sourced from {source_cycle} temperature_2 ({overlap_temp2_percent:.2f}% overlap)")
+    elif overlap_target_temp1_percent > 50:
+        print(f"❌ {target_cycle} mixture data incorrectly sourced from {target_cycle} temperature_1 ({overlap_target_temp1_percent:.2f}% overlap)")
     else:
         print(f"❓ {target_cycle} mixture data source is unclear. Consider regenerating.")
     
@@ -165,6 +181,9 @@ def analyze_data_sources(base_dir: str = "/Users/milano/FOF", target_cycle: str 
         print(f"✅ {source_cycle} temperature_1 and temperature_2 contain different data ({overlap_temp1_temp2_percent:.2f}% overlap)")
     else:
         print(f"⚠️  {source_cycle} temperature_1 and temperature_2 have significant overlap ({overlap_temp1_temp2_percent:.2f}% overlap)")
+    
+    # Note about deduplicated data comparison
+    print(f"ℹ️  Deduplicated data comparison is based on a sample ({len(dedup_data)} samples) and may not be representative of the full dataset.")
     
     # Sample analysis
     print(f"\n{'='*60}")
@@ -190,9 +209,11 @@ def analyze_data_sources(base_dir: str = "/Users/milano/FOF", target_cycle: str 
         'target_mixture_count': len(target_mixture_data),
         'source_temp1_count': len(source_temp1_data),
         'source_temp2_count': len(source_temp2_data),
+        'target_temp1_count': len(target_temp1_data),
         'overlap_temp1_percent': overlap_temp1_percent,
         'overlap_temp2_percent': overlap_temp2_percent,
         'overlap_dedup_percent': overlap_dedup_percent,
+        'overlap_target_temp1_percent': overlap_target_temp1_percent,
         'overlap_temp1_temp2_percent': overlap_temp1_temp2_percent
     }
 
@@ -227,9 +248,10 @@ def main():
         elif results['overlap_temp2_percent'] > 50:
             print(f"❌ {args.target_cycle} mixture data incorrectly sourced from {source_cycle} temperature_2")
             print("   Consider regenerating with correct temperature_1 source.")
-        elif results['overlap_dedup_percent'] > 30:
-            print(f"✅ {args.target_cycle} mixture data appears to be a proper mixture")
-            print("   No regeneration needed.")
+        elif results['overlap_target_temp1_percent'] > 50:
+            print(f"❌ {args.target_cycle} mixture data incorrectly sourced from {args.target_cycle} temperature_1")
+            print("   This suggests the mixture was created from the wrong cycle's data.")
+            print("   Consider regenerating with correct source cycle.")
         else:
             print(f"❓ {args.target_cycle} mixture data source is unclear")
             print("   Consider regenerating to ensure correct source.")
