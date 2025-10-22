@@ -2,6 +2,11 @@
 # 使い方: ./run_self_improvement.sh RL3(3回目)
 # 引数で "RL1" "RL2" などを指定すると、そのサイクル名が使われます
 
+# プロジェクトルートに移動
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
+
 CYCLE=${1:-RL1}  # デフォルトはRL1
 PREV_CYCLE="RL$(( ${CYCLE:2} - 1 ))"  # "RL2" → "RL1" に変換
 BUCKET="fof-data-20251010-milano"
