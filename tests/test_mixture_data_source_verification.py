@@ -58,51 +58,55 @@ def create_data_hash(data_item: Dict[str, Any]) -> str:
     return hashlib.md5(data_str.encode()).hexdigest()
 
 
-def analyze_data_sources(base_dir: str = "/Users/milano/FOF"):
+def analyze_data_sources(base_dir: str = "/Users/milano/FOF", target_cycle: str = "RL2"):
     """Analyze the source of mixture data."""
     
-    # Load RL2 mixture data
-    rl2_mixture_path = os.path.join(base_dir, "generated_data_RL2", "temperature_1_mixture")
+    # Load target cycle mixture data
+    target_mixture_path = os.path.join(base_dir, f"generated_data_{target_cycle}", "temperature_1_mixture")
     print(f"\n{'='*60}")
-    print(f"Analyzing RL2 mixture data from: {rl2_mixture_path}")
+    print(f"Analyzing {target_cycle} mixture data from: {target_mixture_path}")
     print(f"{'='*60}")
     
-    rl2_mixture_data = load_json_files(rl2_mixture_path)
+    target_mixture_data = load_json_files(target_mixture_path)
     
-    if not rl2_mixture_data:
-        print("No RL2 mixture data found!")
+    if not target_mixture_data:
+        print(f"No {target_cycle} mixture data found!")
         return
     
-    # Create hashes for RL2 mixture data
-    rl2_hashes = set()
-    for item in rl2_mixture_data:
-        rl2_hashes.add(create_data_hash(item))
+    # Create hashes for target mixture data
+    target_hashes = set()
+    for item in target_mixture_data:
+        target_hashes.add(create_data_hash(item))
     
-    print(f"RL2 mixture data: {len(rl2_mixture_data)} samples, {len(rl2_hashes)} unique hashes")
+    print(f"{target_cycle} mixture data: {len(target_mixture_data)} samples, {len(target_hashes)} unique hashes")
     
-    # Load RL1 temperature data sources
-    rl1_temp1_path = os.path.join(base_dir, "generated_data_RL1", "temperature_1")
-    rl1_temp2_path = os.path.join(base_dir, "generated_data_RL1", "temperature_2")
+    # Determine source cycle (previous cycle)
+    cycle_num = int(target_cycle[2:])  # Extract number from "RL2", "RL3", etc.
+    source_cycle = f"RL{cycle_num - 1}" if cycle_num > 1 else "RL1"
+    
+    # Load source cycle temperature data
+    source_temp1_path = os.path.join(base_dir, f"generated_data_{source_cycle}", "temperature_1")
+    source_temp2_path = os.path.join(base_dir, f"generated_data_{source_cycle}", "temperature_2")
     
     print(f"\n{'='*60}")
-    print(f"Analyzing RL1 temperature data sources")
+    print(f"Analyzing {source_cycle} temperature data sources")
     print(f"{'='*60}")
     
-    # Load RL1 temperature_1 data
-    rl1_temp1_data = load_json_files(rl1_temp1_path)
-    rl1_temp1_hashes = set()
-    for item in rl1_temp1_data:
-        rl1_temp1_hashes.add(create_data_hash(item))
+    # Load source temperature_1 data
+    source_temp1_data = load_json_files(source_temp1_path)
+    source_temp1_hashes = set()
+    for item in source_temp1_data:
+        source_temp1_hashes.add(create_data_hash(item))
     
-    print(f"RL1 temperature_1 data: {len(rl1_temp1_data)} samples, {len(rl1_temp1_hashes)} unique hashes")
+    print(f"{source_cycle} temperature_1 data: {len(source_temp1_data)} samples, {len(source_temp1_hashes)} unique hashes")
     
-    # Load RL1 temperature_2 data
-    rl1_temp2_data = load_json_files(rl1_temp2_path)
-    rl1_temp2_hashes = set()
-    for item in rl1_temp2_data:
-        rl1_temp2_hashes.add(create_data_hash(item))
+    # Load source temperature_2 data
+    source_temp2_data = load_json_files(source_temp2_path)
+    source_temp2_hashes = set()
+    for item in source_temp2_data:
+        source_temp2_hashes.add(create_data_hash(item))
     
-    print(f"RL1 temperature_2 data: {len(rl1_temp2_data)} samples, {len(rl1_temp2_hashes)} unique hashes")
+    print(f"{source_cycle} temperature_2 data: {len(source_temp2_data)} samples, {len(source_temp2_hashes)} unique hashes")
     
     # Load deduplicated data for comparison
     dedup_path = os.path.join(base_dir, "deduplicated_data")
@@ -118,29 +122,29 @@ def analyze_data_sources(base_dir: str = "/Users/milano/FOF"):
     print(f"OVERLAP ANALYSIS")
     print(f"{'='*60}")
     
-    # RL2 mixture vs RL1 temperature_1
-    overlap_temp1 = rl2_hashes.intersection(rl1_temp1_hashes)
-    overlap_temp1_percent = len(overlap_temp1) / len(rl2_hashes) * 100 if rl2_hashes else 0
+    # Target mixture vs source temperature_1
+    overlap_temp1 = target_hashes.intersection(source_temp1_hashes)
+    overlap_temp1_percent = len(overlap_temp1) / len(target_hashes) * 100 if target_hashes else 0
     
-    print(f"RL2 mixture ∩ RL1 temperature_1: {len(overlap_temp1)} samples ({overlap_temp1_percent:.2f}%)")
+    print(f"{target_cycle} mixture ∩ {source_cycle} temperature_1: {len(overlap_temp1)} samples ({overlap_temp1_percent:.2f}%)")
     
-    # RL2 mixture vs RL1 temperature_2
-    overlap_temp2 = rl2_hashes.intersection(rl1_temp2_hashes)
-    overlap_temp2_percent = len(overlap_temp2) / len(rl2_hashes) * 100 if rl2_hashes else 0
+    # Target mixture vs source temperature_2
+    overlap_temp2 = target_hashes.intersection(source_temp2_hashes)
+    overlap_temp2_percent = len(overlap_temp2) / len(target_hashes) * 100 if target_hashes else 0
     
-    print(f"RL2 mixture ∩ RL1 temperature_2: {len(overlap_temp2)} samples ({overlap_temp2_percent:.2f}%)")
+    print(f"{target_cycle} mixture ∩ {source_cycle} temperature_2: {len(overlap_temp2)} samples ({overlap_temp2_percent:.2f}%)")
     
-    # RL2 mixture vs deduplicated data
-    overlap_dedup = rl2_hashes.intersection(dedup_hashes)
-    overlap_dedup_percent = len(overlap_dedup) / len(rl2_hashes) * 100 if rl2_hashes else 0
+    # Target mixture vs deduplicated data
+    overlap_dedup = target_hashes.intersection(dedup_hashes)
+    overlap_dedup_percent = len(overlap_dedup) / len(target_hashes) * 100 if target_hashes else 0
     
-    print(f"RL2 mixture ∩ Deduplicated data: {len(overlap_dedup)} samples ({overlap_dedup_percent:.2f}%)")
+    print(f"{target_cycle} mixture ∩ Deduplicated data: {len(overlap_dedup)} samples ({overlap_dedup_percent:.2f}%)")
     
-    # RL1 temperature_1 vs RL1 temperature_2 (check if they're different)
-    overlap_temp1_temp2 = rl1_temp1_hashes.intersection(rl1_temp2_hashes)
-    overlap_temp1_temp2_percent = len(overlap_temp1_temp2) / len(rl1_temp1_hashes) * 100 if rl1_temp1_hashes else 0
+    # Source temperature_1 vs source temperature_2 (check if they're different)
+    overlap_temp1_temp2 = source_temp1_hashes.intersection(source_temp2_hashes)
+    overlap_temp1_temp2_percent = len(overlap_temp1_temp2) / len(source_temp1_hashes) * 100 if source_temp1_hashes else 0
     
-    print(f"RL1 temperature_1 ∩ RL1 temperature_2: {len(overlap_temp1_temp2)} samples ({overlap_temp1_temp2_percent:.2f}%)")
+    print(f"{source_cycle} temperature_1 ∩ {source_cycle} temperature_2: {len(overlap_temp1_temp2)} samples ({overlap_temp1_temp2_percent:.2f}%)")
     
     # Analysis summary
     print(f"\n{'='*60}")
@@ -148,44 +152,44 @@ def analyze_data_sources(base_dir: str = "/Users/milano/FOF"):
     print(f"{'='*60}")
     
     if overlap_temp1_percent > 50:
-        print(f"✅ RL2 mixture data appears to come primarily from RL1 temperature_1 ({overlap_temp1_percent:.2f}% overlap)")
+        print(f"✅ {target_cycle} mixture data appears to come primarily from {source_cycle} temperature_1 ({overlap_temp1_percent:.2f}% overlap)")
     elif overlap_temp2_percent > 50:
-        print(f"✅ RL2 mixture data appears to come primarily from RL1 temperature_2 ({overlap_temp2_percent:.2f}% overlap)")
+        print(f"✅ {target_cycle} mixture data appears to come primarily from {source_cycle} temperature_2 ({overlap_temp2_percent:.2f}% overlap)")
     elif overlap_dedup_percent > 30:
-        print(f"✅ RL2 mixture data appears to be a proper mixture with deduplicated data ({overlap_dedup_percent:.2f}% overlap)")
+        print(f"✅ {target_cycle} mixture data appears to be a proper mixture with deduplicated data ({overlap_dedup_percent:.2f}% overlap)")
     else:
-        print(f"❓ RL2 mixture data source is unclear. Consider regenerating.")
+        print(f"❓ {target_cycle} mixture data source is unclear. Consider regenerating.")
     
-    # Check if RL1 temperature directories are different
+    # Check if source temperature directories are different
     if overlap_temp1_temp2_percent < 10:
-        print(f"✅ RL1 temperature_1 and temperature_2 contain different data ({overlap_temp1_temp2_percent:.2f}% overlap)")
+        print(f"✅ {source_cycle} temperature_1 and temperature_2 contain different data ({overlap_temp1_temp2_percent:.2f}% overlap)")
     else:
-        print(f"⚠️  RL1 temperature_1 and temperature_2 have significant overlap ({overlap_temp1_temp2_percent:.2f}% overlap)")
+        print(f"⚠️  {source_cycle} temperature_1 and temperature_2 have significant overlap ({overlap_temp1_temp2_percent:.2f}% overlap)")
     
     # Sample analysis
     print(f"\n{'='*60}")
     print(f"SAMPLE DATA ANALYSIS")
     print(f"{'='*60}")
     
-    if rl2_mixture_data:
-        print("Sample RL2 mixture data:")
-        for i, item in enumerate(rl2_mixture_data[:3]):
+    if target_mixture_data:
+        print(f"Sample {target_cycle} mixture data:")
+        for i, item in enumerate(target_mixture_data[:3]):
             print(f"  {i+1}: {str(item)[:100]}...")
     
-    if rl1_temp1_data:
-        print("\nSample RL1 temperature_1 data:")
-        for i, item in enumerate(rl1_temp1_data[:3]):
+    if source_temp1_data:
+        print(f"\nSample {source_cycle} temperature_1 data:")
+        for i, item in enumerate(source_temp1_data[:3]):
             print(f"  {i+1}: {str(item)[:100]}...")
     
-    if rl1_temp2_data:
-        print("\nSample RL1 temperature_2 data:")
-        for i, item in enumerate(rl1_temp2_data[:3]):
+    if source_temp2_data:
+        print(f"\nSample {source_cycle} temperature_2 data:")
+        for i, item in enumerate(source_temp2_data[:3]):
             print(f"  {i+1}: {str(item)[:100]}...")
     
     return {
-        'rl2_mixture_count': len(rl2_mixture_data),
-        'rl1_temp1_count': len(rl1_temp1_data),
-        'rl1_temp2_count': len(rl1_temp2_data),
+        'target_mixture_count': len(target_mixture_data),
+        'source_temp1_count': len(source_temp1_data),
+        'source_temp2_count': len(source_temp2_data),
         'overlap_temp1_percent': overlap_temp1_percent,
         'overlap_temp2_percent': overlap_temp2_percent,
         'overlap_dedup_percent': overlap_dedup_percent,
@@ -197,32 +201,37 @@ def main():
     parser = argparse.ArgumentParser(description="Verify mixture data sources")
     parser.add_argument("--base-dir", default="/Users/milano/FOF", 
                        help="Base directory containing the data")
+    parser.add_argument("--target-cycle", default="RL2",
+                       help="Target cycle to analyze (e.g., RL2, RL3, RL4)")
     parser.add_argument("--verbose", action="store_true",
                        help="Enable verbose output")
     
     args = parser.parse_args()
     
-    print("Mixture Data Source Verification")
+    print(f"Mixture Data Source Verification for {args.target_cycle}")
     print("=" * 50)
     
-    results = analyze_data_sources(args.base_dir)
+    results = analyze_data_sources(args.base_dir, args.target_cycle)
     
     if results:
         print(f"\n{'='*60}")
         print(f"RECOMMENDATION")
         print(f"{'='*60}")
         
+        cycle_num = int(args.target_cycle[2:])
+        source_cycle = f"RL{cycle_num - 1}" if cycle_num > 1 else "RL1"
+        
         if results['overlap_temp1_percent'] > 50:
-            print("✅ RL2 mixture data is correctly sourced from RL1 temperature_1")
+            print(f"✅ {args.target_cycle} mixture data is correctly sourced from {source_cycle} temperature_1")
             print("   No regeneration needed.")
         elif results['overlap_temp2_percent'] > 50:
-            print("❌ RL2 mixture data incorrectly sourced from RL1 temperature_2")
+            print(f"❌ {args.target_cycle} mixture data incorrectly sourced from {source_cycle} temperature_2")
             print("   Consider regenerating with correct temperature_1 source.")
         elif results['overlap_dedup_percent'] > 30:
-            print("✅ RL2 mixture data appears to be a proper mixture")
+            print(f"✅ {args.target_cycle} mixture data appears to be a proper mixture")
             print("   No regeneration needed.")
         else:
-            print("❓ RL2 mixture data source is unclear")
+            print(f"❓ {args.target_cycle} mixture data source is unclear")
             print("   Consider regenerating to ensure correct source.")
 
 
