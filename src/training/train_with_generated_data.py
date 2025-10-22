@@ -10,7 +10,6 @@ import os
 import sys
 import glob
 import time
-import math
 from typing import List, Tuple, Dict, Any
 
 try:
@@ -155,6 +154,7 @@ def train_epoch(
     arg2_loss_weight: float = 0.8,
     entropy_reg_weight: float = 0.0,
     kl_penalty_weight: float = 0.0,
+    reference_model: TransformerClassifier | DataParallel | None = None,
     use_amp: bool = False,
     scaler: GradScaler = None,
     gradient_accumulation_steps: int = 1,
@@ -183,17 +183,27 @@ def train_epoch(
         entropy = -(probs * log_probs).sum(dim=-1)
         return entropy.mean()
 
-    def compute_kl_to_uniform(logits: torch.Tensor) -> torch.Tensor:
-        """Compute mean KL divergence from predictions to uniform distribution."""
-        if logits.numel() == 0:
+    def compute_kl_to_reference(
+        student_logits: torch.Tensor,
+        reference_logits: torch.Tensor | None,
+    ) -> torch.Tensor:
+        """Compute mean KL divergence from student predictions to reference model."""
+        if reference_logits is None or reference_logits.numel() == 0:
             return torch.tensor(0.0, device=device)
-        log_probs = torch.log_softmax(logits, dim=-1)
-        probs = torch.softmax(logits, dim=-1)
-        log_uniform = -math.log(logits.size(-1))
-        kl = (probs * (log_probs - log_uniform)).sum(dim=-1)
+        student_log_probs = torch.log_softmax(student_logits, dim=-1)
+        student_probs = torch.softmax(student_logits, dim=-1)
+        reference_log_probs = torch.log_softmax(reference_logits, dim=-1)
+        kl = (student_probs * (student_log_probs - reference_log_probs)).sum(dim=-1)
         return kl.mean()
 
-    def compute_batch_loss(main_logits, arg1_logits, arg2_logits):
+    def compute_batch_loss(
+        main_logits,
+        arg1_logits,
+        arg2_logits,
+        reference_main_logits=None,
+        reference_arg1_logits=None,
+        reference_arg2_logits=None,
+    ):
         main_loss = criterion(main_logits, main_labels)
 
         arg1_valid_mask = arg1_labels != -1
@@ -222,11 +232,27 @@ def train_epoch(
 
         kl_penalty_loss = torch.tensor(0.0, device=device)
         if kl_penalty_weight != 0.0:
-            kl_terms = [compute_kl_to_uniform(main_logits)]
+            kl_terms = [
+                compute_kl_to_reference(main_logits, reference_main_logits)
+            ]
             if arg1_valid_mask.any():
-                kl_terms.append(compute_kl_to_uniform(arg1_logits[arg1_valid_mask]))
+                kl_terms.append(
+                    compute_kl_to_reference(
+                        arg1_logits[arg1_valid_mask],
+                        None
+                        if reference_arg1_logits is None
+                        else reference_arg1_logits[arg1_valid_mask],
+                    )
+                )
             if arg2_valid_mask.any():
-                kl_terms.append(compute_kl_to_uniform(arg2_logits[arg2_valid_mask]))
+                kl_terms.append(
+                    compute_kl_to_reference(
+                        arg2_logits[arg2_valid_mask],
+                        None
+                        if reference_arg2_logits is None
+                        else reference_arg2_logits[arg2_valid_mask],
+                    )
+                )
             kl_penalty_loss = torch.stack(kl_terms).mean()
             total_loss_local = total_loss_local + kl_penalty_weight * kl_penalty_loss
 
@@ -251,6 +277,17 @@ def train_epoch(
         # オプティマイザーの勾配をリセット
         optimizer.zero_grad()
 
+        reference_main_logits = None
+        reference_arg1_logits = None
+        reference_arg2_logits = None
+        if reference_model is not None and kl_penalty_weight != 0.0:
+            with torch.no_grad():
+                reference_outputs = reference_model(input_ids, attention_mask)
+            if isinstance(reference_outputs, tuple) and len(reference_outputs) == 3:
+                reference_main_logits, reference_arg1_logits, reference_arg2_logits = reference_outputs
+            else:
+                raise ValueError("Reference model must return a tuple of three logits")
+
         # 混合精度での推論
         if use_amp and scaler is not None:
             with autocast():
@@ -258,7 +295,14 @@ def train_epoch(
                 main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
 
                 # 正則化込みの損失計算
-                total_loss_batch, loss_components = compute_batch_loss(main_logits, arg1_logits, arg2_logits)
+                total_loss_batch, loss_components = compute_batch_loss(
+                    main_logits,
+                    arg1_logits,
+                    arg2_logits,
+                    reference_main_logits,
+                    reference_arg1_logits,
+                    reference_arg2_logits,
+                )
                 total_loss_batch = total_loss_batch / gradient_accumulation_steps
 
             # 混合精度での逆伝播
@@ -268,7 +312,14 @@ def train_epoch(
             main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
 
             # 正則化込みの損失計算
-            total_loss_batch, loss_components = compute_batch_loss(main_logits, arg1_logits, arg2_logits)
+            total_loss_batch, loss_components = compute_batch_loss(
+                main_logits,
+                arg1_logits,
+                arg2_logits,
+                reference_main_logits,
+                reference_arg1_logits,
+                reference_arg2_logits,
+            )
             total_loss_batch = total_loss_batch / gradient_accumulation_steps
 
             # 通常の逆伝播
@@ -337,7 +388,13 @@ def main():
     parser.add_argument("--arg1_loss_weight", type=float, default=0.8, help="weight for arg1 loss")
     parser.add_argument("--arg2_loss_weight", type=float, default=0.8, help="weight for arg2 loss")
     parser.add_argument("--entropy_reg_weight", type=float, default=0.0, help="weight for entropy regularization (positive values penalize high entropy)")
-    parser.add_argument("--kl_penalty_weight", type=float, default=0.0, help="weight for KL penalty against uniform distribution")
+    parser.add_argument("--kl_penalty_weight", type=float, default=0.0, help="weight for KL penalty against reference model")
+    parser.add_argument(
+        "--kl_reference_model_path",
+        type=str,
+        default=None,
+        help="path to frozen reference model used for KL regularization",
+    )
     parser.add_argument("--random_seed", type=int, default=42, help="random seed for reproducibility")
     parser.add_argument("--log_frequency", type=int, default=1000, help="log training loss every n batches")
     parser.add_argument("--save_checkpoints", action="store_true", help="save model checkpoint after each epoch")
@@ -401,6 +458,7 @@ def main():
     print(f"   Gradient accumulation steps: {args.gradient_accumulation_steps}")
     print(f"   Entropy regularization weight: {args.entropy_reg_weight}")
     print(f"   KL penalty weight: {args.kl_penalty_weight}")
+    print(f"   KL reference model path: {args.kl_reference_model_path}")
     print(f"   Random seed: {args.random_seed}")
     print(f"   Save checkpoints: {args.save_checkpoints}")
     print(f"   Use wandb: {args.use_wandb}")
@@ -557,7 +615,44 @@ def main():
             print(f"Only one GPU specified, using single GPU")
     else:
         gpu_ids = None
-    
+
+    reference_model = None
+    if args.kl_penalty_weight != 0.0:
+        if not args.kl_reference_model_path:
+            print("❌ KL penalty weight specified but no kl_reference_model_path provided.")
+            return
+        reference_model_path = os.path.join(project_root, args.kl_reference_model_path)
+        if not os.path.exists(reference_model_path):
+            print(f"❌ Reference model not found: {reference_model_path}")
+            return
+        print(f"🔒 Loading KL reference model from: {reference_model_path}")
+        reference_model = TransformerClassifier(
+            vocab_size=tokenizer.vocab_size,
+            pad_id=tokenizer.pad_id,
+            max_seq_len=args.max_seq_len,
+            d_model=model_params.d_model,
+            nhead=model_params.nhead,
+            num_layers=model_params.num_layers,
+            dim_feedforward=model_params.dim_feedforward,
+            dropout=model_params.dropout,
+            num_main_classes=len(id_to_main),
+            num_arg1_classes=len(id_to_arg1),
+            num_arg2_classes=len(id_to_arg2),
+        )
+        try:
+            reference_state = torch.load(reference_model_path, map_location=device)
+            reference_model.load_state_dict(reference_state)
+            print("✅ Reference model loaded successfully")
+        except Exception as exc:
+            print(f"❌ Failed to load reference model: {exc}")
+            return
+        reference_model = reference_model.to(device)
+        if args.use_data_parallel and device.type == 'cuda' and gpu_ids and len(gpu_ids) > 1:
+            reference_model = DataParallel(reference_model, device_ids=gpu_ids)
+        reference_model.eval()
+        for param in reference_model.parameters():
+            param.requires_grad = False
+
     # オプティマイザーと損失関数を作成
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
     criterion = nn.CrossEntropyLoss()
@@ -587,6 +682,7 @@ def main():
                 "arg2_loss_weight": args.arg2_loss_weight,
                 "entropy_reg_weight": args.entropy_reg_weight,
                 "kl_penalty_weight": args.kl_penalty_weight,
+                "kl_reference_model_path": args.kl_reference_model_path,
                 "device": str(device),
                 "save_checkpoints": args.save_checkpoints,
                 "checkpoint_dir": args.checkpoint_dir
@@ -652,6 +748,7 @@ def main():
             arg2_loss_weight=args.arg2_loss_weight,
             entropy_reg_weight=args.entropy_reg_weight,
             kl_penalty_weight=args.kl_penalty_weight,
+            reference_model=reference_model,
             use_amp=use_amp,
             scaler=scaler,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
