@@ -260,3 +260,33 @@ pyprover/env/
 # Empty or temporary files
 train.py
 =2.0
+
+# Actor-Critic specific files
+# Test and example scripts (keep in repo but ignore execution logs)
+test_*.log
+example_*.log
+
+# Actor-Critic training outputs
+actor_critic_*.pth
+actor_critic_*.pt
+actor_critic_logs/
+actor_critic_models/
+
+# Comprehensive data collection outputs
+comprehensive_data_*.json
+self_improvement_data/
+generated_data_*/
+
+# Training logs and outputs
+logs_*/
+nohup.out
+*.out
+
+# RL training specific
+rl_data/
+episode_data/
+replay_buffer/
+
+# Temporary test files
+temp_test_*.py
+test_temp_*.py
