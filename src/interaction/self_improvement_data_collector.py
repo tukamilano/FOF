@@ -20,12 +20,59 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, project_root)
 
 import torch
+import re
 
 # グローバル定数（一度だけ初期化）
 PYPROVER_MODULES = None
 GENERATION_PARAMS = None
 BASE_TOKENS = None
 TACTIC_PARSER_CACHE = {}
+
+
+def detect_double_negation_loop(goal: str, max_nesting: int = 6) -> bool:
+    """
+    二重否定の無限ループを検出
+
+    Args:
+        goal: 目標の論理式
+        max_nesting: 最大ネストレベル
+
+    Returns:
+        True if double negation loop detected
+    """
+    if not isinstance(goal, str):
+        return False
+
+    # より厳密な二重否定パターンを検出: 連続する深いネスト
+    # パターン: ((((X → False) → False) → False) → False)...
+    double_negation_pattern = r'\([^)]*→\s*False\)\s*→\s*False'
+
+    # ネストレベルをカウント
+    nesting_level = 0
+    current_goal = goal
+
+    # 連続する二重否定の深さをチェック
+    while re.search(double_negation_pattern, current_goal):
+        nesting_level += 1
+        if nesting_level > max_nesting:
+            return True
+
+        # パターンを置換して次のレベルをチェック（グループ参照を修正）
+        current_goal = re.sub(double_negation_pattern, r'(\g<0>)', current_goal)
+
+        # 無限ループを防ぐ
+        if nesting_level > 10:
+            break
+
+    # 追加チェック: 矢印数とFalse出現数による二重否定ループ検出
+    arrow_count = goal.count('→')
+    false_count = goal.count('False')
+
+    if arrow_count >= 5 and false_count >= 5:
+        return True
+
+    return False
+
 
 from src.core.transformer_classifier import (
     load_tokens_and_labels_from_token_py,
@@ -617,13 +664,6 @@ def collect_comprehensive_rl_data(
             
             if verbose:
                 print(f"\nExample {i+1}: {goal_str}")
-                # 初期状態を表示
-                initial_state = encode_prover_state(prover)
-                initial_premises = initial_state["premises"]
-                initial_goal = initial_state["goal"]
-                print(f"  Initial state:")
-                print(f"    Premises: {initial_premises if initial_premises else '[]'}")
-                print(f"    Goal: {initial_goal}")
             
             # このexampleの成功・失敗タクティクを一時的に保存
             example_successful_tactics = []
@@ -644,10 +684,15 @@ def collect_comprehensive_rl_data(
                 current_premises = current_state["premises"]
                 current_goal = current_state["goal"]
                 
+                # 二重否定ループを検出した場合は早期終了
+                if current_goal and detect_double_negation_loop(str(current_goal)):
+                    if verbose:
+                        print(f"    Double negation loop detected, keeping {len(example_failed_tactics)} failed tactics")
+                    example_terminated = True
+                    break
+                
                 if verbose:
-                    print(f"\n  Step {step+1}:")
-                    print(f"    Premises: {current_premises if current_premises else '[]'}")
-                    print(f"    Goal: {current_goal}")
+                    print(f"  Step {step+1}: Goal={current_goal}")
                 
                 # 確率閾値を満たすタクティク組み合わせを生成
                 tactic_combinations = generate_tactic_combinations(
@@ -656,12 +701,7 @@ def collect_comprehensive_rl_data(
                 )
                 
                 if verbose:
-                    print(f"    Generated {len(tactic_combinations)} tactic combinations")
-                    if tactic_combinations:
-                        print(f"    Threshold filtered tactics: {[(t, f'{p:.3f}') for t, p in tactic_combinations]}")
-                    else:
-                        print(f"    Threshold filtered tactics: []")
-                    print(f"    Failed tactics so far: {failed_tactics}")
+                    print(f"    Generated {len(tactic_combinations)} tactics, {len(example_failed_tactics)} failed so far")
                 
                 # 確率的にタクティクを選択して適用
                 success = False
@@ -681,7 +721,7 @@ def collect_comprehensive_rl_data(
                     if not selected_tactic:
                         # 利用可能なタクティクがない場合
                         if verbose:
-                            print(f"    No available tactics (all failed)")
+                            print(f"    No available tactics")
                         example_terminated = True
                         break
                     
@@ -689,8 +729,8 @@ def collect_comprehensive_rl_data(
                     success = apply_tactic_from_label(prover, selected_tactic)
                     attempts += 1
                     
-                    if verbose:
-                        print(f"    Attempt {attempts}: {selected_tactic} (prob: {selected_prob:.3f}) - {'Success' if success else 'Failed'}")
+                    if verbose and attempts <= 3:  # 最初の3回のみ表示
+                        print(f"    Attempt {attempts}: {selected_tactic} - {'Success' if success else 'Failed'}")
                     
                     if success:
                         # 成功したタクティクを一時的に記録
@@ -712,21 +752,18 @@ def collect_comprehensive_rl_data(
                         })
                         consecutive_failures = 0  # 成功したら連続失敗数をリセット
                         
-                        if verbose:
-                            # タクティク適用後の状態を表示
+                        if verbose and attempts <= 3:  # 最初の3回のみ表示
                             new_state = encode_prover_state(prover)
-                            new_premises = new_state["premises"]
                             new_goal = new_state["goal"]
-                            print(f"    → New state after {selected_tactic}:")
-                            print(f"      Premises: {new_premises if new_premises else '[]'}")
-                            print(f"      Goal: {new_goal if new_goal else 'SOLVED!'}")
+                            print(f"    → New goal: {new_goal if new_goal else 'SOLVED!'}")
                     else:
                         # 失敗したタクティクを記録
                         failed_tactic_strings.add(selected_tactic)
                         consecutive_failures += 1
                         
                         # 失敗データも記録（include_failuresがTrueの場合）
-                        if include_failures:
+                        # ただし、二重否定ループが含まれている場合はスキップ
+                        if include_failures and not detect_double_negation_loop(str(current_goal)):
                             tactic_dict = parse_tactic_string_cached(selected_tactic)
                             state_tactic_hash = create_state_hash(current_premises, current_goal, selected_tactic)
                             
@@ -747,7 +784,7 @@ def collect_comprehensive_rl_data(
                         
                         if not available_tactics:
                             if verbose:
-                                print(f"    All tactics failed in this step")
+                                print(f"    All tactics failed")
                             example_terminated = True
                             break
                 
@@ -758,22 +795,32 @@ def collect_comprehensive_rl_data(
             if solved:
                 solved_count += 1
                 successful_tactics.extend(example_successful_tactics)
-                result_text = f"SOLVED in {step} steps"
+                # 成功した場合でも、その過程での失敗データを記録
+                if include_failures:
+                    # 二重否定ループが含まれていない失敗データのみを追加
+                    filtered_failed_tactics = [
+                        failed_tactic for failed_tactic in example_failed_tactics
+                        if not detect_double_negation_loop(str(failed_tactic.get('goal', '')))
+                    ]
+                    failed_tactics.extend(filtered_failed_tactics)
                 if verbose:
-                    print(f"  Result: {result_text}")
+                    print(f"  Result: SOLVED in {step} steps")
             else:
                 # 解けなかった場合でも、失敗データは記録する（include_failuresがTrueの場合）
                 if include_failures:
-                    failed_tactics.extend(example_failed_tactics)
+                    # 二重否定ループが含まれていない失敗データのみを追加
+                    filtered_failed_tactics = [
+                        failed_tactic for failed_tactic in example_failed_tactics
+                        if not detect_double_negation_loop(str(failed_tactic.get('goal', '')))
+                    ]
+                    failed_tactics.extend(filtered_failed_tactics)
                 
                 if example_terminated:
-                    result_text = f"EARLY TERMINATED after {step} steps"
                     if verbose:
-                        print(f"  Result: {result_text}")
+                        print(f"  Result: EARLY TERMINATED after {step} steps")
                 else:
-                    result_text = f"FAILED after {step} steps"
                     if verbose:
-                        print(f"  Result: {result_text}")
+                        print(f"  Result: FAILED after {step} steps")
             
                 
         except Exception as e:
