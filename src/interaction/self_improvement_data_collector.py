@@ -525,13 +525,59 @@ def collect_self_improvement_data(
     temperature: float = 1.0
 ) -> List[Dict[str, Any]]:
     """
-    Self improvement用のデータを収集
+    Self improvement用のデータを収集（成功データのみ）
     
     Args:
         generated_data_dir: generated_dataディレクトリのパス
     
     Returns:
         成功したタクティクのリスト（deduplicated_batch形式）
+    """
+    successful_tactics, _ = collect_comprehensive_rl_data(
+        model, tokenizer, label_mappings, device, max_seq_len,
+        num_examples, max_steps, verbose, generated_data_dir, temperature,
+        include_failures=False
+    )
+    return successful_tactics
+
+
+def collect_comprehensive_rl_data(
+    model: TransformerClassifier,
+    tokenizer: CharTokenizer,
+    label_mappings: Dict[str, Any],
+    device: torch.device,
+    max_seq_len: int,
+    num_examples: int = 100,
+    max_steps: int = 30,
+    verbose: bool = False,
+    generated_data_dir: str = "generated_data",
+    temperature: float = 1.0,
+    include_failures: bool = True,
+    success_reward: float = 1.0,
+    step_penalty: float = 0.01,
+    failure_penalty: float = -0.1
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Actor-Critic学習用の包括的データを収集（成功・失敗両方）
+    
+    Args:
+        model: 学習済みモデル
+        tokenizer: トークナイザー
+        label_mappings: ラベルマッピング
+        device: デバイス
+        max_seq_len: 最大シーケンス長
+        num_examples: 処理する例数
+        max_steps: 最大ステップ数
+        verbose: 詳細出力フラグ
+        generated_data_dir: 生成データディレクトリ
+        temperature: 温度パラメータ
+        include_failures: 失敗データを含むかどうか
+        success_reward: 成功時の報酬
+        step_penalty: ステップペナルティ
+        failure_penalty: 失敗時のペナルティ
+    
+    Returns:
+        (successful_tactics, failed_tactics) のタプル
     """
     # グローバル定数を初期化
     initialize_global_constants()
@@ -544,15 +590,16 @@ def collect_self_improvement_data(
     
     if not tautologies:
         print("Failed to load tautologies from generated_data directory!")
-        return []
+        return [], []
     
     print(f"Loaded {len(tautologies)} tautologies from generated_data directory")
     print("First 5 tautologies:")
     for i in range(min(5, len(tautologies))):
         print(f"  {i+1}: {tautologies[i]}")
     
-    # 成功したタクティクを収集
+    # 成功・失敗データを収集
     successful_tactics = []
+    failed_tactics = []
     solved_count = 0
     
     # 進捗表示付きでループ実行
@@ -578,11 +625,12 @@ def collect_self_improvement_data(
                 print(f"    Premises: {initial_premises if initial_premises else '[]'}")
                 print(f"    Goal: {initial_goal}")
             
-            # このexampleの成功したタクティクを一時的に保存
+            # このexampleの成功・失敗タクティクを一時的に保存
             example_successful_tactics = []
+            example_failed_tactics = []
             
             # 失敗したタクティクを記録するセット（このexample内でのみ有効）
-            failed_tactics = set()
+            failed_tactic_strings = set()
             
             # 推論ループ
             step = 0
@@ -622,12 +670,12 @@ def collect_self_improvement_data(
                 
                 # 利用可能なタクティクを事前に計算
                 available_tactics = [tactic for tactic, _ in tactic_combinations 
-                                   if tactic not in failed_tactics]
+                                   if tactic not in failed_tactic_strings]
                 
                 while not success and attempts < max_attempts and not example_terminated and available_tactics:
                     # 確率的にタクティクを選択
                     selected_tactic, selected_prob = select_tactic_probabilistically(
-                        tactic_combinations, temperature, failed_tactics
+                        tactic_combinations, temperature, failed_tactic_strings
                     )
                     
                     if not selected_tactic:
@@ -649,13 +697,18 @@ def collect_self_improvement_data(
                         tactic_dict = parse_tactic_string_cached(selected_tactic)
                         state_tactic_hash = create_state_hash(current_premises, current_goal, selected_tactic)
                         
+                        # 報酬計算
+                        reward = success_reward if prover.goal is None else 0.0
+                        
                         example_successful_tactics.append({
                             "step_index": step,
                             "premises": current_premises.copy(),
                             "goal": current_goal,
                             "tactic": tactic_dict,
                             "tactic_apply": True,
-                            "state_tactic_hash": state_tactic_hash
+                            "state_tactic_hash": state_tactic_hash,
+                            "reward": reward,
+                            "log_prob": np.log(selected_prob + 1e-8)  # 対数確率
                         })
                         consecutive_failures = 0  # 成功したら連続失敗数をリセット
                         
@@ -669,12 +722,28 @@ def collect_self_improvement_data(
                             print(f"      Goal: {new_goal if new_goal else 'SOLVED!'}")
                     else:
                         # 失敗したタクティクを記録
-                        failed_tactics.add(selected_tactic)
+                        failed_tactic_strings.add(selected_tactic)
                         consecutive_failures += 1
+                        
+                        # 失敗データも記録（include_failuresがTrueの場合）
+                        if include_failures:
+                            tactic_dict = parse_tactic_string_cached(selected_tactic)
+                            state_tactic_hash = create_state_hash(current_premises, current_goal, selected_tactic)
+                            
+                            example_failed_tactics.append({
+                                "step_index": step,
+                                "premises": current_premises.copy(),
+                                "goal": current_goal,
+                                "tactic": tactic_dict,
+                                "tactic_apply": False,
+                                "state_tactic_hash": state_tactic_hash,
+                                "reward": failure_penalty,
+                                "log_prob": np.log(selected_prob + 1e-8)  # 対数確率
+                            })
                         
                         # 利用可能なタクティクリストを更新
                         available_tactics = [tactic for tactic, _ in tactic_combinations 
-                                           if tactic not in failed_tactics]
+                                           if tactic not in failed_tactic_strings]
                         
                         if not available_tactics:
                             if verbose:
@@ -685,7 +754,7 @@ def collect_self_improvement_data(
                 step += 1
                 solved = prover.goal is None
             
-            # 解けた場合のみ、このexampleの成功したタクティクを追加
+            # 成功・失敗データを適切に処理
             if solved:
                 solved_count += 1
                 successful_tactics.extend(example_successful_tactics)
@@ -693,6 +762,10 @@ def collect_self_improvement_data(
                 if verbose:
                     print(f"  Result: {result_text}")
             else:
+                # 解けなかった場合でも、失敗データは記録する（include_failuresがTrueの場合）
+                if include_failures:
+                    failed_tactics.extend(example_failed_tactics)
+                
                 if example_terminated:
                     result_text = f"EARLY TERMINATED after {step} steps"
                     if verbose:
@@ -713,11 +786,13 @@ def collect_self_improvement_data(
     # 進捗バーを閉じる
     progress_bar.close()
     
-    print(f"\nSelf improvement data collection completed:")
+    print(f"\nComprehensive RL data collection completed:")
     print(f"  Solved examples: {solved_count}/{len(tautologies)}")
     print(f"  Successful tactics collected: {len(successful_tactics)}")
+    if include_failures:
+        print(f"  Failed tactics collected: {len(failed_tactics)}")
     
-    return successful_tactics
+    return successful_tactics, failed_tactics
 
 
 def clear_self_improvement_data(output_dir: str = "self_improvement_data") -> None:

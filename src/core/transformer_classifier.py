@@ -207,6 +207,14 @@ class TransformerClassifier(nn.Module):
     ) -> None:
         super().__init__()
         
+        # パラメータをインスタンス変数として保存
+        self.vocab_size = vocab_size
+        self.pad_id = pad_id
+        self.max_seq_len = max_seq_len
+        self.num_main_classes = num_main_classes
+        self.num_arg1_classes = num_arg1_classes
+        self.num_arg2_classes = num_arg2_classes
+        
         self.embedding = nn.Embedding(vocab_size, d_model, padding_idx=pad_id)
         # Segment embeddings: 0=special([CLS]/[SEP]/[PAD]/[EOS]), 1=goal, 2+=premises
         # Support up to 100 segments to handle variable number of premises

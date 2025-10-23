@@ -1,10 +1,9 @@
 #!/bin/bash
-# Usage: ./run_train_parallel_loop.sh <SRC_LOOP> <DST_LOOP> <BUCKET_NAME> [BATCH_SIZE]
-#        [--entropy-reg-weight <V>] [--kl-penalty-weight <V>]
+# Usage: ./run_train_parallel.sh <SRC_LOOP> <DST_LOOP> <BUCKET_NAME> [BATCH_SIZE]
+#        [--temperature <V>] [--entropy-reg-weight <V>] [--kl-penalty-weight <V>]
 #        [--kl-reference-model-template <PATH>] [--arg1-loss-weight <V>] [--arg2-loss-weight <V>]
 #        [-- <additional python args...>]
-# Example: ./run_train_parallel_loop.sh RL1 RL2 bucket 32 --entropy-reg-weight 0.05 --kl-penalty-weight 0.1 \
-#          --kl-reference-model-template "models/{SRC_LOOP}_temperature_{TEMP}_low_lr.pth" -- --num-epochs 2
+# Example: ./run_train_parallel.sh RL1 RL2 fof-data-20251010-milano 8 --temperature 1.5 --entropy-reg-weight 0.05 --kl-penalty-weight 0.05 --kl-reference-model-template "models/pretrained_model.pth"
 
 set -e  # 途中でエラーが出たら終了
 
@@ -18,7 +17,8 @@ DST_LOOP=$2
 BUCKET=$3
 shift 3
 
-BATCH_SIZE=32  # デフォルトバッチサイズ
+BATCH_SIZE=8  # デフォルトバッチサイズ
+TEMPERATURE=1  # デフォルト温度
 ENTROPY_REG_WEIGHT=0.0
 KL_PENALTY_WEIGHT=0.0
 KL_REFERENCE_MODEL_TEMPLATE=""
@@ -34,6 +34,10 @@ fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --temperature)
+      TEMPERATURE=$2
+      shift 2
+      ;;
     --entropy-reg-weight)
       ENTROPY_REG_WEIGHT=$2
       shift 2
@@ -67,13 +71,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 # === 設定 ===
-TEMPS=("1" "1.25" "1.5" "2")
+TEMPS=("${TEMPERATURE}")
 LOG_DIR="logs_${DST_LOOP}"
 mkdir -p "${LOG_DIR}"
 
 # === トレーニング実行（順次実行） ===
 echo "=== Starting parallel training for ${DST_LOOP} ==="
 echo "Using batch size: ${BATCH_SIZE}"
+echo "Temperature: ${TEMPERATURE}"
 echo "Entropy regularization weight: ${ENTROPY_REG_WEIGHT}"
 echo "KL penalty weight: ${KL_PENALTY_WEIGHT}"
 if [[ -n "${KL_REFERENCE_MODEL_TEMPLATE}" ]]; then
@@ -84,8 +89,15 @@ echo "Arg2 loss weight: ${ARG2_LOSS_WEIGHT}"
 
 for TEMP in "${TEMPS[@]}"; do
   DATA_DIR="generated_data_${DST_LOOP}/temperature_${TEMP}_mixture"
-  LOAD_MODEL="models/${SRC_LOOP}_temperature_${TEMP}_low_lr.pth"
-  SAVE_MODEL="models/${DST_LOOP}_temperature_${TEMP}_low_lr.pth"
+  
+  # RL0の場合はpretrained_model.pthを使用
+  if [[ "${SRC_LOOP}" == "RL0" ]]; then
+    LOAD_MODEL="models/pretrained_model.pth"
+  else
+    LOAD_MODEL="models/${SRC_LOOP}_temperature_${TEMP}_low_lr.pth"
+  fi
+  
+  SAVE_MODEL="models/${DST_LOOP}_temperature_${TEMP}_KL_${KL_PENALTY_WEIGHT}_entropy_${ENTROPY_REG_WEIGHT}.pth"
   LOG_FILE="${LOG_DIR}/train_${TEMP}.log"
   REFERENCE_MODEL_PATH="${KL_REFERENCE_MODEL_TEMPLATE}"
   if [[ -n "${REFERENCE_MODEL_PATH}" ]]; then
@@ -123,7 +135,7 @@ echo "All training jobs completed."
 echo "Uploading models to gs://${BUCKET}/models/ ..."
 
 for TEMP in "${TEMPS[@]}"; do
-  SAVE_MODEL="models/${DST_LOOP}_temperature_${TEMP}_low_lr.pth"
+  SAVE_MODEL="models/${DST_LOOP}_temperature_${TEMP}_KL_${KL_PENALTY_WEIGHT}_entropy_${ENTROPY_REG_WEIGHT}.pth"
   if [ -f "${SAVE_MODEL}" ]; then
     echo "→ Uploading ${SAVE_MODEL}"
     gsutil cp "${SAVE_MODEL}" "gs://${BUCKET}/models/"
