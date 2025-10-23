@@ -42,7 +42,6 @@ from src.core.parameter import (
     default_params, get_model_params, get_training_params, 
     get_system_params, get_hierarchical_labels, DeviceType
 )
-from src.training.inference_hierarchical import evaluate_inference_performance
 
 
 class BatchDataset(Dataset):
@@ -160,7 +159,8 @@ def train_epoch(
     gradient_accumulation_steps: int = 1,
     use_wandb: bool = False,
     epoch: int = 0,
-    log_frequency: int = 1000
+    log_frequency: int = 1000,
+    disable_tqdm: bool = False
 ) -> float:
     """1エポックの学習を実行"""
     model.train()
@@ -172,7 +172,10 @@ def train_epoch(
     recent_entropy_reg_losses = []
     recent_kl_penalties = []
 
-    pbar = tqdm(dataloader, desc="Training", unit="batch")
+    if disable_tqdm:
+        pbar = dataloader
+    else:
+        pbar = tqdm(dataloader, desc="Training", unit="batch")
 
     def compute_entropy(logits: torch.Tensor) -> torch.Tensor:
         """Compute mean entropy for the provided logits."""
@@ -356,7 +359,8 @@ def train_epoch(
                 recent_kl_penalties.pop(0)
 
         # プログレスバーを更新
-        pbar.set_postfix({'Loss': f'{total_loss / num_batches:.4f}'})
+        if not disable_tqdm:
+            pbar.set_postfix({'Loss': f'{total_loss / num_batches:.4f}'})
 
         # 指定された頻度でwandbにログ
         if use_wandb and WANDB_AVAILABLE and batch_idx % log_frequency == 0:
@@ -398,6 +402,7 @@ def main():
     parser.add_argument("--random_seed", type=int, default=42, help="random seed for reproducibility")
     parser.add_argument("--log_frequency", type=int, default=1000, help="log training loss every n batches")
     parser.add_argument("--save_checkpoints", action="store_true", help="save model checkpoint after each epoch")
+    parser.add_argument("--checkpoint_dir", type=str, default="checkpoints", help="directory to save model checkpoints")
     parser.add_argument("--load_model_path", type=str, default=None, help="path to pretrained model to load")
     
     # 並列化関連の引数（オプション）
@@ -406,6 +411,7 @@ def main():
     parser.add_argument("--gpu_ids", type=str, default=None, help="comma-separated GPU IDs to use")
     parser.add_argument("--use_amp", action="store_true", help="use Automatic Mixed Precision")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="number of gradient accumulation steps")
+    parser.add_argument("--disable_tqdm", action="store_true", help="disable tqdm progress bars (useful for logging)")
     
     # 推論評価関連の引数（オプション）
     parser.add_argument("--inference_eval_examples", type=int, default=100, help="number of examples for inference evaluation")
@@ -711,26 +717,16 @@ def main():
     print(f"📊 Log frequency: every {args.log_frequency} batches")
     print("=" * 60)
     
-    # 学習開始前のベースライン推論評価
-    print(f"\n🔍 Evaluating baseline inference performance (before training)...")
-    baseline_success_rate, baseline_avg_steps = evaluate_inference_performance(
-        model, tokenizer, label_mappings, device, args.max_seq_len,
-        num_examples=args.inference_eval_examples, 
-        max_steps=args.inference_max_steps, 
-        temperature=args.inference_temperature,
-        difficulty=0.7,  # デフォルトのdifficulty値を使用
-        max_depth=4,  # データ生成時と同じmax_depth値を使用
-        seed=42  # 再現性のため固定シードを使用
-    )
-    print(f"  Baseline inference success rate: {baseline_success_rate:.3f}")
-    print(f"  Baseline inference avg steps (when solved): {baseline_avg_steps:.2f}")
+    # 学習開始前のベースライン推論評価（削除）
+    # print(f"\n🔍 Evaluating baseline inference performance (before training)...")
+    # baseline_success_rate, baseline_avg_steps = evaluate_inference_performance(...)
     
-    # ベースライン結果をwandbに記録
-    if args.use_wandb and WANDB_AVAILABLE:
-        wandb.log({
-            "inference/success_rate": baseline_success_rate,
-            "inference/avg_steps": baseline_avg_steps
-        })
+    # ベースライン結果をwandbに記録（削除）
+    # if args.use_wandb and WANDB_AVAILABLE:
+    #     wandb.log({
+    #         "inference/success_rate": baseline_success_rate,
+    #         "inference/avg_steps": baseline_avg_steps
+    #     })
     
     print("=" * 60)
     
@@ -754,38 +750,22 @@ def main():
             gradient_accumulation_steps=args.gradient_accumulation_steps,
             use_wandb=args.use_wandb and WANDB_AVAILABLE,
             epoch=epoch,
-            log_frequency=args.log_frequency
+            log_frequency=args.log_frequency,
+            disable_tqdm=args.disable_tqdm
         )
         
         print(f"Epoch {epoch+1} completed. Average loss: {avg_loss:.4f}")
         
-        # 推論性能を評価（毎エポック）
-        if True:  # 毎エポック実行
-            print(f"\n🔍 Evaluating inference performance after epoch {epoch+1}...")
-            inference_success_rate, inference_avg_steps = evaluate_inference_performance(
-                model, tokenizer, label_mappings, device, args.max_seq_len,
-                num_examples=args.inference_eval_examples, 
-                max_steps=args.inference_max_steps, 
-                temperature=args.inference_temperature,
-                difficulty=0.7,  # デフォルトのdifficulty値を使用
-                max_depth=4  # データ生成時と同じmax_depth値を使用
-            )
-            print(f"  Inference success rate: {inference_success_rate:.3f}")
-            print(f"  Inference avg steps (when solved): {inference_avg_steps:.2f}")
-        else:
-            inference_success_rate = None
-            inference_avg_steps = None
+        # 推論性能を評価（毎エポック）- 削除
+        # print(f"\n🔍 Evaluating inference performance after epoch {epoch+1}...")
+        # inference_success_rate, inference_avg_steps = evaluate_inference_performance(...)
         
         # wandbにログ
         if args.use_wandb and WANDB_AVAILABLE:
             log_data = {
                 "loss": avg_loss
             }
-            if inference_success_rate is not None:
-                log_data.update({
-                    "inference/success_rate": inference_success_rate,
-                    "inference/avg_steps": inference_avg_steps
-                })
+            # inference関連のログは削除
             wandb.log(log_data)
         
         # エポックごとにモデルを保存
