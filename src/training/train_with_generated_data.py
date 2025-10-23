@@ -227,7 +227,7 @@ def train_epoch(
                 entropy_terms.append(compute_entropy(arg1_logits[arg1_valid_mask]))
             if arg2_valid_mask.any():
                 entropy_terms.append(compute_entropy(arg2_logits[arg2_valid_mask]))
-            entropy_loss = -torch.stack(entropy_terms).mean()
+            entropy_loss = torch.stack(entropy_terms).mean()
             total_loss_local = total_loss_local + entropy_reg_weight * entropy_loss
 
         kl_penalty_loss = torch.tensor(0.0, device=device)
