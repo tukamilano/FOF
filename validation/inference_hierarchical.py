@@ -11,7 +11,7 @@ import json
 import time
 from typing import List, Tuple, Dict, Any
 
-from tqdm import tqdm
+# from tqdm import tqdm  # 依存関係を削除
 
 
 # プロジェクトルートをパスに追加
@@ -669,15 +669,12 @@ def main():
     tactic_usage = {}
     confidence_scores = []
     
-    with tqdm(
-        total=len(tautologies),
-        desc="Processing examples",
-        unit="example",
-    ) as progress:
-        for i, goal_str in enumerate(tautologies):
+    # 簡単な進捗表示
+    print(f"Processing {len(tautologies)} examples...")
+    for i, goal_str in enumerate(tautologies):
             if not goal_str:
                 print(f"Warning: Empty formula for example {i+1}, skipping...")
-                progress.update(1)
+                # progress.update(1)  # 削除
                 continue
             try:
                 # パースしてproverを作成
@@ -785,8 +782,9 @@ def main():
                 print(f"Warning: Failed to process tautology {i+1}: {e}")
                 step_counts.append(args.max_steps)  # 失敗として記録
             
-            # プログレスバーを更新
-            progress.update(1)
+            # 進捗表示
+            if (i + 1) % 10 == 0:
+                print(f"Processed {i + 1}/{len(tautologies)} examples...")
     
     # 最終結果を計算
     total_examples = len(step_counts)  # 実際に処理された問題数

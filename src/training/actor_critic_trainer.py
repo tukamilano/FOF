@@ -48,33 +48,131 @@ class RLDataset(Dataset):
         return len(self.data)
     
     def __getitem__(self, idx):
-        item = self.data[idx]
-        
-        # 入力をエンコード
-        premises = item['premises']
-        goal = item['goal']
-        input_ids, attention_mask, segment_ids = self.tokenizer.encode(
-            goal, premises, self.max_seq_len
-        )
-        
-        # タクティクを解析
-        tactic = item['tactic']
-        if isinstance(tactic, str):
-            from ..core.state_encoder import parse_tactic_string
-            tactic_dict = parse_tactic_string(tactic)
-        else:
-            tactic_dict = tactic
-        
+        try:
+            if idx >= len(self.data):
+                print(f"⚠️  Index {idx} out of range (dataset size: {len(self.data)})")
+                return self._get_dummy_item()
+            
+            item = self.data[idx]
+            if item is None:
+                print(f"⚠️  Item at index {idx} is None")
+                return self._get_dummy_item()
+            
+            # 入力をエンコード
+            premises = item.get('premises', [])
+            goal = item.get('goal', '')
+            
+            # premisesがNoneでないことをチェック（空のリストはOK）
+            if premises is None or not goal:
+                print(f"⚠️  Missing premises or goal at index {idx}")
+                return self._get_dummy_item()
+            
+            input_ids, attention_mask, segment_ids = self.tokenizer.encode(
+                goal, premises, self.max_seq_len
+            )
+            
+            # タクティクを解析
+            tactic = item.get('tactic', {})
+            if isinstance(tactic, str):
+                from ..core.state_encoder import parse_tactic_string
+                tactic_dict = parse_tactic_string(tactic)
+            else:
+                tactic_dict = tactic
+            
+            # 戦術名を数値IDに変換（簡易的なマッピング）
+            main_tactic = tactic_dict.get('main', 'assumption')
+            arg1_value = tactic_dict.get('arg1', '0')
+            arg2_value = tactic_dict.get('arg2', '0')
+            
+            # None値の処理
+            if arg1_value is None:
+                arg1_value = '0'
+            if arg2_value is None:
+                arg2_value = '0'
+            
+            # 文字列に変換
+            arg1_value = str(arg1_value)
+            arg2_value = str(arg2_value)
+            
+            # 基本的な戦術マッピング
+            tactic_mapping = {
+                'assumption': 0, 'intro': 1, 'split': 2, 'left': 3, 'right': 4, 'add_dn': 5,
+                'apply': 6, 'destruct': 12, 'specialize': 18
+            }
+            
+            # main_actionの計算
+            if main_tactic in ['apply', 'destruct', 'specialize']:
+                # apply, destruct, specializeの場合は基本ID + 引数
+                if main_tactic == 'apply':
+                    main_action = 6 + int(arg1_value) if arg1_value.isdigit() else 6
+                elif main_tactic == 'destruct':
+                    main_action = 12 + int(arg1_value) if arg1_value.isdigit() else 12
+                elif main_tactic == 'specialize':
+                    main_action = 18 + int(arg1_value) if arg1_value.isdigit() else 18
+            else:
+                main_action = tactic_mapping.get(main_tactic, 0)
+            
+            # arg1_action, arg2_actionの計算
+            arg1_action = int(arg1_value) if arg1_value.isdigit() else 0
+            arg2_action = int(arg2_value) if arg2_value.isdigit() else 0
+            
+            return {
+                'input_ids': input_ids,
+                'attention_mask': attention_mask,
+                'segment_ids': segment_ids,
+                'main_action': main_action,
+                'arg1_action': arg1_action,
+                'arg2_action': arg2_action,
+                'reward': float(item.get('reward', 0.0)),
+                'log_prob': float(item.get('log_prob', 0.0)),
+                'is_success': bool(item.get('is_success', False))
+            }
+        except Exception as e:
+            print(f"⚠️  Error in RLDataset.__getitem__({idx}): {e}")
+            print(f"   Item keys: {list(item.keys()) if 'item' in locals() and item is not None else 'N/A'}")
+            return self._get_dummy_item()
+    
+    def _get_dummy_item(self):
+        """ダミーデータを返す"""
+        try:
+            dummy_input_ids = torch.zeros(self.max_seq_len, dtype=torch.long)
+            dummy_attention_mask = torch.zeros(self.max_seq_len, dtype=torch.long)
+            dummy_segment_ids = torch.zeros(self.max_seq_len, dtype=torch.long)
+            
+            result = {
+                'input_ids': dummy_input_ids,
+                'attention_mask': dummy_attention_mask,
+                'segment_ids': dummy_segment_ids,
+                'main_action': 0,
+                'arg1_action': 0,
+                'arg2_action': 0,
+                'reward': 0.0,
+                'log_prob': 0.0,
+                'is_success': False
+            }
+            
+            # 結果がNoneでないことを確認
+            if result is None:
+                print("⚠️  _get_dummy_item returned None!")
+                return self._get_fallback_item()
+            
+            return result
+        except Exception as e:
+            print(f"⚠️  Error in _get_dummy_item: {e}")
+            return self._get_fallback_item()
+    
+    def _get_fallback_item(self):
+        """最終的なフォールバック用のダミーデータ"""
         return {
-            'input_ids': input_ids,
-            'attention_mask': attention_mask,
-            'segment_ids': segment_ids,
-            'main_action': tactic_dict['main'],
-            'arg1_action': tactic_dict['arg1'],
-            'arg2_action': tactic_dict['arg2'],
-            'reward': item['reward'],
-            'log_prob': item['log_prob'],
-            'is_success': item['is_success']
+            'input_ids': torch.tensor([0] * self.max_seq_len, dtype=torch.long),
+            'attention_mask': torch.tensor([0] * self.max_seq_len, dtype=torch.long),
+            'segment_ids': torch.tensor([0] * self.max_seq_len, dtype=torch.long),
+            'main_action': 0,
+            'arg1_action': 0,
+            'arg2_action': 0,
+            'reward': 0.0,
+            'log_prob': 0.0,
+            'is_success': False
         }
 
 
@@ -251,8 +349,8 @@ def train_actor_critic_epoch(
         main_actions = batch['main_action'].to(device)
         arg1_actions = batch['arg1_action'].to(device)
         arg2_actions = batch['arg2_action'].to(device)
-        rewards = batch['reward'].to(device)
-        old_log_probs = batch['log_prob'].to(device)
+        rewards = batch['reward'].to(device).float()  # float32に変換
+        old_log_probs = batch['log_prob'].to(device).float()  # float32に変換
         
         # エピソードごとにアドバンテージを計算
         # ここでは簡略化して、即座の報酬を使用

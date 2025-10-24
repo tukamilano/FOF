@@ -107,10 +107,8 @@ def load_tautologies_from_generated_data(
     json_files.sort()  # ファイル名でソート
     
     if not json_files:
-        print(f"Warning: No JSON files found in {generated_data_dir}")
         return []
     
-    print(f"Found {len(json_files)} JSON files in {generated_data_dir}")
     
     for json_file in json_files:
         if max_examples and len(tautologies) >= max_examples:
@@ -137,13 +135,11 @@ def load_tautologies_from_generated_data(
                         if isinstance(formula, str) and formula.strip():
                             tautologies.append(formula.strip())
             
-            print(f"Loaded {len(data) if isinstance(data, list) else 'unknown'} formulas from {json_file}")
             
         except Exception as e:
             print(f"Warning: Failed to load {json_file}: {e}")
             continue
     
-    print(f"Total loaded tautologies: {len(tautologies)}")
     return tautologies
 
 
@@ -229,6 +225,70 @@ def create_state_hash(premises: List[str], goal: str, tactic_str: str) -> str:
     # 文字列結合を最適化
     state_tactic_str = f"{'|'.join(premises)}|{goal}|{tactic_str}"
     return hashlib.md5(state_tactic_str.encode()).hexdigest()
+
+
+def save_buffer_data(
+    successful_buffer: List[Dict[str, Any]],
+    failed_buffer: List[Dict[str, Any]],
+    output_dir: str,
+    batch_counter: int,
+    batch_size: int,
+    gcs_bucket: str = None,
+    gcs_prefix: str = ""
+) -> int:
+    """バッファデータをファイルに保存"""
+    if not output_dir:
+        return batch_counter
+    
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # 成功データを保存
+    if successful_buffer:
+        filename = f"successful_tactics_{batch_counter:05d}.json"
+        filepath = os.path.join(output_dir, filename)
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(successful_buffer, f, ensure_ascii=False, indent=2)
+        
+        print(f"💾 Saved {len(successful_buffer)} successful tactics to {filepath}")
+        
+        # GCSアップロード（オプション）
+        if gcs_bucket:
+            try:
+                from google.cloud import storage
+                client = storage.Client()
+                bucket = client.bucket(gcs_bucket)
+                blob_name = f"{gcs_prefix.rstrip('/')}/{filename}" if gcs_prefix else filename
+                blob = bucket.blob(blob_name)
+                blob.upload_from_filename(filepath)
+                print(f"✅ Uploaded {filename} to GCS")
+            except Exception as e:
+                print(f"❌ Failed to upload {filename} to GCS: {e}")
+    
+    # 失敗データを保存
+    if failed_buffer:
+        filename = f"failed_tactics_{batch_counter:05d}.json"
+        filepath = os.path.join(output_dir, filename)
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(failed_buffer, f, ensure_ascii=False, indent=2)
+        
+        print(f"💾 Saved {len(failed_buffer)} failed tactics to {filepath}")
+        
+        # GCSアップロード（オプション）
+        if gcs_bucket:
+            try:
+                from google.cloud import storage
+                client = storage.Client()
+                bucket = client.bucket(gcs_bucket)
+                blob_name = f"{gcs_prefix.rstrip('/')}/{filename}" if gcs_prefix else filename
+                blob = bucket.blob(blob_name)
+                blob.upload_from_filename(filepath)
+                print(f"✅ Uploaded {filename} to GCS")
+            except Exception as e:
+                print(f"❌ Failed to upload {filename} to GCS: {e}")
+    
+    return batch_counter + 1
 
 
 def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[TransformerClassifier, Dict[str, Any]]:
@@ -602,7 +662,11 @@ def collect_comprehensive_rl_data(
     include_failures: bool = True,
     success_reward: float = 1.0,
     step_penalty: float = 0.01,
-    failure_penalty: float = -0.1
+    failure_penalty: float = -0.1,
+    output_dir: str = None,
+    batch_size: int = 1000,
+    gcs_bucket: str = None,
+    gcs_prefix: str = ""
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     Actor-Critic学習用の包括的データを収集（成功・失敗両方）
@@ -639,20 +703,19 @@ def collect_comprehensive_rl_data(
         print("Failed to load tautologies from generated_data directory!")
         return [], []
     
-    print(f"Loaded {len(tautologies)} tautologies from generated_data directory")
-    print("First 5 tautologies:")
-    for i in range(min(5, len(tautologies))):
-        print(f"  {i+1}: {tautologies[i]}")
     
     # 成功・失敗データを収集
     successful_tactics = []
     failed_tactics = []
     solved_count = 0
     
-    # 進捗表示付きでループ実行
-    progress_bar = tqdm(enumerate(tautologies), total=len(tautologies), desc="Processing tautologies", unit="formula")
+    # 逐次書き出し用のバッファ
+    successful_buffer = []
+    failed_buffer = []
+    batch_counter = 0
     
-    for i, goal_str in progress_bar:
+    # ループ実行
+    for i, goal_str in enumerate(tautologies):
         try:
             # パースしてproverを作成
             parse_tree = PYPROVER_MODULES['PropParseTree']()
@@ -662,8 +725,6 @@ def collect_comprehensive_rl_data(
             # 前提は空（トートロジーなので前提なしで証明可能）
             premises = []
             
-            if verbose:
-                print(f"\nExample {i+1}: {goal_str}")
             
             # このexampleの成功・失敗タクティクを一時的に保存
             example_successful_tactics = []
@@ -686,13 +747,9 @@ def collect_comprehensive_rl_data(
                 
                 # 二重否定ループを検出した場合は早期終了
                 if current_goal and detect_double_negation_loop(str(current_goal)):
-                    if verbose:
-                        print(f"    Double negation loop detected, keeping {len(example_failed_tactics)} failed tactics")
                     example_terminated = True
                     break
                 
-                if verbose:
-                    print(f"  Step {step+1}: Goal={current_goal}")
                 
                 # 確率閾値を満たすタクティク組み合わせを生成
                 tactic_combinations = generate_tactic_combinations(
@@ -700,8 +757,6 @@ def collect_comprehensive_rl_data(
                     label_mappings, device, max_seq_len, temperature
                 )
                 
-                if verbose:
-                    print(f"    Generated {len(tactic_combinations)} tactics, {len(example_failed_tactics)} failed so far")
                 
                 # 確率的にタクティクを選択して適用
                 success = False
@@ -720,8 +775,6 @@ def collect_comprehensive_rl_data(
                     
                     if not selected_tactic:
                         # 利用可能なタクティクがない場合
-                        if verbose:
-                            print(f"    No available tactics")
                         example_terminated = True
                         break
                     
@@ -729,8 +782,6 @@ def collect_comprehensive_rl_data(
                     success = apply_tactic_from_label(prover, selected_tactic)
                     attempts += 1
                     
-                    if verbose and attempts <= 3:  # 最初の3回のみ表示
-                        print(f"    Attempt {attempts}: {selected_tactic} - {'Success' if success else 'Failed'}")
                     
                     if success:
                         # 成功したタクティクを一時的に記録
@@ -752,10 +803,27 @@ def collect_comprehensive_rl_data(
                         })
                         consecutive_failures = 0  # 成功したら連続失敗数をリセット
                         
-                        if verbose and attempts <= 3:  # 最初の3回のみ表示
+                        # 成功したが最終的に証明が完了しなかった場合、失敗データにも追加
+                        # ただし、基本的なタクティク（assumption, intro, split, left, right, add_dn）の場合は除外（正解なので）
+                        basic_tactics = {"assumption", "intro", "split", "left", "right", "add_dn"}
+                        if prover.goal is not None and include_failures and tactic_dict["main"] not in basic_tactics:
+                            # 新しいゴールを取得
                             new_state = encode_prover_state(prover)
                             new_goal = new_state["goal"]
-                            print(f"    → New goal: {new_goal if new_goal else 'SOLVED!'}")
+                            
+                            # 二重否定ループが含まれていない場合のみ追加
+                            if not detect_double_negation_loop(str(new_goal)):
+                                example_failed_tactics.append({
+                                "step_index": step,
+                                "premises": current_premises.copy(),
+                                "goal": current_goal,
+                                "tactic": tactic_dict,
+                                "tactic_apply": True,  # 適用は成功したが結果は良くなかった
+                                "state_tactic_hash": state_tactic_hash,
+                                "reward": 0.0,  # 中間的な失敗として0.0
+                                "log_prob": np.log(selected_prob + 1e-8)
+                            })
+                        
                     else:
                         # 失敗したタクティクを記録
                         failed_tactic_strings.add(selected_tactic)
@@ -783,8 +851,6 @@ def collect_comprehensive_rl_data(
                                            if tactic not in failed_tactic_strings]
                         
                         if not available_tactics:
-                            if verbose:
-                                print(f"    All tactics failed")
                             example_terminated = True
                             break
                 
@@ -795,6 +861,8 @@ def collect_comprehensive_rl_data(
             if solved:
                 solved_count += 1
                 successful_tactics.extend(example_successful_tactics)
+                successful_buffer.extend(example_successful_tactics)
+                
                 # 成功した場合でも、その過程での失敗データを記録
                 if include_failures:
                     # 二重否定ループが含まれていない失敗データのみを追加
@@ -803,8 +871,7 @@ def collect_comprehensive_rl_data(
                         if not detect_double_negation_loop(str(failed_tactic.get('goal', '')))
                     ]
                     failed_tactics.extend(filtered_failed_tactics)
-                if verbose:
-                    print(f"  Result: SOLVED in {step} steps")
+                    failed_buffer.extend(filtered_failed_tactics)
             else:
                 # 解けなかった場合でも、失敗データは記録する（include_failuresがTrueの場合）
                 if include_failures:
@@ -814,30 +881,27 @@ def collect_comprehensive_rl_data(
                         if not detect_double_negation_loop(str(failed_tactic.get('goal', '')))
                     ]
                     failed_tactics.extend(filtered_failed_tactics)
+                    failed_buffer.extend(filtered_failed_tactics)
+            
+            # バッファが一定量に達したら書き出し
+            if output_dir and (len(successful_buffer) >= batch_size or len(failed_buffer) >= batch_size):
+                batch_counter = save_buffer_data(
+                    successful_buffer, failed_buffer, output_dir, batch_counter, batch_size, gcs_bucket, gcs_prefix
+                )
+                successful_buffer = []
+                failed_buffer = []
                 
-                if example_terminated:
-                    if verbose:
-                        print(f"  Result: EARLY TERMINATED after {step} steps")
-                else:
-                    if verbose:
-                        print(f"  Result: FAILED after {step} steps")
             
                 
         except Exception as e:
             # パースエラーなどで失敗した場合はスキップ
-            if verbose:
-                print(f"Warning: Failed to process tautology {i+1}: {e}")
-            
             continue
     
-    # 進捗バーを閉じる
-    progress_bar.close()
-    
-    print(f"\nComprehensive RL data collection completed:")
-    print(f"  Solved examples: {solved_count}/{len(tautologies)}")
-    print(f"  Successful tactics collected: {len(successful_tactics)}")
-    if include_failures:
-        print(f"  Failed tactics collected: {len(failed_tactics)}")
+    # 残りのバッファを書き出し
+    if output_dir and (successful_buffer or failed_buffer):
+        batch_counter = save_buffer_data(
+            successful_buffer, failed_buffer, output_dir, batch_counter, batch_size, gcs_bucket, gcs_prefix
+        )
     
     return successful_tactics, failed_tactics
 

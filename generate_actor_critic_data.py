@@ -9,6 +9,7 @@ import json
 import torch
 import argparse
 from pathlib import Path
+from google.cloud import storage
 
 # プロジェクトルートをパスに追加
 project_root = os.path.dirname(__file__)
@@ -22,6 +23,96 @@ from src.core.transformer_classifier import (
 )
 from src.core.parameter import get_model_params, get_hierarchical_labels
 from src.interaction.self_improvement_data_collector import collect_comprehensive_rl_data
+
+
+def upload_to_gcs(local_file_path: str, gcs_bucket: str, gcs_prefix: str) -> bool:
+    """Upload a local file to Google Cloud Storage.
+    
+    Args:
+        local_file_path: Path to the local file to upload
+        gcs_bucket: GCS bucket name
+        gcs_prefix: GCS prefix for the uploaded file
+        
+    Returns:
+        True if upload successful, False otherwise
+    """
+    try:
+        client = storage.Client()
+        bucket = client.bucket(gcs_bucket)
+        
+        # Create the blob name by combining prefix and filename
+        filename = os.path.basename(local_file_path)
+        blob_name = f"{gcs_prefix.rstrip('/')}/{filename}" if gcs_prefix else filename
+        
+        blob = bucket.blob(blob_name)
+        
+        print(f"📤 Uploading {local_file_path} to gs://{gcs_bucket}/{blob_name}")
+        blob.upload_from_filename(local_file_path)
+        
+        print(f"✅ Successfully uploaded to gs://{gcs_bucket}/{blob_name}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error uploading {local_file_path} to GCS: {e}")
+        return False
+
+
+def save_actor_critic_data_with_gcs(
+    successful_tactics: list,
+    failed_tactics: list,
+    output_dir: str = "actor_critic_data",
+    batch_size: int = 10000,
+    gcs_bucket: str = None,
+    gcs_prefix: str = ""
+) -> None:
+    """Actor-Criticデータをファイルに保存し、GCSに逐次アップロード"""
+    
+    # 出力ディレクトリを作成
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # 成功データをバッチごとに分割して保存・アップロード
+    if successful_tactics:
+        print(f"💾 Saving {len(successful_tactics)} successful tactics in batches of {batch_size}...")
+        for i in range(0, len(successful_tactics), batch_size):
+            batch_data = successful_tactics[i:i + batch_size]
+            batch_num = i // batch_size
+            
+            filename = f"successful_tactics_{batch_num:05d}.json"
+            filepath = os.path.join(output_dir, filename)
+            
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(batch_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"💾 Saved {len(batch_data)} successful tactics to {filepath}")
+            
+            # GCSに逐次アップロード
+            if gcs_bucket:
+                if upload_to_gcs(filepath, gcs_bucket, gcs_prefix):
+                    print(f"✅ Uploaded {filename} to GCS")
+                else:
+                    print(f"❌ Failed to upload {filename} to GCS")
+    
+    # 失敗データをバッチごとに分割して保存・アップロード
+    if failed_tactics:
+        print(f"💾 Saving {len(failed_tactics)} failed tactics in batches of {batch_size}...")
+        for i in range(0, len(failed_tactics), batch_size):
+            batch_data = failed_tactics[i:i + batch_size]
+            batch_num = i // batch_size
+            
+            filename = f"failed_tactics_{batch_num:05d}.json"
+            filepath = os.path.join(output_dir, filename)
+            
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(batch_data, f, ensure_ascii=False, indent=2)
+            
+            print(f"💾 Saved {len(batch_data)} failed tactics to {filepath}")
+            
+            # GCSに逐次アップロード
+            if gcs_bucket:
+                if upload_to_gcs(filepath, gcs_bucket, gcs_prefix):
+                    print(f"✅ Uploaded {filename} to GCS")
+                else:
+                    print(f"❌ Failed to upload {filename} to GCS")
 
 
 def load_trial1_data(trial1_dir: str = "tautology/trial1", max_files: int = None) -> list:
@@ -105,7 +196,10 @@ def generate_actor_critic_data(
     success_reward: float = 1.0,
     step_penalty: float = 0.01,
     failure_penalty: float = -0.1,
-    device: str = "auto"
+    device: str = "auto",
+    gcs_bucket: str = None,
+    gcs_prefix: str = "",
+    batch_size: int = 10000
 ):
     """
     Actor-Critic学習用データを生成
@@ -122,6 +216,9 @@ def generate_actor_critic_data(
         step_penalty: ステップペナルティ
         failure_penalty: 失敗時のペナルティ
         device: デバイス
+        gcs_bucket: GCSバケット名（Noneの場合はアップロードしない）
+        gcs_prefix: GCSプレフィックス
+        batch_size: バッチサイズ（デフォルト10000）
     """
     print("🚀 Starting Actor-Critic data generation...")
     
@@ -226,22 +323,15 @@ def generate_actor_critic_data(
     print(f"  Successful tactics: {len(successful_tactics)}")
     print(f"  Failed tactics: {len(failed_tactics)}")
     
-    # 結果を保存
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # 成功データを保存
-    if successful_tactics:
-        success_file = os.path.join(output_dir, "successful_tactics.json")
-        with open(success_file, 'w', encoding='utf-8') as f:
-            json.dump(successful_tactics, f, ensure_ascii=False, indent=2)
-        print(f"💾 Successful tactics saved to: {success_file}")
-    
-    # 失敗データを保存
-    if failed_tactics:
-        failed_file = os.path.join(output_dir, "failed_tactics.json")
-        with open(failed_file, 'w', encoding='utf-8') as f:
-            json.dump(failed_tactics, f, ensure_ascii=False, indent=2)
-        print(f"💾 Failed tactics saved to: {failed_file}")
+    # 結果を保存（GCSアップロード機能を使用）
+    save_actor_critic_data_with_gcs(
+        successful_tactics=successful_tactics,
+        failed_tactics=failed_tactics,
+        output_dir=output_dir,
+        batch_size=batch_size,
+        gcs_bucket=gcs_bucket,
+        gcs_prefix=gcs_prefix
+    )
     
     # 統計情報を保存
     stats = {
@@ -285,6 +375,9 @@ def main():
     parser.add_argument("--step_penalty", type=float, default=0.01, help="step penalty")
     parser.add_argument("--failure_penalty", type=float, default=-0.1, help="failure penalty")
     parser.add_argument("--device", type=str, default="auto", help="device (auto/cuda/cpu)")
+    parser.add_argument("--gcs_bucket", type=str, default=None, help="GCS bucket name for upload")
+    parser.add_argument("--gcs_prefix", type=str, default="", help="GCS prefix for upload")
+    parser.add_argument("--batch_size", type=int, default=10000, help="batch size for GCS upload")
     
     args = parser.parse_args()
     
@@ -299,7 +392,10 @@ def main():
         success_reward=args.success_reward,
         step_penalty=args.step_penalty,
         failure_penalty=args.failure_penalty,
-        device=args.device
+        device=args.device,
+        gcs_bucket=args.gcs_bucket,
+        gcs_prefix=args.gcs_prefix,
+        batch_size=args.batch_size
     )
 
 
