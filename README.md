@@ -1,14 +1,28 @@
 # FOF (First-Order Formula) - Transformer-based Theorem Prover
 
-Transformerモデルを使用して命題論理の定理証明を自動化するシステムです。[pyprover](https://github.com/kaicho8636/pyprover)ライブラリと組み合わせて、数式生成から証明戦略の予測まで一貫したワークフローを提供します。
+Transformerモデルで命題論理の定理証明を自動化するシステムです。[pyprover](https://github.com/kaicho8636/pyprover) と組み合わせ、数式生成→学習→推論→自己改善まで一貫したワークフローを提供します。
 
 ## 🚀 主な特徴
 
-- **階層分類アーキテクチャ**: タクティクの種類と引数を独立して予測
-- **推論性能評価システム**: 実際の問題解決能力を測定
-- **大規模データ処理**: GCS統合による効率的なデータ管理
-- **並列データ収集**: マルチプロセス対応の高速データ生成
-- **実験追跡**: wandbによる詳細な学習・推論ログ
+- **階層分類アーキテクチャ**: タクティクの種類と引数を独立に予測
+- **推論評価スイート**: さまざまな推論手法を比較・検証
+- **大規模データ運用**: GCS統合と重複排除で効率化
+- **並列データ収集/学習**: マルチプロセス・マルチGPU・AMP対応
+- **実験追跡**: wandb で詳細なログ・可視化
+
+## 🔰 クイックスタート（推論のみ）
+
+学習済みモデルで推論を素早く試す：
+
+```bash
+python validation/inference_hierarchical.py \
+  --model_path models/pretrained_model.pth \
+  --count 100 \
+  --max_steps 30 \
+  --verbose
+```
+
+- 追加のベンチマークは `validation/pretrained_model_validation.txt` を参照
 
 ## 環境設定
 
@@ -16,7 +30,7 @@ Transformerモデルを使用して命題論理の定理証明を自動化する
 # 仮想環境の作成と有効化
 python -m venv .venv
 source .venv/bin/activate  # macOS/Linux
-# .venv\Scripts\activate   # Windows
+# .venv\Scripts\activate  # Windows
 
 # 依存関係をインストール
 pip install -r requirements.txt
@@ -24,52 +38,45 @@ pip install -r requirements.txt
 
 ### 依存関係
 
-- Python 3.8+
+- Python 3.8+（推奨: 3.9〜3.11）
 - PyTorch
-- [pyprover](https://github.com/kaicho8636/pyprover) - 命題論理証明器ライブラリ
-- wandb (オプション) - 実験追跡
+- [pyprover](https://github.com/kaicho8636/pyprover)
+- wandb（任意）
+- GCS を使う場合は `google-cloud-storage`
 
-## プロジェクト構造
+## プロジェクト構造（抜粋）
 
 ```
 FOF/
-├── src/                          # メインソースコード
-│   ├── core/                     # コア機能
-│   │   ├── transformer_classifier.py  # Transformerモデル
-│   │   ├── state_encoder.py           # 証明状態のエンコーディング
-│   │   ├── parameter.py               # ハイパーパラメータ管理
-│   │   └── fof_tokens.py              # トークン定義
-│   ├── data_generation/          # データ生成
-│   │   ├── auto_data_parallel_collector.py  # 並列データ収集
-│   │   └── tautology_generator.py          # トートロジー生成
-│   ├── training/                 # 学習関連
-│   │   ├── train_simple.py              # シンプル学習スクリプト
-│   │   ├── train_with_generated_data.py # 生成データ学習
-│   │   └── deduplicate_generated_data.py # 重複排除
-│   ├── interaction/              # インタラクション
-│   │   └── self_improvement_data_parallel_collector.py
-│   └── compression/              # データ圧縮
-├── validation/                   # 推論・評価
-│   └── inference_hierarchical.py # 階層分類推論
-├── tests/                        # テストファイル
-├── generated_data/               # 生成された学習データ
-├── deduplicated_data/            # 重複排除済みデータ
-├── models/                       # 学習済みモデル
-└── pyprover/                     # pyproverライブラリ
+├── automation/                   # 自動化スクリプト
+│   ├── create_temperature_mixture.sh
+│   ├── run_self_improvement.sh
+│   ├── run_train_simple_loop.sh
+│   └── README.md
+├── src/
+│   ├── core/                     # Transformer/エンコーダ/パラメータ
+│   ├── data_generation/          # 生成・収集（並列あり）
+│   ├── interaction/              # 自己改善データ収集
+│   ├── training/                 # 学習・分析・重複排除
+│   └── compression/              # 圧縮ユーティリティ
+├── validation/                   # 推論・比較
+├── tests/                        # テスト一式
+├── models/                       # 学習済み/チェックポイント
+└── pyprover/                     # 証明器
 ```
 
 ## 使用方法
 
-### 1. データ生成
+### 1) データ生成
 
 ```bash
-# 並列データ収集（推奨）
+# 並列データ収集（ローカル保存）
 python src/data_generation/auto_data_parallel_collector.py \
   --count 1000 \
   --workers 4 \
   --examples_per_file 100
 
-# GCSに直接アップロード
+# 直接 GCS に保存
 python src/data_generation/auto_data_parallel_collector.py \
   --count 10000 \
   --workers 8 \
@@ -77,100 +84,87 @@ python src/data_generation/auto_data_parallel_collector.py \
   --gcs_prefix generated_data/
 ```
 
-### 2. モデル学習
+### 2) 重複排除と分析
 
 ```bash
-# シンプル学習（重複排除済みデータ）
+python src/training/deduplicate_generated_data.py \
+  --input_dir generated_data \
+  --output_dir deduplicated_data
+
+python src/training/analyze_generated_data.py
+```
+
+### 3) 学習（シンプル）
+
+```bash
 python src/training/train_simple.py \
   --data_dir deduplicated_data \
   --batch_size 32 \
   --learning_rate 3e-4 \
   --num_epochs 10
 
-# wandbを使用した学習追跡
-python src/training/train_simple.py \
-  --use_wandb \
-  --wandb_project fof-training
+# wandb で追跡
+python src/training/train_simple.py --use_wandb --wandb_project fof-training
 ```
 
-### 3. 推論実行
+より詳細なワークフローや二段階重複排除は `src/training/README.md` を参照。
+
+### 4) 推論と比較
 
 ```bash
-# 基本的な推論
+# 階層分類推論
 python validation/inference_hierarchical.py \
   --model_path models/pretrained_model.pth \
   --count 100 \
   --max_steps 30
 
-# wandbを使用した推論追跡
-python validation/inference_hierarchical.py \
-  --use_wandb \
-  --wandb_project fof-inference
+# ビームサーチなどの比較
+python validation/inference_beam_search.py --help
+python validation/compare_inference_methods.py --help
 ```
 
-### 4. データ管理
+## 並列学習・高速化オプション
+
+- DataLoader 並列化、複数 GPU（DataParallel）、AMP、勾配累積に対応
+- 具体例・推奨設定は `src/training/PARALLEL_TRAINING.md` を参照
+
+## 自動化スクリプト（automation/）
+
+`automation/README.md` に簡易ガイドあり。実行前に実行権限を付与：
 
 ```bash
-# 重複排除
-python src/training/deduplicate_generated_data.py \
-  --input_dir generated_data \
-  --output_dir deduplicated_data
-
-# データ分析
-python src/training/analyze_generated_data.py
+chmod +x automation/*.sh
 ```
 
-## 学習システムの特徴
-
-### 全データ学習 + 推論性能評価
-
-- **全データ学習**: 利用可能なすべてのデータを学習に使用
-- **推論性能評価**: 実際の問題解決能力を測定
-- **ランダム問題選択**: 毎回異なる問題で評価
-- **実用的メトリクス**: 推論成功率と平均ステップ数
-
-### 階層分類アーキテクチャ
-
-```python
-# 3つの独立した分類ヘッド
-main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
-
-# タクティクの種類に応じた引数要件
-TACTIC_ARG_MASK = {
-    "intro": (False, False),      # 引数不要
-    "apply": (True, False),       # arg1のみ必要
-    "specialize": (True, True),   # arg1, arg2両方必要
-}
-```
-
-## 証明戦略
-
-| 戦略 | main | arg1 | arg2 | 説明 |
-|------|------|------|------|------|
-| `assumption` | "assumption" | null | null | 前提の直接適用 |
-| `intro` | "intro" | null | null | 含意導入 |
-| `split` | "split" | null | null | 連言の分解 |
-| `left` | "left" | null | null | 選言の左側選択 |
-| `right` | "right" | null | null | 選言の右側選択 |
-| `apply N` | "apply" | "N" | null | 前提Nの適用 |
-| `destruct N` | "destruct" | "N" | null | 前提Nの分解 |
-| `specialize N M` | "specialize" | "N" | "M" | 前提NをMで特殊化 |
-
-## 推奨ワークフロー
+例：
 
 ```bash
-# 1. データ生成
+# 温度ミクスチャ生成
+./automation/create_temperature_mixture.sh RL3
+
+# 学習ループ（例: RL1→RL2）
+./automation/run_train_simple_loop.sh RL1 RL2 your-gcs-bucket-prefix
+
+# 自己改善データ収集
+./automation/run_self_improvement.sh RL3
+```
+
+## モデル/チェックポイント
+
+- `models/pretrained_model.pth`: 事前学習済みモデル
+- `models/RL*_*.pth`: 強化学習サイクル（温度・ビームサーチ・top_k 等の条件）で得たモデル
+
+## 推奨ワークフロー（要約）
+
+```bash
+# 1. 生成
 python src/data_generation/auto_data_parallel_collector.py --count 1000 --workers 4
 
 # 2. 重複排除
-python src/training/deduplicate_generated_data.py \
-  --input_dir generated_data \
-  --output_dir deduplicated_data
+python src/training/deduplicate_generated_data.py --input_dir generated_data --output_dir deduplicated_data
 
 # 3. 学習
-python src/training/train_simple.py \
-  --data_dir deduplicated_data \
-  --use_wandb
+python src/training/train_simple.py --data_dir deduplicated_data --use_wandb
 
 # 4. 推論
 python validation/inference_hierarchical.py --verbose
@@ -179,19 +173,27 @@ python validation/inference_hierarchical.py --verbose
 ## テスト
 
 ```bash
-# 基本機能テスト
 python tests/test_integration.py
 python tests/test_parameter_sync.py
-
-# 重複排除テスト
 python tests/test_duplicate_check.py
 python tests/test_deduplicated_data_hashes.py
+python tests/test_tactic_tokens.py
+python tests/test_inference_evaluation.py
 ```
+
+注意: `tests/test_wandb_connection.py` は wandb ログインが必要です（`wandb login` または `WANDB_API_KEY` 環境変数）。
+
+## トラブルシューティング
+
+- **wandb にログインできない**: `pip install wandb && wandb login`
+- **GCS に書き込めない**: `GOOGLE_APPLICATION_CREDENTIALS` を設定し、`google-cloud-storage` をインストール
+- **CUDA メモリ不足**: バッチサイズを減らす / `--use_amp` / 勾配累積を利用
+- **データローディングが遅い**: `--num_workers` を増やす
 
 ## 謝辞
 
-このプロジェクトは以下のオープンソースライブラリを使用しています：
+このプロジェクトは以下の OSS を利用しています：
 
-- **[pyprover](https://github.com/kaicho8636/pyprover)** - 命題論理証明器ライブラリ
-- **PyTorch** - 深層学習フレームワーク
-- **wandb** - 実験追跡プラットフォーム
+- [pyprover](https://github.com/kaicho8636/pyprover)
+- PyTorch
+- wandb
