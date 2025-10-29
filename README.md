@@ -170,26 +170,6 @@ python src/training/train_simple.py --data_dir deduplicated_data --use_wandb
 python validation/inference_hierarchical.py --verbose
 ```
 
-## テスト
-
-```bash
-python tests/test_integration.py
-python tests/test_parameter_sync.py
-python tests/test_duplicate_check.py
-python tests/test_deduplicated_data_hashes.py
-python tests/test_tactic_tokens.py
-python tests/test_inference_evaluation.py
-```
-
-注意: `tests/test_wandb_connection.py` は wandb ログインが必要です（`wandb login` または `WANDB_API_KEY` 環境変数）。
-
-## トラブルシューティング
-
-- **wandb にログインできない**: `pip install wandb && wandb login`
-- **GCS に書き込めない**: `GOOGLE_APPLICATION_CREDENTIALS` を設定し、`google-cloud-storage` をインストール
-- **CUDA メモリ不足**: バッチサイズを減らす / `--use_amp` / 勾配累積を利用
-- **データローディングが遅い**: `--num_workers` を増やす
-
 ## 謝辞
 
 このプロジェクトは以下の OSS を利用しています：
