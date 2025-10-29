@@ -152,7 +152,7 @@ chmod +x automation/*.sh
 ## モデル/チェックポイント
 
 - `models/pretrained_model.pth`: 事前学習済みモデル
-- `models/RL*_*.pth`: 強化学習サイクル（温度・ビームサーチ・top_k 等の条件）で得たモデル
+- `models/RL*_*.pth`: SFTサイクル（温度・ビームサーチ・top_k 等の条件）で得たモデル
 
 ## 推奨ワークフロー（要約）
 
