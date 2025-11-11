@@ -26,7 +26,7 @@ def test_parameter_consistency():
     generation_params = get_generation_params()
     system_params = get_system_params()
     
-    # 基本的な値の確認
+    # Check basic values
     assert model_params.d_model > 0, "d_model should be positive"
     assert training_params.batch_size > 0, "batch_size should be positive"
     assert generation_params.count > 0, "count should be positive"
@@ -35,7 +35,7 @@ def test_parameter_consistency():
 
 
 def test_parameter_updates():
-    """パラメータ更新のテスト"""
+    """Test parameter updates"""
     print("Testing parameter updates...")
     
     # 元の値 保存
