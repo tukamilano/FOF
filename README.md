@@ -1,18 +1,18 @@
 # FOF (First-Order Formula) - Transformer-based Theorem Prover
 
-Transformerモデルで命題論理の定理証明を自動化するシステムです。[pyprover](https://github.com/kaicho8636/pyprover) と組み合わせ、数式生成→学習→推論→自己改善まで一貫したワークフローを提供します。
+A system that automates propositional logic theorem proving using Transformer models. Combined with [pyprover](https://github.com/kaicho8636/pyprover), it provides a consistent workflow from formula generation → training → inference → self-improvement.
 
-## 🚀 主な特徴
+## 🚀 Key Features
 
-- **階層分類アーキテクチャ**: タクティクの種類と引数を独立に予測
-- **推論評価スイート**: さまざまな推論手法を比較・検証
-- **大規模データ運用**: GCS統合と重複排除で効率化
-- **並列データ収集/学習**: マルチプロセス・マルチGPU・AMP対応
-- **実験追跡**: wandb で詳細なログ・可視化
+- **Hierarchical Classification Architecture**: Independently predicts tactic types and arguments
+- **Inference Evaluation Suite**: Compare and verify various inference methods
+- **Large-scale Data Operations**: Efficiency through GCS integration and deduplication
+- **Parallel Data Collection/Training**: Multi-process, multi-GPU, and AMP support
+- **Experiment Tracking**: Detailed logging and visualization with wandb
 
-## 🔰 クイックスタート（推論のみ）
+## 🔰 Quick Start (Inference Only)
 
-学習済みモデルで推論を素早く試す：
+Quickly test inference with a pretrained model:
 
 ```bash
 python validation/inference_hierarchical.py \
@@ -22,61 +22,61 @@ python validation/inference_hierarchical.py \
   --verbose
 ```
 
-- 追加のベンチマークは `validation/pretrained_model_validation.txt` を参照
+- See `validation/pretrained_model_validation.txt` for additional benchmarks
 
-## 環境設定
+## Environment Setup
 
 ```bash
-# 仮想環境の作成と有効化
+# Create and activate virtual environment
 python -m venv .venv
 source .venv/bin/activate  # macOS/Linux
 # .venv\Scripts\activate  # Windows
 
-# 依存関係をインストール
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 依存関係
+### Dependencies
 
-- Python 3.8+（推奨: 3.9〜3.11）
+- Python 3.8+ (recommended: 3.9-3.11)
 - PyTorch
 - [pyprover](https://github.com/kaicho8636/pyprover)
-- wandb（任意）
-- GCS を使う場合は `google-cloud-storage`
+- wandb (optional)
+- `google-cloud-storage` if using GCS
 
-## プロジェクト構造（抜粋）
+## Project Structure (Overview)
 
 ```
 FOF/
-├── automation/                   # 自動化スクリプト
+├── automation/                   # Automation scripts
 │   ├── create_temperature_mixture.sh
 │   ├── run_self_improvement.sh
 │   ├── run_train_simple_loop.sh
 │   └── README.md
 ├── src/
-│   ├── core/                     # Transformer/エンコーダ/パラメータ
-│   ├── data_generation/          # 生成・収集（並列あり）
-│   ├── interaction/              # 自己改善データ収集
-│   ├── training/                 # 学習・分析・重複排除
-│   └── compression/              # 圧縮ユーティリティ
-├── validation/                   # 推論・比較
-├── tests/                        # テスト一式
-├── models/                       # 学習済み/チェックポイント
-└── pyprover/                     # 証明器
+│   ├── core/                     # Transformer/encoder/parameters
+│   ├── data_generation/          # Generation/collection (with parallelization)
+│   ├── interaction/              # Self-improvement data collection
+│   ├── training/                 # Training/analysis/deduplication
+│   └── compression/              # Compression utilities
+├── validation/                   # Inference/comparison
+├── tests/                        # Test suite
+├── models/                       # Pretrained/checkpoints
+└── pyprover/                     # Theorem prover
 ```
 
-## 使用方法
+## Usage
 
-### 1) データ生成
+### 1) Data Generation
 
 ```bash
-# 並列データ収集（ローカル保存）
+# Parallel data collection (local storage)
 python src/data_generation/auto_data_parallel_collector.py \
   --count 1000 \
   --workers 4 \
   --examples_per_file 100
 
-# 直接 GCS に保存
+# Save directly to GCS
 python src/data_generation/auto_data_parallel_collector.py \
   --count 10000 \
   --workers 8 \
@@ -84,7 +84,7 @@ python src/data_generation/auto_data_parallel_collector.py \
   --gcs_prefix generated_data/
 ```
 
-### 2) 重複排除と分析
+### 2) Deduplication and Analysis
 
 ```bash
 python src/training/deduplicate_generated_data.py \
@@ -94,7 +94,7 @@ python src/training/deduplicate_generated_data.py \
 python src/training/analyze_generated_data.py
 ```
 
-### 3) 学習（シンプル）
+### 3) Training (Simple)
 
 ```bash
 python src/training/train_simple.py \
@@ -103,76 +103,76 @@ python src/training/train_simple.py \
   --learning_rate 3e-4 \
   --num_epochs 10
 
-# wandb で追跡
+# Track with wandb
 python src/training/train_simple.py --use_wandb --wandb_project fof-training
 ```
 
-より詳細なワークフローや二段階重複排除は `src/training/README.md` を参照。
+For more detailed workflows and two-stage deduplication, see `src/training/README.md`.
 
-### 4) 推論と比較
+### 4) Inference and Comparison
 
 ```bash
-# 階層分類推論
+# Hierarchical classification inference
 python validation/inference_hierarchical.py \
   --model_path models/pretrained_model.pth \
   --count 100 \
   --max_steps 30
 
-# ビームサーチなどの比較
+# Beam search and other comparisons
 python validation/inference_beam_search.py --help
 python validation/compare_inference_methods.py --help
 ```
 
-## 並列学習・高速化オプション
+## Parallel Training and Optimization Options
 
-- DataLoader 並列化、複数 GPU（DataParallel）、AMP、勾配累積に対応
-- 具体例・推奨設定は `src/training/PARALLEL_TRAINING.md` を参照
+- Supports DataLoader parallelization, multiple GPUs (DataParallel), AMP, and gradient accumulation
+- See `src/training/PARALLEL_TRAINING.md` for examples and recommended settings
 
-## 自動化スクリプト（automation/）
+## Automation Scripts (automation/)
 
-`automation/README.md` に簡易ガイドあり。実行前に実行権限を付与：
+See `automation/README.md` for a quick guide. Grant execution permissions before running:
 
 ```bash
 chmod +x automation/*.sh
 ```
 
-例：
+Examples:
 
 ```bash
-# 温度ミクスチャ生成
+# Temperature mixture generation
 ./automation/create_temperature_mixture.sh RL3
 
-# 学習ループ（例: RL1→RL2）
+# Training loop (e.g., RL1→RL2)
 ./automation/run_train_simple_loop.sh RL1 RL2 your-gcs-bucket-prefix
 
-# 自己改善データ収集
+# Self-improvement data collection
 ./automation/run_self_improvement.sh RL3
 ```
 
-## モデル/チェックポイント
+## Models/Checkpoints
 
-- `models/pretrained_model.pth`: 事前学習済みモデル
-- `models/RL*_*.pth`: SFTサイクル（温度・ビームサーチ・top_k 等の条件）で得たモデル
+- `models/pretrained_model.pth`: Pretrained model
+- `models/RL*_*.pth`: Models obtained from SFT cycles (temperature, beam search, top_k, etc.)
 
-## 推奨ワークフロー（要約）
+## Recommended Workflow (Summary)
 
 ```bash
-# 1. 生成
+# 1. Generation
 python src/data_generation/auto_data_parallel_collector.py --count 1000 --workers 4
 
-# 2. 重複排除
+# 2. Deduplication
 python src/training/deduplicate_generated_data.py --input_dir generated_data --output_dir deduplicated_data
 
-# 3. 学習
+# 3. Training
 python src/training/train_simple.py --data_dir deduplicated_data --use_wandb
 
-# 4. 推論
+# 4. Inference
 python validation/inference_hierarchical.py --verbose
 ```
 
-## 謝辞
+## Acknowledgments
 
-このプロジェクトは以下の OSS を利用しています：
+This project uses the following OSS:
 
 - [pyprover](https://github.com/kaicho8636/pyprover)
 - PyTorch
