@@ -6,7 +6,7 @@ tactic tokensのテスト
 import sys
 import os
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0, project_root)
 
@@ -15,14 +15,14 @@ from src.core.state_encoder import parse_tactic_string, format_tactic_string
 
 
 def test_tokenizer():
-    """トークナイザーのテスト"""
+    """Test tokenizer"""
     print("Testing tokenizer...")
     
-    # トークンを読み込み
+    # トークン 読み込み
     token_py_path = os.path.join(project_root, "src", "core", "fof_tokens.py")
     base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
     
-    # トークナイザーを作成
+    # Create tokenizer
     tokenizer = CharTokenizer(base_tokens=base_tokens)
     
     # 基本的なエンコードテスト
@@ -41,13 +41,13 @@ def test_tactic_parsing():
     """タクティク解析のテスト"""
     print("Testing tactic parsing...")
     
-    # 文字列から構造化形式への変換
+    # 文字列 from 構造化形式 to の変換
     tactic_str = "apply 0"
     parsed = parse_tactic_string(tactic_str)
     expected = {"main": "apply", "arg1": "0", "arg2": None}
     assert parsed == expected, f"Parsing failed: {parsed} != {expected}"
     
-    # 構造化形式から文字列への変換
+    # 構造化形式 from 文字列 to の変換
     formatted = format_tactic_string(parsed)
     assert formatted == tactic_str, f"Formatting failed: {formatted} != {tactic_str}"
     

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-推論評価のみをテストするスクリプト
-訓練をスキップして、異なるdifficulty値での推論性能を比較
+推論評価only テストdo/performスクリプト
+訓練 スキップand、異becomedifficulty値 with/at の推論性能 比較
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import sys
 import time
 from typing import Dict, Any
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0, project_root)
 
@@ -33,24 +33,24 @@ from src.training.inference_hierarchical import evaluate_inference_performance
 
 
 def test_difficulty_impact():
-    """異なるdifficulty値での推論性能をテスト"""
+    """異becomedifficulty値 with/at の推論性能 テスト"""
     
-    # パラメータを初期化
+    # Initialize parameters
     model_params = get_model_params()
     training_params = get_training_params()
     system_params = get_system_params()
     hierarchical_labels = get_hierarchical_labels()
     
-    # デバイス設定
+    # Device setup
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
-    # トークンとラベルを読み込み
+    # Load tokens and labels
     token_py_path = os.path.join(project_root, "src", "core", "fof_tokens.py")
     print(f"Loading tokens from: {token_py_path}")
     base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
     
-    # 階層分類用のラベルマッピングを構築
+    # Build label mapping for hierarchical classification
     main_to_id, arg1_to_id, arg2_to_id, id_to_main, id_to_arg1, id_to_arg2 = build_hierarchical_label_mappings(
         hierarchical_labels.main_tactics,
         hierarchical_labels.arg1_values,
@@ -61,14 +61,14 @@ def test_difficulty_impact():
     print(f"Arg1 values: {len(id_to_arg1)} classes")
     print(f"Arg2 values: {len(id_to_arg2)} classes")
     
-    # トークナイザーを作成
+    # Create tokenizer
     tokenizer = CharTokenizer(
         base_tokens=base_tokens,
         add_tactic_tokens=model_params.add_tactic_tokens,
         num_tactic_tokens=model_params.num_tactic_tokens
     )
     
-    # モデルを作成（ランダム初期化）
+    # Create model（ランダム初期化）
     model = TransformerClassifier(
         vocab_size=tokenizer.vocab_size,
         pad_id=tokenizer.pad_id,
@@ -86,7 +86,7 @@ def test_difficulty_impact():
     model = model.to(device)
     model.eval()  # 評価モード
     
-    # ラベルマッピングを作成
+    # ラベルマッピング 作成
     label_mappings = {
         'main_to_id': main_to_id,
         'arg1_to_id': arg1_to_id,
@@ -96,7 +96,7 @@ def test_difficulty_impact():
         'id_to_arg2': id_to_arg2
     }
     
-    # 異なるdifficulty値でテスト
+    # 異becomedifficulty値 with/at テスト
     difficulty_values = [0.3, 0.5, 0.7, 0.9]
     num_examples = 50
     max_steps = 20
@@ -112,7 +112,7 @@ def test_difficulty_impact():
         print(f"\n🔍 Testing difficulty = {difficulty}")
         print("-" * 40)
         
-        # 指定されたdifficultyでトートロジーを生成
+        # 指定was donedifficulty with/at トートロジー Generation
         gen = FormulaGenerator(
             variables=["a", "b", "c"],
             allow_const=False,
@@ -121,7 +121,7 @@ def test_difficulty_impact():
             seed=42  # 再現性のため固定シード
         )
         
-        # トートロジーを生成して表示
+        # トートロジー Generationand表示
         tautologies = filter_formulas(
             gen=gen,
             max_len=100,
@@ -138,16 +138,16 @@ def test_difficulty_impact():
         for i in range(min(5, len(tautologies))):
             print(f"  {i+1}: {tautologies[i]}")
         
-        # 推論性能を評価
+        # 推論性能 評価
         start_time = time.time()
         success_rate, avg_steps = evaluate_inference_performance(
             model, tokenizer, label_mappings, device, 512,
             num_examples=num_examples, 
             max_steps=max_steps, 
             temperature=1.0,
-            difficulty=difficulty,  # 同じdifficulty値を使用
-            seed=42,  # 同じシードを使用
-            max_depth=4  # 同じmax_depth値を使用
+            difficulty=difficulty,  # 同じdifficulty値 使用
+            seed=42,  # 同じシード 使用
+            max_depth=4  # 同じmax_depth値 使用
         )
         eval_time = time.time() - start_time
         
@@ -159,10 +159,10 @@ def test_difficulty_impact():
             'success_rate': success_rate,
             'avg_steps': avg_steps,
             'eval_time': eval_time,
-            'tautologies': tautologies[:5]  # 最初の5個を保存
+            'tautologies': tautologies[:5]  # 最初の5 保存
         }
     
-    # 結果をまとめて表示
+    # 結果 まとめて表示
     print(f"\n📊 Summary of Results")
     print("=" * 80)
     print(f"{'Difficulty':<12} {'Success Rate':<15} {'Avg Steps':<12} {'Eval Time':<12}")
@@ -173,7 +173,7 @@ def test_difficulty_impact():
             r = results[difficulty]
             print(f"{difficulty:<12.1f} {r['success_rate']:<15.3f} {r['avg_steps']:<12.2f} {r['eval_time']:<12.2f}")
     
-    # トートロジーの複雑さを分析
+    # トートロジーの複雑さ 分析
     print(f"\n🔍 Tautology Complexity Analysis")
     print("=" * 80)
     
@@ -187,7 +187,7 @@ def test_difficulty_impact():
 
 
 def test_tautology_generation_detailed():
-    """トートロジー生成の詳細テスト"""
+    """トートロジーGenerationの詳細テスト"""
     
     print(f"\n🔍 Detailed Tautology Generation Test")
     print("=" * 80)
@@ -215,7 +215,7 @@ def test_tautology_generation_detailed():
         )
         
         if tautologies:
-            # 統計を計算
+            # 統計 計算
             lengths = [len(t) for t in tautologies]
             avg_length = sum(lengths) / len(lengths)
             max_length = max(lengths)
@@ -244,7 +244,7 @@ def main():
     print(f"   Arguments: {' '.join(sys.argv[1:])}")
     print("=" * 80)
     
-    # 再現性のためのシード設定
+    # Set seed for reproducibility
     import random
     import numpy as np
     random.seed(42)
@@ -257,7 +257,7 @@ def main():
     # 推論性能テスト
     results = test_difficulty_impact()
     
-    # 詳細な生成テスト（オプション）
+    # 詳細なGenerationテスト（オプション）
     if args.test_generation:
         test_tautology_generation_detailed()
     

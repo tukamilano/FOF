@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-deduplicated_dataのstate_hashとstate_tactic_hashの重複チェックテスト
+Test to check duplicates of state_hash and state_tactic_hash in deduplicated_data
 """
 
 import json
@@ -10,8 +10,8 @@ from collections import Counter, defaultdict
 from typing import Dict, List, Set, Tuple
 
 def check_deduplicated_data_hashes():
-    """deduplicated_data内のすべてのファイルでstate_hashとstate_tactic_hashの重複チェックを実行"""
-    # deduplicated_dataディレクトリ内のJSONファイルを取得
+    """Check state_hash and state_tactic_hash duplicates in all files in deduplicated_data"""
+    # Get JSON files in deduplicated_data directory
     pattern = "deduplicated_data/*.json"
     files = glob.glob(pattern)
     
@@ -21,10 +21,10 @@ def check_deduplicated_data_hashes():
     
     print(f"Found {len(files)} files in deduplicated_data/")
     
-    # 全ファイルのハッシュを集める
+    # 全ファイルのハッシュ 集める
     global_state_hash_counter = Counter()
     global_state_tactic_hash_counter = Counter()
-    global_state_hash_files = defaultdict(set)  # ハッシュがどのファイルに含まれているかを追跡
+    global_state_hash_files = defaultdict(set)  # ハッシュ どのファイル 含まれてexistsか 追跡
     global_state_tactic_hash_files = defaultdict(set)
     
     total_steps = 0
@@ -40,7 +40,7 @@ def check_deduplicated_data_hashes():
             total_steps += len(steps)
             total_files += 1
             
-            # 各ステップのハッシュをチェック
+            # 各ステップのハッシュ チェック
             for step in steps:
                 state_hash = step.get('state_hash', '')
                 state_tactic_hash = step.get('state_tactic_hash', '')
@@ -59,15 +59,15 @@ def check_deduplicated_data_hashes():
             print(f"Error processing {file_path}: {e}")
             continue
     
-    # 重複を検出
+    # 重複 検出
     duplicate_state_hashes = {h: count for h, count in global_state_hash_counter.items() if count > 1}
     duplicate_state_tactic_hashes = {h: count for h, count in global_state_tactic_hash_counter.items() if count > 1}
     
-    # ファイル間重複の検出（複数ファイルにまたがる重複）
+    # Detect cross-file duplicates（複数ファイル また る重複）
     cross_file_state_hash_duplicates = {h: files for h, files in global_state_hash_files.items() if len(files) > 1}
     cross_file_state_tactic_hash_duplicates = {h: files for h, files in global_state_tactic_hash_files.items() if len(files) > 1}
     
-    # 結果を表示
+    # 結果 表示
     print(f"\n" + "="*80)
     print("deduplicated_data ハッシュ重複チェック結果")
     print("="*80)
@@ -93,7 +93,7 @@ def check_deduplicated_data_hashes():
             cross_file_indicator = " (ファイル間)" if len(files_list) > 1 else " (ファイル内)"
             print(f"  {i+1}. Hash: {hash_value[:16]}... Count: {count}{cross_file_indicator}, Files: {files_list}")
     else:
-        print(f"\n✓ state_hash重複は見つかりませんでした！")
+        print(f"\n✓ state_hash重複は見かりません with/at did！")
     
     # state_tactic_hash重複の詳細表示
     if duplicate_state_tactic_hashes:
@@ -103,26 +103,26 @@ def check_deduplicated_data_hashes():
             cross_file_indicator = " (ファイル間)" if len(files_list) > 1 else " (ファイル内)"
             print(f"  {i+1}. Hash: {hash_value[:16]}... Count: {count}{cross_file_indicator}, Files: {files_list}")
     else:
-        print(f"\n✓ state_tactic_hash重複は見つかりませんでした！")
+        print(f"\n✓ state_tactic_hash重複は見かりません with/at did！")
     
-    # 期待される結果の確認
+    # 期待is done結果の確認
     print(f"\n" + "="*80)
-    print("期待される結果の確認")
+    print("期待is done結果の確認")
     print("="*80)
     
-    # state_hashの重複は正常（同じ状態で異なるtacticを試すため）
+    # state_hashの重複は正常（同じ状態 with/at 異becometactic 試すため）
     if len(duplicate_state_hashes) > 0:
-        print(f"ℹ️  state_hash: {len(duplicate_state_hashes)}個の重複（正常 - 同じ状態で異なるtacticを試すため）")
-        print(f"   - ファイル間重複: {len(cross_file_state_hash_duplicates)}個")
+        print(f"ℹ️  state_hash: {len(duplicate_state_hashes)}の重複（正常 - 同じ状態 with/at 異becometactic 試すため）")
+        print(f"   - ファイル間重複: {len(cross_file_state_hash_duplicates)}")
     else:
         print("✅ state_hash: 重複なし")
     
-    # state_tactic_hashの重複は除去されるべき
+    # state_tactic_hashの重複は除去is doneべき
     if len(duplicate_state_tactic_hashes) == 0:
-        print("✅ state_tactic_hash: 重複なし（期待通り - 重複除去が正しく動作）")
+        print("✅ state_tactic_hash: 重複なし（期待通り - 重複除去 正しく動作）")
     else:
-        print(f"❌ state_tactic_hash: {len(duplicate_state_tactic_hashes)}個の重複が検出されました（重複除去に問題あり）")
-        print(f"   - ファイル間重複: {len(cross_file_state_tactic_hash_duplicates)}個")
+        print(f"❌ state_tactic_hash: {len(duplicate_state_tactic_hashes)}の重複 検出されまdid（重複除去 問題あり）")
+        print(f"   - ファイル間重複: {len(cross_file_state_tactic_hash_duplicates)}")
     
     return {
         'total_files': total_files,
@@ -137,7 +137,7 @@ def check_deduplicated_data_hashes():
 
 def main():
     """メイン関数"""
-    print("🔍 deduplicated_data ハッシュ重複チェックを開始...")
+    print("🔍 deduplicated_data ハッシュ重複チェック 開始...")
     result = check_deduplicated_data_hashes()
     
     if result:

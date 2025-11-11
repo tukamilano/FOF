@@ -6,7 +6,7 @@
 import sys
 import os
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0, project_root)
 
@@ -36,7 +36,7 @@ def test_basic_functionality():
     """基本的な機能のテスト"""
     print("Testing basic functionality...")
     
-    # パラメータの取得
+    # パラメータのget
     model_params = get_model_params()
     training_params = get_training_params()
     

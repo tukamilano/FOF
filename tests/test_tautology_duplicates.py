@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-GCSからトートロジーファイルをダウンロードして重複判定を行うテスト
+Test to download tautology files from GCS and check for duplicates
 
-使用方法:
+Usage:
 python tests/test_tautology_duplicates.py --gcs_bucket fof-data-20251010-milano --gcs_prefix tautology
 """
 
@@ -17,10 +17,10 @@ import hashlib
 
 
 def download_gcs_files(gcs_bucket: str, gcs_prefix: str, local_dir: str) -> List[str]:
-    """GCSからファイルをダウンロードしてローカルファイルパスのリストを返す"""
+    """Download files from GCS and return list of local file paths"""
     print(f"Downloading files from gs://{gcs_bucket}/{gcs_prefix}")
     
-    # GCSのファイル一覧を取得
+    # GCSのファイル一覧 get
     try:
         result = subprocess.run([
             'gcloud', 'storage', 'ls', f'gs://{gcs_bucket}/{gcs_prefix}'
@@ -33,7 +33,7 @@ def download_gcs_files(gcs_bucket: str, gcs_prefix: str, local_dir: str) -> List
         print(f"Error listing GCS files: {e}")
         return []
     
-    # ローカルにダウンロード
+    # ローカル ダウンロード
     local_files = []
     for gcs_file in gcs_files:
         filename = os.path.basename(gcs_file)
@@ -52,7 +52,7 @@ def download_gcs_files(gcs_bucket: str, gcs_prefix: str, local_dir: str) -> List
 
 
 def load_formulas_from_files(file_paths: List[str]) -> List[str]:
-    """複数のJSONファイルから論理式を読み込む"""
+    """複数のJSONファイル from 論理式 読み込む"""
     all_formulas = []
     
     for file_path in file_paths:
@@ -71,10 +71,10 @@ def load_formulas_from_files(file_paths: List[str]) -> List[str]:
 
 
 def analyze_duplicates(formulas: List[str]) -> Dict[str, any]:
-    """論理式の重複を分析"""
+    """論理式の重複 分析"""
     print(f"\nAnalyzing {len(formulas)} formulas...")
     
-    # ハッシュを計算
+    # ハッシュ 計算
     formula_hashes = []
     for formula in formulas:
         formula_hash = hashlib.md5(formula.encode()).hexdigest()
@@ -91,7 +91,7 @@ def analyze_duplicates(formulas: List[str]) -> Dict[str, any]:
     duplicate_formulas = []
     
     for hash_val, count in duplicate_hashes.items():
-        # このハッシュに対応する論理式を1つ取得
+        # thisハッシュ 対応do/perform論理式 1get
         for i, f_hash in enumerate(formula_hashes):
             if f_hash == hash_val:
                 duplicate_formulas.append({
@@ -115,7 +115,7 @@ def analyze_duplicates(formulas: List[str]) -> Dict[str, any]:
 
 
 def print_duplicate_analysis(analysis: Dict[str, any], show_examples: bool = True):
-    """重複分析結果を表示"""
+    """重複分析結果 表示"""
     print(f"\n{'='*60}")
     print(f"DUPLICATE ANALYSIS RESULTS")
     print(f"{'='*60}")
@@ -146,7 +146,7 @@ def print_duplicate_analysis(analysis: Dict[str, any], show_examples: bool = Tru
 
 
 def analyze_file_distribution(file_paths: List[str]):
-    """ファイルごとの分布を分析"""
+    """ファイルごとの分布 分析"""
     print(f"\n{'='*60}")
     print(f"FILE DISTRIBUTION ANALYSIS")
     print(f"{'='*60}")
@@ -171,34 +171,34 @@ def main():
     parser.add_argument("--keep_files", action="store_true", help="Keep downloaded files after analysis")
     args = parser.parse_args()
     
-    # 一時ディレクトリを作成
+    # 一時ディレクトリ 作成
     with tempfile.TemporaryDirectory() as temp_dir:
         print(f"Using temporary directory: {temp_dir}")
         
-        # GCSからファイルをダウンロード
+        # GCS from ファイル ダウンロード
         local_files = download_gcs_files(args.gcs_bucket, args.gcs_prefix, temp_dir)
         
         if not local_files:
             print("No files downloaded. Exiting.")
             return
         
-        # ファイル分布を分析
+        # ファイル分布 分析
         analyze_file_distribution(local_files)
         
-        # 論理式を読み込み
+        # 論理式 読み込み
         formulas = load_formulas_from_files(local_files)
         
         if not formulas:
             print("No formulas loaded. Exiting.")
             return
         
-        # 重複を分析
+        # 重複 分析
         analysis = analyze_duplicates(formulas)
         
-        # 結果を表示
+        # 結果 表示
         print_duplicate_analysis(analysis, args.show_examples)
         
-        # ファイルを保持する場合
+        # ファイル 保持do/perform場合
         if args.keep_files:
             keep_dir = "downloaded_tautology_files"
             os.makedirs(keep_dir, exist_ok=True)

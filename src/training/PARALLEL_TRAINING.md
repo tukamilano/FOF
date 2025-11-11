@@ -1,11 +1,11 @@
-# 並列化訓練ガイド
+# Parallel Training Guide
 
-このドキュメントでは、FOFプロジェクトでの並列化訓練の使用方法について説明します。
+This document explains how to use parallel training in the FOF project.
 
-## 利用可能な並列化手法
+## Available Parallelization Methods
 
-### 1. DataLoader並列化
-データローディングの並列化により、データの前処理を高速化できます。
+### 1. DataLoader Parallelization
+Parallelizes data loading to speed up data preprocessing.
 
 ```bash
 python src/training/train_with_generated_data.py \
@@ -15,18 +15,18 @@ python src/training/train_with_generated_data.py \
     --use_wandb
 ```
 
-### 2. GPU並列化（DataParallel）
-単一マシンで複数のGPUを使用して訓練を並列化します。
+### 2. GPU Parallelization (DataParallel)
+Parallelizes training using multiple GPUs on a single machine.
 
 ```bash
-# すべてのGPUを使用
+# Use all GPUs
 python src/training/train_with_generated_data.py \
     --data_dir generated_data \
     --batch_size 32 \
     --use_data_parallel \
     --use_wandb
 
-# 特定のGPUのみを使用
+# Use specific GPUs only
 python src/training/train_with_generated_data.py \
     --data_dir generated_data \
     --batch_size 32 \
@@ -34,7 +34,7 @@ python src/training/train_with_generated_data.py \
     --gpu_ids "0,1,2" \
     --use_wandb
 
-# 特定のGPUを1つだけ使用
+# Use only one specific GPU
 python src/training/train_with_generated_data.py \
     --data_dir generated_data \
     --batch_size 32 \
@@ -43,8 +43,8 @@ python src/training/train_with_generated_data.py \
     --use_wandb
 ```
 
-### 3. 混合精度訓練（AMP）
-メモリ使用量を削減し、訓練速度を向上させます。
+### 3. Mixed Precision Training (AMP)
+Reduces memory usage and improves training speed.
 
 ```bash
 python src/training/train_with_generated_data.py \
@@ -54,8 +54,8 @@ python src/training/train_with_generated_data.py \
     --use_wandb
 ```
 
-### 4. 勾配累積
-大きなバッチサイズをシミュレートして、メモリ効率を向上させます。
+### 4. Gradient Accumulation
+Simulates larger batch sizes to improve memory efficiency.
 
 ```bash
 python src/training/train_with_generated_data.py \
@@ -65,9 +65,9 @@ python src/training/train_with_generated_data.py \
     --use_wandb
 ```
 
-## 組み合わせ例
+## Combination Examples
 
-### 高パフォーマンス設定
+### High Performance Configuration
 ```bash
 python src/training/train_with_generated_data.py \
     --data_dir generated_data \
@@ -80,7 +80,7 @@ python src/training/train_with_generated_data.py \
     --wandb_project fof-high-performance
 ```
 
-### メモリ効率設定
+### Memory Efficient Configuration
 ```bash
 python src/training/train_with_generated_data.py \
     --data_dir generated_data \
@@ -90,7 +90,7 @@ python src/training/train_with_generated_data.py \
     --use_wandb
 ```
 
-### 最大パフォーマンス設定
+### Maximum Performance Configuration
 ```bash
 python src/training/train_with_generated_data.py \
     --data_dir generated_data \
@@ -103,37 +103,37 @@ python src/training/train_with_generated_data.py \
     --wandb_project fof-max-performance
 ```
 
-## パラメータ説明
+## Parameter Descriptions
 
-### 並列化関連パラメータ
+### Parallelization-Related Parameters
 
-- `--num_workers`: データローディングのワーカー数（デフォルト: 4）
-- `--use_data_parallel`: DataParallelを使用（複数GPU）
-- `--gpu_ids`: 使用するGPU ID（例: "0,1,2" または "all"）
-- `--use_amp`: 混合精度訓練を使用
-- `--gradient_accumulation_steps`: 勾配累積のステップ数（デフォルト: 1）
-- `--validation_frequency`: バリデーション実行頻度（デフォルト: 10000データポイントごと）
+- `--num_workers`: Number of data loading workers (default: 4)
+- `--use_data_parallel`: Use DataParallel (multiple GPUs)
+- `--gpu_ids`: GPU IDs to use (e.g., "0,1,2" or "all")
+- `--use_amp`: Use mixed precision training
+- `--gradient_accumulation_steps`: Number of gradient accumulation steps (default: 1)
+- `--validation_frequency`: Validation execution frequency (default: every 10000 data points)
 
-## 注意事項
+## Notes
 
-1. **メモリ使用量**: 並列化によりメモリ使用量が増加する可能性があります
-2. **バッチサイズ調整**: 並列化時はバッチサイズを調整することを推奨します
-3. **勾配累積**: 大きなバッチサイズが必要な場合は勾配累積を使用してください
-4. **GPU競合**: `--use_data_parallel`は自動的にすべてのGPUを使用するため、他のプロセスと競合する可能性があります
-5. **明示的なGPU指定**: 本番環境では`--gpu_ids`で明示的にGPUを指定することを推奨します
+1. **Memory Usage**: Parallelization may increase memory usage
+2. **Batch Size Adjustment**: Adjusting batch size when parallelizing is recommended
+3. **Gradient Accumulation**: Use gradient accumulation when large batch sizes are needed
+4. **GPU Conflicts**: `--use_data_parallel` automatically uses all GPUs, which may conflict with other processes
+5. **Explicit GPU Specification**: In production environments, explicitly specifying GPUs with `--gpu_ids` is recommended
 
-## トラブルシューティング
+## Troubleshooting
 
-### メモリ不足エラー
-- バッチサイズを小さくする
-- 勾配累積を使用する
-- 混合精度訓練を使用する
+### Out of Memory Errors
+- Reduce batch size
+- Use gradient accumulation
+- Use mixed precision training
 
-### データローディングが遅い
-- `num_workers`を増やす
-- `pin_memory=True`が有効になっているか確認
+### Slow Data Loading
+- Increase `num_workers`
+- Verify that `pin_memory=True` is enabled
 
-### GPU競合エラー
-- `--gpu_ids`で明示的にGPUを指定する
-- `nvidia-smi`でGPU使用状況を確認する
-- 他のプロセスがGPUを使用していないか確認する
+### GPU Conflict Errors
+- Explicitly specify GPUs with `--gpu_ids`
+- Check GPU usage with `nvidia-smi`
+- Verify that other processes are not using GPUs

@@ -17,7 +17,7 @@ except ImportError:
     WANDB_AVAILABLE = False
     print("Warning: wandb not available. Install with: pip install wandb")
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0, project_root)
 
@@ -32,10 +32,10 @@ from src.core.state_encoder import encode_prover_state, format_tactic_string
 
 
 def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[TransformerClassifier, Dict[str, Any]]:
-    """階層分類モデルを読み込み"""
+    """階層分類Model 読み込み"""
     checkpoint = torch.load(model_path, map_location=device)
     
-    # 新しい形式のチェックポイントかどうかを判定
+    # 新しい形式のチェックポイントかどうか 判定
     if 'model_params' in checkpoint:
         # 新しい形式のチェックポイント
         model_params = checkpoint['model_params']
@@ -43,12 +43,12 @@ def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[Tran
         pad_id = checkpoint.get('pad_id', model_params['pad_id'])
         max_seq_len = checkpoint.get('max_seq_len', model_params['max_seq_len'])
         
-        # クラス数をチェックポイントから取得
+        # クラス数 チェックポイント from get
         num_main_classes = len(checkpoint['id_to_main'])
         num_arg1_classes = len(checkpoint['id_to_arg1'])
         num_arg2_classes = len(checkpoint['id_to_arg2'])
         
-        # ラベルマッピングを取得
+        # ラベルマッピング get
         label_mappings = {
             'main_to_id': checkpoint['main_to_id'],
             'arg1_to_id': checkpoint['arg1_to_id'],
@@ -74,18 +74,18 @@ def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[Tran
         
         model.load_state_dict(checkpoint['model_state_dict'])
     else:
-        # 古い形式のチェックポイント（重みのみ）
+        # 古い形式のチェックポイント（重みonly）
         print("Loading old format checkpoint (weights only)")
         
-        # デフォルトのモデルパラメータを取得
+        # デフォルトのModelパラメータ get
         from src.core.parameter import get_model_params
         model_params = get_model_params()
         
-        # チェックポイントからvocab_sizeを取得（embedding層のサイズから）
+        # チェックポイント from vocab_size get（embedding層のサイズ from ）
         vocab_size = checkpoint['embedding.weight'].shape[0]
         print(f"Detected vocab_size from checkpoint: {vocab_size}")
         
-        # デフォルトのラベルマッピングを取得
+        # デフォルトのラベルマッピング get
         from src.core.parameter import get_hierarchical_labels
         from src.core.transformer_classifier import build_hierarchical_label_mappings
         hierarchical_labels = get_hierarchical_labels()
@@ -104,7 +104,7 @@ def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[Tran
             'id_to_arg2': id_to_arg2,
         }
         
-        # モデルを作成（チェックポイントから取得したvocab_sizeを使用）
+        # Create model（チェックポイント from getdidvocab_size 使用）
         model = TransformerClassifier(
             vocab_size=vocab_size,
             pad_id=model_params.pad_id,
@@ -119,7 +119,7 @@ def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[Tran
             num_arg2_classes=len(id_to_arg2),
         )
         
-        # 重みを読み込み
+        # 重み 読み込み
         model.load_state_dict(checkpoint)
     
     model.to(device)
@@ -137,21 +137,21 @@ def calculate_tactic_probability(
     arg2_confidence: float
 ) -> float:
     """
-    タクティクの種類に応じて適切な確率を計算
+    タクティクの種類 応じて適切な確率 計算
     """
     # 引数不要なタクティク
     if main_tactic in ['assumption', 'intro', 'split', 'left', 'right', 'add_dn']:
         return main_confidence
     
-    # 引数1つのタクティク
+    # 引数1のタクティク
     elif main_tactic in ['apply', 'destruct']:
         return main_confidence * arg1_confidence
     
-    # 引数2つのタクティク
+    # 引数2のタクティク
     elif main_tactic == 'specialize':
         return main_confidence * arg1_confidence * arg2_confidence
     
-    # その他のタクティク（引数不要として扱う）
+    # Other tactics（引数不要 as 扱う）
     else:
         return main_confidence
 
@@ -166,9 +166,9 @@ def generate_all_tactic_combinations(
     max_seq_len: int = 256
 ) -> List[Tuple[str, float]]:
     """
-    すべての可能なタクティクの組み合わせを生成し、確率の高い順にソート
+    allの可能なタクティクの組み合わせ Generationし、確率の高い順 ソート
     """
-    # 入力をエンコード
+    # Encode input
     input_ids, attention_mask, segment_ids = tokenizer.encode(goal, premises, max_seq_len)
     input_ids = input_ids.unsqueeze(0).to(device)
     attention_mask = attention_mask.unsqueeze(0).to(device)
@@ -177,18 +177,18 @@ def generate_all_tactic_combinations(
     with torch.no_grad():
         main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
         
-        # softmaxで確率に変換
+        # softmax with/at 確率 変換
         main_probs = torch.softmax(main_logits, dim=-1)
         arg1_probs = torch.softmax(arg1_logits, dim=-1)
         arg2_probs = torch.softmax(arg2_logits, dim=-1)
         
         tactic_combinations = []
         
-        # すべての可能な組み合わせを生成
+        # allの可能な組み合わせ Generation
         for main_id, main_tactic in enumerate(label_mappings['id_to_main']):
             main_confidence = main_probs[0, main_id].item()
             
-            # 引数が不要なタクティクの場合
+            # 引数 不要なタクティクの場合
             if main_tactic in ['assumption', 'intro', 'split', 'left', 'right', 'add_dn']:
                 tactic_string = main_tactic
                 probability = calculate_tactic_probability(
@@ -197,7 +197,7 @@ def generate_all_tactic_combinations(
                 )
                 tactic_combinations.append((tactic_string, probability))
             
-            # 引数1つのタクティクの場合
+            # 引数1のタクティクの場合
             elif main_tactic in ['apply', 'destruct']:
                 for arg1_id, arg1_value in enumerate(label_mappings['id_to_arg1']):
                     arg1_confidence = arg1_probs[0, arg1_id].item()
@@ -208,7 +208,7 @@ def generate_all_tactic_combinations(
                     )
                     tactic_combinations.append((tactic_string, probability))
             
-            # 引数2つのタクティクの場合
+            # 引数2のタクティクの場合
             elif main_tactic == 'specialize':
                 for arg1_id, arg1_value in enumerate(label_mappings['id_to_arg1']):
                     arg1_confidence = arg1_probs[0, arg1_id].item()
@@ -221,7 +221,7 @@ def generate_all_tactic_combinations(
                         )
                         tactic_combinations.append((tactic_string, probability))
             
-            # その他のタクティク（引数不要として扱う）
+            # Other tactics（引数不要 as 扱う）
             else:
                 tactic_string = main_tactic
                 probability = calculate_tactic_probability(
@@ -230,14 +230,14 @@ def generate_all_tactic_combinations(
                 )
                 tactic_combinations.append((tactic_string, probability))
         
-        # 確率の高い順にソート
+        # 確率の高い順 ソート
         tactic_combinations.sort(key=lambda x: x[1], reverse=True)
         
         return tactic_combinations
 
 
 def apply_tactic_from_label(prover, label) -> bool:
-    """タクティクを適用"""
+    """タクティク 適用"""
     if isinstance(label, dict):
         tactic_str = format_tactic_string(label)
     else:
@@ -276,18 +276,18 @@ def apply_tactic_from_label(prover, label) -> bool:
             return not prover.specialize(func_idx, domain_idx)
         return False
     except Exception as e:
-        # pyproverのエラーをキャッチしてFalseを返す
+        # pyproverのエラー キャッチandFalse 返す
         return False
 
 
 def test_auto_classical(goal_str: str, depth_limit: int = 10) -> Tuple[bool, List[str], float]:
     """
-    auto_classicalで問題を解く
+    auto_classical with/at 問題 解く
     
     Returns:
         (solved, tactics_used, time_taken)
     """
-    # pyproverをインポート
+    # pyprover インポート
     pyprover_dir = os.path.join(project_root, "pyprover")
     sys.path.insert(0, pyprover_dir)
     
@@ -304,17 +304,17 @@ def test_auto_classical(goal_str: str, depth_limit: int = 10) -> Tuple[bool, Lis
     Prover = prover_mod.Prover
     
     try:
-        # パースしてproverを作成
+        # パースandprover 作成
         parse_tree = PropParseTree()
         goal_node = parse_tree.transform(prop_parser.parse(goal_str))
         prover = Prover(goal_node)
         
-        # auto_classicalを実行
+        # auto_classical 実行
         start_time = time.time()
         tactics = prover.auto_classical(depth_limit)
         time_taken = time.time() - start_time
         
-        # 解けたかどうかを判定
+        # 解けたかどうか 判定
         solved = prover.goal is None
         
         return solved, tactics, time_taken
@@ -334,12 +334,12 @@ def test_hierarchical_inference(
     max_steps: int = 30
 ) -> Tuple[bool, List[str], float, float]:
     """
-    階層分類推論で問題を解く
+    階層分類推論 with/at 問題 解く
     
     Returns:
         (solved, tactics_used, time_taken, avg_confidence)
     """
-    # pyproverをインポート
+    # pyprover インポート
     pyprover_dir = os.path.join(project_root, "pyprover")
     sys.path.insert(0, pyprover_dir)
     
@@ -356,12 +356,12 @@ def test_hierarchical_inference(
     Prover = prover_mod.Prover
     
     try:
-        # パースしてproverを作成
+        # パースandprover 作成
         parse_tree = PropParseTree()
         goal_node = parse_tree.transform(prop_parser.parse(goal_str))
         prover = Prover(goal_node)
         
-        # 前提は空（トートロジーなので前提なしで証明可能）
+        # 前提は空（トートロジーなの with/at 前提なし with/at 証明可能）
         premises = []
         
         # 推論ループ
@@ -373,24 +373,24 @@ def test_hierarchical_inference(
         start_time = time.time()
         
         while not solved and step < max_steps:
-            # 現在の状態を取得
+            # 現在の状態 get
             current_state = encode_prover_state(prover)
             current_premises = current_state["premises"]
             current_goal = current_state["goal"]
             
-            # すべての可能なタクティクの組み合わせを生成（確率の高い順）
+            # allの可能なタクティクの組み合わせ Generation（確率の高い順）
             tactic_combinations = generate_all_tactic_combinations(
                 model, tokenizer, current_premises, current_goal,
                 label_mappings, device, max_seq_len
             )
             
-            # 上位max_steps個のタクティクを順次適用
+            # 上位max_stepsのタクティク 順次適用
             success = False
             for tactic_str, probability in tactic_combinations[:max_steps]:
-                # タクティクを適用
+                # タクティク 適用
                 success = apply_tactic_from_label(prover, tactic_str)
                 
-                # ログ用データを記録
+                # ログ用データ 記録
                 tactics_used.append(tactic_str)
                 confidences.append(probability)
                 
@@ -412,7 +412,7 @@ def test_hierarchical_inference(
 
 def load_validation_data(validation_file: str, num_examples: int = None) -> List[str]:
     """
-    バリデーションデータを読み込み
+    バリデーションデータ 読み込み
     """
     try:
         with open(validation_file, 'r', encoding='utf-8') as f:
@@ -458,7 +458,7 @@ def main():
     
     args = parser.parse_args()
     
-    # デバイス設定
+    # Device setup
     if args.device == "auto":
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -466,7 +466,7 @@ def main():
     
     print(f"Using device: {device}")
     
-    # wandb初期化
+    # Initialize wandb
     if args.use_wandb and WANDB_AVAILABLE:
         run_name = args.wandb_run_name or f"comparison_{int(time.time())}"
         wandb.init(
@@ -485,7 +485,7 @@ def main():
     elif args.use_wandb and not WANDB_AVAILABLE:
         print("Warning: wandb requested but not available. Continuing without logging.")
     
-    # バリデーションデータを読み込み
+    # バリデーションデータ 読み込み
     validation_file = os.path.join(os.path.dirname(__file__), args.validation_file)
     print(f"\nLoading validation data from {validation_file}...")
     
@@ -495,18 +495,18 @@ def main():
         print("Error: No validation data loaded!")
         return
     
-    # モデルを読み込みまたは初期化
+    # Model 読み込みor初期化
     if not os.path.exists(args.model_path):
         print(f"Model file not found: {args.model_path}")
         print("Creating a randomly initialized model...")
         
-        # 初期化されたモデルを作成
+        # 初期化was doneModel 作成
         from src.core.parameter import get_model_params, get_hierarchical_labels
         
         model_params = get_model_params()
         hierarchical_labels = get_hierarchical_labels()
         
-        # ラベルマッピングを作成
+        # ラベルマッピング 作成
         main_to_id = hierarchical_labels.get_main_to_id()
         arg1_to_id = hierarchical_labels.get_arg1_to_id()
         arg2_to_id = hierarchical_labels.get_arg2_to_id()
@@ -523,13 +523,13 @@ def main():
             'id_to_arg2': id_to_arg2,
         }
         
-        # トークナイザーを作成
+        # Create tokenizer
         root_dir = os.path.dirname(os.path.dirname(__file__))
         token_py_path = os.path.join(root_dir, "src", "core", "fof_tokens.py")
         base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
         tokenizer = CharTokenizer(base_tokens=base_tokens)
         
-        # モデルを作成
+        # Create model
         vocab_size = tokenizer.vocab_size
         model = TransformerClassifier(
             vocab_size=vocab_size,
@@ -552,15 +552,15 @@ def main():
         model, label_mappings = load_hierarchical_model(args.model_path, device)
         print(f"Loaded model from {args.model_path}")
         
-        # トークナイザーを作成
+        # Create tokenizer
         root_dir = os.path.dirname(os.path.dirname(__file__))
         token_py_path = os.path.join(root_dir, "src", "core", "fof_tokens.py")
         base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
         tokenizer = CharTokenizer(base_tokens=base_tokens)
     
-    print(f"\n{len(tautologies)}個の問題を比較中...")
+    print(f"\n{len(tautologies)} problems 比較中...")
     
-    # 結果を格納する変数
+    # 結果 格納do/perform変数
     results = []
     auto_classical_solved = 0
     hierarchical_solved = 0
@@ -578,15 +578,15 @@ def main():
             print(f"Warning: Empty formula for example {i+1}, skipping...")
             continue
         
-        # auto_classicalでテスト
+        # auto_classical with/at テスト
         auto_solved, auto_tactics, auto_time = test_auto_classical(goal_str, args.auto_depth)
         
-        # 階層分類推論でテスト
+        # 階層分類推論 with/at テスト
         hierarchical_solved_result, hierarchical_tactics, hierarchical_time, hierarchical_confidence = test_hierarchical_inference(
             goal_str, model, tokenizer, label_mappings, device, args.max_seq_len, args.max_steps
         )
         
-        # 結果を記録
+        # 結果 記録
         result = {
             'example_id': i + 1,
             'goal': goal_str,
@@ -604,7 +604,7 @@ def main():
         }
         results.append(result)
         
-        # 統計を更新
+        # 統計 更新
         if auto_solved:
             auto_classical_solved += 1
             auto_times.append(auto_time)
@@ -632,7 +632,7 @@ def main():
             if (i + 1) % 10 == 0 or i == len(tautologies) - 1:
                 print(f"進捗: {i+1}/{len(tautologies)}")
     
-    # 最終結果を計算
+    # 最終結果 計算
     total_examples = len(results)
     auto_success_rate = auto_classical_solved / total_examples if total_examples > 0 else 0.0
     hierarchical_success_rate = hierarchical_solved / total_examples if total_examples > 0 else 0.0
@@ -641,9 +641,9 @@ def main():
     avg_hierarchical_time = sum(hierarchical_times) / len(hierarchical_times) if hierarchical_times else 0.0
     avg_hierarchical_confidence = sum(hierarchical_confidences) / len(hierarchical_confidences) if hierarchical_confidences else 0.0
     
-    # 階層分類推論で解けたがauto_classicalで解けなかった問題を収集
+    # 階層分類推論 with/at 解けた auto_classical with/at 解けなかった問題 収集
     hierarchical_only_examples = []
-    # auto_classicalで解けたが階層分類推論で解けなかった問題を収集
+    # auto_classical with/at 解けた 階層分類推論 with/at 解けなかった問題 収集
     auto_only_examples = []
     for result in results:
         if not result['auto_classical']['solved'] and result['hierarchical']['solved']:
@@ -651,42 +651,42 @@ def main():
         elif result['auto_classical']['solved'] and not result['hierarchical']['solved']:
             auto_only_examples.append(result)
     
-    # 結果を表示
+    # 結果 表示
     print(f"\n{'='*50}")
-    print(f"比較結果")
+    print(f"Comparison Results")
     print(f"{'='*50}")
-    print(f"総問題数: {total_examples}")
+    print(f"Total Problems: {total_examples}")
     print(f"")
     print(f"auto_classical:     {auto_classical_solved:3d}/{total_examples} ({auto_success_rate*100:5.1f}%)")
-    print(f"階層分類推論:       {hierarchical_solved:3d}/{total_examples} ({hierarchical_success_rate*100:5.1f}%)")
+    print(f"Hierarchical Classification Inference:       {hierarchical_solved:3d}/{total_examples} ({hierarchical_success_rate*100:5.1f}%)")
     print(f"")
-    print(f"階層分類推論の優位性:")
-    print(f"  auto_classicalで解けなかった問題を解けた数: {only_hierarchical_solved:3d}")
-    print(f"  追加成功率: {only_hierarchical_solved/total_examples*100:5.1f}%")
+    print(f"Advantage of Hierarchical Classification Inference:")
+    print(f"  Problems solved that auto_classical couldn't solve: {only_hierarchical_solved:3d}")
+    print(f"  Additional success rate: {only_hierarchical_solved/total_examples*100:5.1f}%")
     
-    # 階層分類推論で解けたがauto_classicalで解けなかった問題を表示
+    # 階層分類推論 with/at 解けた auto_classical with/at 解けなかった問題 表示
     if hierarchical_only_examples:
-        print(f"\n階層分類推論で解けたがauto_classicalで解けなかった問題:")
+        print(f"\nProblems solved by hierarchical classification inference but not by auto_classical:")
         print(f"{'='*50}")
         for i, result in enumerate(hierarchical_only_examples, 1):
             print(f"{i:2d}. {result['goal']}")
-            print(f"    使用タクティク: {', '.join(result['hierarchical']['tactics'])}")
-            print(f"    実行時間: {result['hierarchical']['time']:.3f}s")
+            print(f"    Tactics used: {', '.join(result['hierarchical']['tactics'])}")
+            print(f"    Execution time: {result['hierarchical']['time']:.3f}s")
             print()
     
-    # auto_classicalで解けたが階層分類推論で解けなかった問題を表示
+    # auto_classical with/at 解けた 階層分類推論 with/at 解けなかった問題 表示
     if auto_only_examples:
-        print(f"\nauto_classicalで解けたが階層分類推論で解けなかった問題:")
+        print(f"\nauto_classical with/at 解けた 階層分類推論 with/at 解けなかった問題:")
         print(f"{'='*50}")
         for i, result in enumerate(auto_only_examples, 1):
             print(f"{i:2d}. {result['goal']}")
-            print(f"    auto_classical使用タクティク: {', '.join(result['auto_classical']['tactics'])}")
-            print(f"    auto_classical実行時間: {result['auto_classical']['time']:.3f}s")
-            print(f"    階層分類推論実行時間: {result['hierarchical']['time']:.3f}s")
+            print(f"    auto_classicalTactics used: {', '.join(result['auto_classical']['tactics'])}")
+            print(f"    auto_classicalExecution time: {result['auto_classical']['time']:.3f}s")
+            print(f"    階層分類推論Execution time: {result['hierarchical']['time']:.3f}s")
             print(f"    階層分類推論平均信頼度: {result['hierarchical']['avg_confidence']:.3f}")
             print()
     
-    # wandbに結果をログ
+    # wandb 結果 ログ
     if args.use_wandb and WANDB_AVAILABLE:
         wandb.log({
             "final/auto_classical_success_rate": auto_success_rate,

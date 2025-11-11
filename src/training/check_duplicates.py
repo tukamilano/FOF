@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-generated_dataの重複チェックスクリプト
+Script to check duplicates in generated_data
 """
 import os
 import sys
@@ -9,13 +9,13 @@ import glob
 from collections import Counter
 
 def check_duplicates(data_dir="generated_data"):
-    """generated_dataの重複をチェック"""
+    """Check duplicates in generated_data"""
     
     if not os.path.exists(data_dir):
         print(f"Directory {data_dir} not found")
         return
     
-    # 全JSONファイルを読み込み
+    # Load all JSON files
     json_files = glob.glob(os.path.join(data_dir, "*.json"))
     print(f"Found {len(json_files)} JSON files")
     
@@ -48,7 +48,7 @@ def check_duplicates(data_dir="generated_data"):
         for hash_val, count in sorted(duplicates.items(), key=lambda x: x[1], reverse=True)[:10]:
             print(f"Hash: {hash_val[:16]}... Count: {count}")
             
-            # このハッシュの例を表示
+            # thisハッシュの例 表示
             examples = [step for step in all_steps if step.get('state_hash') == hash_val]
             if examples:
                 example = examples[0]
@@ -64,7 +64,7 @@ def check_duplicates(data_dir="generated_data"):
     }
 
 def main():
-    # プロジェクトルートに移動
+    # Move to project root
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(os.path.dirname(script_dir))
     os.chdir(project_root)

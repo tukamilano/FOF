@@ -1,5 +1,5 @@
 """
-共通ユーティリティ関数
+Common utility functions
 """
 import contextlib
 import os
@@ -9,7 +9,7 @@ from typing import Tuple, Any
 
 @contextlib.contextmanager
 def pushd(path: str):
-    """指定されたディレクトリに一時的に移動するコンテキストマネージャー"""
+    """Context manager to temporarily move to specified directory"""
     prev = os.getcwd()
     os.chdir(path)
     try:
@@ -19,7 +19,7 @@ def pushd(path: str):
 
 
 def import_pyprover(pyprover_dir: str) -> Tuple[Any, Any]:
-    """pyproverモジュールをインポートする"""
+    """Import pyprover module"""
     with pushd(pyprover_dir):
         if pyprover_dir not in sys.path:
             sys.path.insert(0, pyprover_dir)

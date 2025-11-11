@@ -1,6 +1,6 @@
 """
 Self Improvement Data Collector Performance Test
-処理速度を測定するためのテストコード
+処理速度 測定do/performためのテストコード
 """
 import os
 import sys
@@ -22,7 +22,7 @@ except ImportError as e:
     import traceback
     traceback.print_exc()
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0, project_root)
 
@@ -54,11 +54,11 @@ class PerformanceProfiler:
             self.process = None
     
     def start_timer(self, name: str):
-        """タイマーを開始"""
+        """タイマー 開始"""
         self.start_times[name] = time.time()
     
     def end_timer(self, name: str):
-        """タイマーを終了して時間を記録"""
+        """タイマー 終了and時間 記録"""
         if name in self.start_times:
             elapsed = time.time() - self.start_times[name]
             self.metrics[name] = elapsed
@@ -67,7 +67,7 @@ class PerformanceProfiler:
         return 0.0
     
     def get_memory_usage(self) -> float:
-        """現在のメモリ使用量をMBで取得"""
+        """現在のメモリ使用量 MB with/at get"""
         if PSUTIL_AVAILABLE and self.process:
             try:
                 return self.process.memory_info().rss / 1024 / 1024
@@ -79,7 +79,7 @@ class PerformanceProfiler:
             return 0.0
     
     def get_cpu_usage(self) -> float:
-        """現在のCPU使用率を取得"""
+        """現在のCPU使用率 get"""
         if PSUTIL_AVAILABLE and self.process:
             return self.process.cpu_percent()
         else:
@@ -94,12 +94,12 @@ def measure_tactic_generation_performance(
     max_seq_len: int = 256,
     num_tests: int = 100
 ) -> Dict[str, Any]:
-    """タクティク生成のパフォーマンスを測定"""
+    """タクティクGenerationのパフォーマンス 測定"""
     print(f"Measuring tactic generation performance ({num_tests} tests)...")
     
     profiler = PerformanceProfiler()
     
-    # テスト用の論理式を生成
+    # テスト用の論理式 Generation
     test_goals = [
         "P -> P",
         "P -> (Q -> P)",
@@ -113,7 +113,7 @@ def measure_tactic_generation_performance(
         "P -> ~~P"
     ]
     
-    # テスト用の前提を生成
+    # テスト用の前提 Generation
     test_premises = [
         [],
         ["P"],
@@ -132,7 +132,7 @@ def measure_tactic_generation_performance(
     generation_times = []
     
     for i in range(num_tests):
-        # ランダムにテストケースを選択
+        # ランダム テストケース 選択
         goal_idx = i % len(test_goals)
         premises_idx = i % len(test_premises)
         
@@ -168,7 +168,7 @@ def measure_tactic_generation_performance(
             profiler.end_timer("tactic_generation")
             continue
     
-    # 統計を計算
+    # 統計 計算
     avg_generation_time = np.mean(generation_times) if generation_times else 0.0
     std_generation_time = np.std(generation_times) if generation_times else 0.0
     tactics_per_second = total_tactics_generated / total_generation_time if total_generation_time > 0 else 0.0
@@ -195,16 +195,16 @@ def measure_tactic_generation_performance(
 def measure_tactic_application_performance(
     num_tests: int = 100
 ) -> Dict[str, Any]:
-    """タクティク適用のパフォーマンスを測定（簡略版）"""
+    """タクティク適用のパフォーマンス 測定（簡略版）"""
     print(f"Measuring tactic application performance ({num_tests} tests)...")
     
-    # グローバル定数を初期化
+    # グローバル定数 初期化
     initialize_global_constants()
     
-    # PYPROVER_MODULESを再取得
+    # PYPROVER_MODULES 再get
     from src.interaction.self_improvement_data_collector import PYPROVER_MODULES
     
-    # PYPROVER_MODULESの状態を確認
+    # PYPROVER_MODULESの状態 確認
     if PYPROVER_MODULES is None:
         print("  Warning: PYPROVER_MODULES is None after initialization")
         return {
@@ -219,7 +219,7 @@ def measure_tactic_application_performance(
     
     profiler = PerformanceProfiler()
     
-    # 簡単なテストケースのみ
+    # 簡単なテストケースonly
     test_cases = [
         ("P -> P", "assumption"),
         ("P -> P", "intro"),
@@ -234,12 +234,12 @@ def measure_tactic_application_performance(
     success_count = 0
     
     for i in range(num_tests):
-        # テストケースを循環的に使用
+        # テストケース 循環的 使用
         case_idx = i % len(test_cases)
         goal, tactic = test_cases[case_idx]
         
         try:
-            # プロバーを作成
+            # プロバー 作成
             parse_tree = PYPROVER_MODULES['PropParseTree']()
             goal_node = parse_tree.transform(PYPROVER_MODULES['prop_parser'].parse(goal))
             prover = PYPROVER_MODULES['Prover'](goal_node)
@@ -261,12 +261,12 @@ def measure_tactic_application_performance(
                 print(f"  Test {i+1}: Applied '{tactic}' to '{goal}' in {application_time:.6f}s - {'Success' if success else 'Failed'}")
                 
         except Exception as e:
-            if i < 10:  # 最初の10回だけエラーを表示
+            if i < 10:  # 最初の10 timesonlyエラー 表示
                 print(f"  Test {i+1} failed: {e}")
             profiler.end_timer("tactic_application")
             continue
     
-    # 統計を計算
+    # 統計 計算
     avg_application_time = np.mean(application_times) if application_times else 0.0
     std_application_time = np.std(application_times) if application_times else 0.0
     applications_per_second = total_applications / total_application_time if total_application_time > 0 else 0.0
@@ -305,16 +305,16 @@ def measure_overall_performance(
     max_steps: int = 10,
     temperature: float = 1.0
 ) -> Dict[str, Any]:
-    """全体のパフォーマンスを測定"""
+    """全体のパフォーマンス 測定"""
     print(f"Measuring overall performance ({num_examples} examples, max {max_steps} steps each)...")
     
     profiler = PerformanceProfiler()
     
-    # メモリ使用量を記録
+    # メモリ使用量 記録
     initial_memory = profiler.get_memory_usage()
     print(f"  Initial memory: {initial_memory:.2f} MB")
     
-    # データ読み込みを事前に実行（測定対象外）
+    # データ読み込み 事前 実行（測定対象外）
     print("  Pre-loading data (not included in performance measurement)...")
     from src.interaction.self_improvement_data_collector import load_tautologies_from_generated_data
     tautologies = load_tautologies_from_generated_data(
@@ -323,32 +323,32 @@ def measure_overall_performance(
     )
     print(f"  Pre-loaded {len(tautologies)} tautologies")
     
-    # 実際の処理時間のみを測定
+    # 実際の処理時間only 測定
     profiler.start_timer("overall_collection")
     
     try:
-        # データ読み込みをスキップして処理のみ実行
+        # データ読み込み スキップand処理only実行
         successful_tactics = []
         solved_count = 0
         
         for i, goal_str in enumerate(tautologies):
             try:
-                # プロバーを作成
+                # プロバー 作成
                 from src.interaction.self_improvement_data_collector import PYPROVER_MODULES, apply_tactic_from_label
                 parse_tree = PYPROVER_MODULES['PropParseTree']()
                 goal_node = parse_tree.transform(PYPROVER_MODULES['prop_parser'].parse(goal_str))
                 prover = PYPROVER_MODULES['Prover'](goal_node)
                 
-                # 前提は空（トートロジーなので前提なしで証明可能）
+                # 前提は空（トートロジーなの with/at 前提なし with/at 証明可能）
                 premises = []
                 
-                # タクティク生成と適用の処理
+                # タクティクGenerationと適用の処理
                 current_premises = premises
                 current_goal = goal_str
                 failed_tactics = set()
                 
                 for step in range(max_steps):
-                    # タクティク生成
+                    # タクティクGeneration
                     tactic_combinations = generate_tactic_combinations(
                         model, tokenizer, current_premises, current_goal,
                         label_mappings, device, max_seq_len, 0.001
@@ -357,30 +357,30 @@ def measure_overall_performance(
                     if not tactic_combinations:
                         break
                     
-                    # 確率的にタクティクを選択して適用
+                    # 確率的 タクティク 選択and適用
                     success = False
                     max_attempts = len(tactic_combinations)
                     attempts = 0
                     
-                    # 利用可能なタクティクを事前に計算
+                    # 利用可能なタクティク 事前 計算
                     available_tactics = [tactic for tactic, _ in tactic_combinations 
                                        if tactic not in failed_tactics]
                     
                     if not available_tactics:
                         break
                     
-                    # 温度に基づく確率的選択
+                    # 温度 基づく確率的選択
                     tactic_probs = []
                     for tactic, prob in tactic_combinations:
                         if tactic in available_tactics:
-                            # 温度で調整
+                            # 温度 with/at 調整
                             adjusted_prob = prob ** (1.0 / temperature)
                             tactic_probs.append((tactic, adjusted_prob))
                     
                     if not tactic_probs:
                         break
                     
-                    # 確率に基づいて選択
+                    # 確率 基づいて選択
                     tactics, probs = zip(*tactic_probs)
                     probs = np.array(probs)
                     probs = probs / np.sum(probs)  # 正規化
@@ -388,11 +388,11 @@ def measure_overall_performance(
                     selected_idx = np.random.choice(len(tactics), p=probs)
                     selected_tactic = tactics[selected_idx]
                     
-                    # タクティクを適用
+                    # タクティク 適用
                     success = apply_tactic_from_label(prover, selected_tactic)
                     
                     if success:
-                        # 成功したタクティクを記録
+                        # 成功didタクティク 記録
                         successful_tactics.append({
                             'premises': current_premises.copy(),
                             'goal': current_goal,
@@ -400,7 +400,7 @@ def measure_overall_performance(
                             'step': step + 1
                         })
                         
-                        # 新しい状態を取得
+                        # 新しい状態 get
                         from src.core.state_encoder import encode_prover_state
                         new_state = encode_prover_state(prover)
                         current_premises = new_state["premises"]
@@ -424,13 +424,13 @@ def measure_overall_performance(
         
         total_time = profiler.end_timer("overall_collection")
         
-        # 最終メモリ使用量を記録
+        # 最終メモリ使用量 記録
         final_memory = profiler.get_memory_usage()
         print(f"  Final memory: {final_memory:.2f} MB")
         memory_used = final_memory - initial_memory
         print(f"  Memory used: {memory_used:.2f} MB")
         
-        # 統計を計算
+        # 統計 計算
         total_tactics = len(successful_tactics)
         tactics_per_second = total_tactics / total_time if total_time > 0 else 0.0
         
@@ -475,10 +475,10 @@ def run_comprehensive_performance_test(
     temperature: float = 1.0,
     max_steps: int = 5
 ):
-    """包括的なパフォーマンステストを実行"""
+    """包括的なパフォーマンステスト 実行"""
     print("Starting comprehensive performance test...")
     
-    # デバイス設定
+    # Device setup
     if device == "auto":
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -486,10 +486,10 @@ def run_comprehensive_performance_test(
     
     print(f"Using device: {device}")
     
-    # グローバル定数を初期化
+    # グローバル定数 初期化
     initialize_global_constants()
     
-    # モデルを読み込み
+    # Model 読み込み
     if not os.path.exists(model_path):
         print(f"Model file not found: {model_path}")
         return
@@ -497,19 +497,19 @@ def run_comprehensive_performance_test(
     model, label_mappings = load_hierarchical_model(model_path, device)
     print(f"Loaded model from {model_path}")
     
-    # トークナイザーを作成
+    # Create tokenizer
     token_py_path = os.path.join(project_root, "src", "core", "fof_tokens.py")
     base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
     tokenizer = CharTokenizer(base_tokens=base_tokens)
     
-    # モデルのmax_seq_lenを取得
+    # Modelのmax_seq_len get
     checkpoint = torch.load(model_path, map_location=device)
     max_seq_len = checkpoint.get('max_seq_len', 256)
     
-    # パフォーマンステストを実行
+    # パフォーマンステスト 実行
     all_results = {}
     
-    # 1. タクティク生成パフォーマンス
+    # 1. タクティクGenerationパフォーマンス
     print("\n" + "="*60)
     print("1. TACTIC GENERATION PERFORMANCE")
     print("="*60)
@@ -534,7 +534,7 @@ def run_comprehensive_performance_test(
     )
     all_results["overall"] = overall_results
     
-    # 結果を保存
+    # 結果 保存
     output_path = os.path.join(project_root, "tests", output_file)
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(all_results, f, ensure_ascii=False, indent=2)
@@ -544,7 +544,7 @@ def run_comprehensive_performance_test(
     print("="*60)
     print(f"Results saved to: {output_path}")
     
-    # サマリーを表示
+    # サマリー 表示
     if "tactic_generation" in all_results:
         gen = all_results["tactic_generation"]
         print(f"Tactic Generation: {gen['tactics_per_second']:.2f} tactics/sec")

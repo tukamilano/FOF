@@ -22,7 +22,7 @@ import torch
 from tqdm import tqdm
 from google.cloud import storage
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
@@ -143,7 +143,7 @@ def _process_tautology_worker(args: Tuple[Any, ...]) -> Dict[str, Any]:
             attempts = 0
 
             if temperature == 0.0:
-                # 確定的：確率の高い順に順番に試す
+                # 確定的：確率の高い順 順番 試す
                 for tactic_str, probability in tactic_combinations[:max_attempts]:
                     if tactic_str in failed_tactics:
                         continue
@@ -170,7 +170,7 @@ def _process_tautology_worker(args: Tuple[Any, ...]) -> Dict[str, Any]:
                     else:
                         failed_tactics.add(tactic_str)
             else:
-                # 確率的：確率的に選択して試す
+                # 確率的：確率的 選択and試す
                 while (
                     not success
                     and attempts < max_attempts
@@ -547,13 +547,13 @@ def save_self_improvement_data_with_gcs(
     gcs_bucket: str = None,
     gcs_prefix: str = ""
 ) -> None:
-    """Self improvementデータをファイルに保存し、GCSに逐次アップロード"""
+    """Self improvementデータ ファイル 保存し、GCS 逐次アップロード"""
     import json
     
-    # 出力ディレクトリを作成
+    # 出力ディレクトリ 作成
     os.makedirs(output_dir, exist_ok=True)
     
-    # バッチごとに分割して保存
+    # バッチごと 分割and保存
     for i in range(0, len(data), batch_size):
         batch_data = data[i:i + batch_size]
         batch_num = i // batch_size
@@ -566,7 +566,7 @@ def save_self_improvement_data_with_gcs(
         
         print(f"Saved {len(batch_data)} tactics to {filepath}")
         
-        # GCSに逐次アップロード
+        # GCS 逐次アップロード
         if gcs_bucket:
             if upload_to_gcs(filepath, gcs_bucket, gcs_prefix):
                 print(f"✅ Uploaded {filename} to GCS")

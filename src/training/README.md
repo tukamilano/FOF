@@ -1,45 +1,45 @@
 # Generated Data Training
 
-このディレクトリには、`generated_data`ディレクトリのデータを使用してモデルを学習するためのスクリプトが含まれています。
+This directory contains scripts for training models using data from the `generated_data` directory.
 
-## ファイル構成
+## File Structure
 
-### コア機能
-- `train_with_generated_data.py`: メインの学習スクリプト（`generated_data`用）
-- `run_training.py`: 学習を簡単に実行するためのラッパースクリプト
-- `inference_hierarchical.py`: 階層分類モデルの推論スクリプト
+### Core Functionality
+- `train_with_generated_data.py`: Main training script (for `generated_data`)
+- `run_training.py`: Wrapper script for easy training execution
+- `inference_hierarchical.py`: Hierarchical classification model inference script
 
-### 分析・ユーティリティ
-- `analyze_generated_data.py`: 生成されたデータの内容を分析するスクリプト
-- `check_duplicates.py`: データの重複をチェックするスクリプト
+### Analysis & Utilities
+- `analyze_generated_data.py`: Script to analyze generated data content
+- `check_duplicates.py`: Script to check for data duplicates
 
-### ドキュメント
-- `README.md`: このファイル
+### Documentation
+- `README.md`: This file
 
-## 使用方法
+## Usage
 
-### 1. データ分析
+### 1. Data Analysis
 
-まず、生成されたデータの内容を確認します：
+First, check the content of generated data:
 
 ```bash
 python src/training/analyze_generated_data.py
 ```
 
-重複の詳細を確認したい場合：
+To check duplicate details:
 
 ```bash
 python src/training/check_duplicates.py
 ```
 
-### 2. 学習実行
+### 2. Training Execution
 
-#### 簡単な実行（推奨）
+#### Simple execution (recommended)
 ```bash
 python src/training/run_training.py
 ```
 
-#### 詳細な設定で実行
+#### Execution with detailed settings
 ```bash
 python src/training/train_with_generated_data.py \
     --data_dir generated_data \
@@ -53,9 +53,9 @@ python src/training/train_with_generated_data.py \
     --wandb_project fof-training
 ```
 
-### 3. 推論実行
+### 3. Inference Execution
 
-学習したモデルを使用して推論を実行：
+Run inference using the trained model:
 
 ```bash
 python src/training/inference_hierarchical.py \
@@ -68,50 +68,50 @@ python src/training/inference_hierarchical.py \
     --wandb_project fof-inference
 ```
 
-## パラメータ説明
+## Parameter Description
 
-- `--data_dir`: 生成されたデータが格納されているディレクトリ（デフォルト: `generated_data`）
-- `--batch_size`: バッチサイズ（デフォルト: 16）
-- `--learning_rate`: 学習率（デフォルト: 3e-4）
-- `--num_epochs`: エポック数（デフォルト: 5）
-- `--save_path`: モデルの保存パス（デフォルト: `models/hierarchical_model_generated.pth`）
-- `--eval_split`: 評価用データの割合（デフォルト: 0.2）
-- `--max_seq_len`: 最大シーケンス長（デフォルト: 256）
-- `--remove_duplicates`: 同じstate_hashの重複例を削除（デフォルト: 有効）
-- `--keep_duplicates`: 重複例を保持（`--remove_duplicates`を無効化）
-- `--use_wandb`: wandbでログを記録
-- `--wandb_project`: wandbプロジェクト名（デフォルト: `fof-training`/`fof-inference`）
-- `--wandb_run_name`: wandbラン名（デフォルト: 自動生成）
+- `--data_dir`: Directory containing generated data (default: `generated_data`)
+- `--batch_size`: Batch size (default: 16)
+- `--learning_rate`: Learning rate (default: 3e-4)
+- `--num_epochs`: Number of epochs (default: 5)
+- `--save_path`: Model save path (default: `models/hierarchical_model_generated.pth`)
+- `--eval_split`: Evaluation data ratio (default: 0.2)
+- `--max_seq_len`: Maximum sequence length (default: 256)
+- `--remove_duplicates`: Remove duplicate examples with same state_hash (default: enabled)
+- `--keep_duplicates`: Keep duplicate examples (disables `--remove_duplicates`)
+- `--use_wandb`: Record logs with wandb
+- `--wandb_project`: wandb project name (default: `fof-training`/`fof-inference`)
+- `--wandb_run_name`: wandb run name (default: auto-generated)
 
-## wandbの使用方法
+## Using wandb
 
-### 1. wandbのインストール
+### 1. Install wandb
 ```bash
 pip install wandb
 ```
 
-### 2. wandbにログイン
+### 2. Login to wandb
 ```bash
 wandb login
 ```
 
-### 3. 学習時のログ記録
+### 3. Log during training
 ```bash
 python src/training/train_with_generated_data.py --use_wandb --wandb_project fof-training
 ```
 
-### 4. 推論時のログ記録
+### 4. Log during inference
 ```bash
 python src/training/inference_hierarchical.py --use_wandb --wandb_project fof-inference
 ```
 
-### 記録される情報
-- **学習時**: エポックごとの損失、精度、学習率
-- **推論時**: 各例の成功/失敗、ステップ数、信頼度、タクティク使用頻度
+### Recorded Information
+- **During training**: Loss, accuracy, learning rate per epoch
+- **During inference**: Success/failure per example, step count, confidence, tactic usage frequency
 
-## データ形式
+## Data Format
 
-`generated_data`ディレクトリには、以下の形式のJSONファイルが含まれている必要があります：
+The `generated_data` directory must contain JSON files in the following format:
 
 ```json
 [
@@ -139,16 +139,16 @@ python src/training/inference_hierarchical.py --use_wandb --wandb_project fof-in
 ]
 ```
 
-## 二段階重複排除ワークフロー
+## Two-Stage Deduplication Workflow
 
-学習時の重複排除を効率化するため、二段階のワークフローを提供しています：
+To streamline deduplication during training, we provide a two-stage workflow:
 
-### 段階1: 事前重複排除（推奨）
+### Stage 1: Pre-Deduplication (Recommended)
 
-学習前に重複を事前に除去し、重複排除済みデータを生成：
+Remove duplicates before training and generate deduplicated data:
 
 ```bash
-# 重複排除を実行
+# Execute deduplication
 python src/training/deduplicate_generated_data.py \
     --input_dir generated_data \
     --output_dir deduplicated_data \
@@ -156,8 +156,8 @@ python src/training/deduplicate_generated_data.py \
     --verbose
 ```
 
-**出力形式:**
-重複排除後は証明の連続性が失われるため、単純なstepの集合として保存されます：
+**Output Format:**
+After deduplication, proof continuity is lost, so data is saved as a simple collection of steps:
 
 ```json
 [
@@ -176,47 +176,47 @@ python src/training/deduplicate_generated_data.py \
 ]
 ```
 
-**メリット:**
-- 重複排除と学習が分離され、効率的
-- 重複排除済みデータを複数回再利用可能
-- 詳細な重複統計レポートを生成
-- 学習時のメモリ使用量を削減
-- 単純なstepの集合形式でメモリ効率が向上
+**Benefits:**
+- Deduplication and training are separated, improving efficiency
+- Deduplicated data can be reused multiple times
+- Generates detailed deduplication statistics report
+- Reduces memory usage during training
+- Improved memory efficiency with simple step collection format
 
-### 段階2: 学習実行
+### Stage 2: Training Execution
 
-重複排除済みデータを使用して学習：
+Train using deduplicated data:
 
 ```bash
-# 重複排除済みデータを使用（推奨）
+# Use deduplicated data (recommended)
 python src/training/train_with_generated_data.py \
     --use_deduplicated_data \
     --data_dir deduplicated_data \
     --batch_size 32 \
     --learning_rate 3e-4
 
-# または従来通り（重複排除を学習時に実行）
+# Or traditional method (deduplication during training)
 python src/training/train_with_generated_data.py \
     --data_dir generated_data \
     --batch_size 32 \
     --learning_rate 3e-4
 ```
 
-### 従来の重複削除について
+### About Traditional Deduplication
 
-`generated_data`には同じ状態（`state_hash`が同じ）の重複例が含まれている場合があります。従来の方法では学習時に重複を自動的に削除します：
+`generated_data` may contain duplicate examples with the same state (`state_hash`). The traditional method automatically removes duplicates during training:
 
-- **重複削除あり**（デフォルト）: 同じ`state_hash`の例は最初の1つだけを保持
-- **重複保持**: `--keep_duplicates`オプションで重複を保持
+- **With deduplication** (default): Only the first example with the same `state_hash` is kept
+- **Keep duplicates**: Use `--keep_duplicates` option to retain duplicates
 
-重複削除により学習データの品質が向上し、より効率的な学習が可能になります。
+Deduplication improves training data quality and enables more efficient training.
 
-## 注意事項
+## Notes
 
-1. **データディレクトリ**: `generated_data`ディレクトリが存在し、JSONファイルが含まれていることを確認してください
-2. **重複排除済みデータ**: `--use_deduplicated_data`を使用する場合は、事前に`deduplicate_generated_data.py`を実行してください
-3. **メモリ使用量**: `batch_size`と`max_seq_len`を適切に設定してください
-4. **学習時間**: 学習には時間がかかる場合があります。GPUが利用可能な場合は自動的に使用されます
-5. **モデル保存**: モデルは`models`ディレクトリに保存されます（ディレクトリが存在しない場合は自動作成されます）
-6. **重複削除効果**: 重複削除により学習データ数が減少する場合があります（通常7-10%程度）
-7. **ワークフロー推奨**: 効率的な学習のため、二段階ワークフロー（事前重複排除→学習）の使用を推奨します
+1. **Data Directory**: Ensure the `generated_data` directory exists and contains JSON files
+2. **Deduplicated Data**: When using `--use_deduplicated_data`, run `deduplicate_generated_data.py` first
+3. **Memory Usage**: Set `batch_size` and `max_seq_len` appropriately
+4. **Training Time**: Training may take time. GPU will be used automatically if available
+5. **Model Saving**: Models are saved to the `models` directory (automatically created if it doesn't exist)
+6. **Deduplication Effect**: Deduplication may reduce training data count (typically 7-10%)
+7. **Workflow Recommendation**: For efficient training, we recommend the two-stage workflow (pre-deduplication → training)

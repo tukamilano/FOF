@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-generated_dataの内容を分析するスクリプト
+Script to analyze generated_data content
 """
 import os
 import sys
@@ -9,13 +9,13 @@ import glob
 from collections import Counter, defaultdict
 
 def analyze_generated_data(data_dir="generated_data"):
-    """generated_dataディレクトリの内容を分析"""
+    """Analyze generated_data directory content"""
     
     if not os.path.exists(data_dir):
         print(f"Directory {data_dir} not found")
         return
     
-    # 全JSONファイルを読み込み
+    # Load all JSON files
     json_files = glob.glob(os.path.join(data_dir, "*.json"))
     print(f"Found {len(json_files)} JSON files")
     
@@ -48,7 +48,7 @@ def analyze_generated_data(data_dir="generated_data"):
     print(f"Max steps in an example: {max(step_lengths)}")
     print(f"Min steps in an example: {min(step_lengths)}")
     
-    # 成功したステップの統計
+    # 成功didステップの統計
     successful_steps = [step for step in all_steps if step.get('tactic_apply', False)]
     print(f"Successful steps: {len(successful_steps)}")
     print(f"Success rate: {len(successful_steps) / len(all_steps) * 100:.2f}%")
@@ -105,7 +105,7 @@ def analyze_generated_data(data_dir="generated_data"):
     }
 
 def main():
-    # プロジェクトルートに移動
+    # Move to project root
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(os.path.dirname(script_dir))
     os.chdir(project_root)
