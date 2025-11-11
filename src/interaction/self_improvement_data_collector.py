@@ -1,6 +1,6 @@
 """
 Self Improvement Data Collector
-解けたexampleの成功したタクティクのみを収集して学習データとして保存するスクリプト
+解けたexampleの成功didタクティクonly 収集andTrainingデータ as 保存do/performスクリプト
 """
 from __future__ import annotations
 
@@ -15,13 +15,13 @@ import numpy as np
 from typing import List, Tuple, Dict, Any
 from tqdm import tqdm
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, project_root)
 
 import torch
 
-# グローバル定数（一度だけ初期化）
+# グローバル定数（一度only初期化）
 PYPROVER_MODULES = None
 GENERATION_PARAMS = None
 BASE_TOKENS = None
@@ -40,24 +40,24 @@ def load_tautologies_from_generated_data(
     max_examples: int = None
 ) -> List[str]:
     """
-    generated_data配下のファイルから論理式を読み出す
+    generated_data配下のファイル from 論理式 読み出す
     
     Args:
         generated_data_dir: generated_dataディレクトリのパス
-        max_examples: 読み込む最大例数（Noneの場合は全て）
+        max_examples: 読み込む最大例数（Noneの場合はall）
     
     Returns:
         論理式のリスト
     """
     tautologies = []
     
-    # generated_dataディレクトリ内のJSONファイルを検索
+    # generated_dataディレクトリ内のJSONファイル 検索
     if not os.path.exists(generated_data_dir):
         print(f"Warning: Generated data directory not found: {generated_data_dir}")
         return []
     
     json_files = [f for f in os.listdir(generated_data_dir) if f.endswith('.json')]
-    json_files.sort()  # ファイル名でソート
+    json_files.sort()  # ファイル名 with/at ソート
     
     if not json_files:
         print(f"Warning: No JSON files found in {generated_data_dir}")
@@ -82,7 +82,7 @@ def load_tautologies_from_generated_data(
                     if isinstance(formula, str) and formula.strip():
                         tautologies.append(formula.strip())
             elif isinstance(data, dict):
-                # 辞書形式の場合（将来的な拡張に対応）
+                # 辞書形式の場合（将来的な拡張 対応）
                 if 'formulas' in data and isinstance(data['formulas'], list):
                     for formula in data['formulas']:
                         if max_examples and len(tautologies) >= max_examples:
@@ -101,23 +101,23 @@ def load_tautologies_from_generated_data(
 
 
 def initialize_global_constants():
-    """グローバル定数を一度だけ初期化"""
+    """グローバル定数 一度only初期化"""
     global PYPROVER_MODULES, GENERATION_PARAMS, BASE_TOKENS
     
     if PYPROVER_MODULES is None:
-        # pyproverモジュールを初期化
+        # pyproverモジュール 初期化
         pyprover_dir = os.path.join(project_root, "pyprover")
         
-        # パスを追加
+        # パスAdd
         if pyprover_dir not in sys.path:
             sys.path.insert(0, pyprover_dir)
         
-        # ディレクトリを変更してからモジュールをインポート
+        # ディレクトリ 変更and from モジュール インポート
         original_cwd = os.getcwd()
         os.chdir(pyprover_dir)
         
         try:
-            # モジュールをインポート
+            # モジュール インポート
             import proposition as proposition_mod
             import prover as prover_mod
             
@@ -145,7 +145,7 @@ def initialize_global_constants():
 
 
 def parse_tactic_string_cached(tactic_str: str) -> Dict[str, Any]:
-    """タクティク文字列をパース（キャッシュ付き）"""
+    """タクティク文字列 パース（キャッシュ付き）"""
     if tactic_str not in TACTIC_PARSER_CACHE:
         parts = tactic_str.split()
         
@@ -178,17 +178,17 @@ def parse_tactic_string_cached(tactic_str: str) -> Dict[str, Any]:
 
 
 def create_state_hash(premises: List[str], goal: str, tactic_str: str) -> str:
-    """状態ハッシュを効率的に作成"""
-    # 文字列結合を最適化
+    """状態ハッシュ 効率的 作成"""
+    # 文字列結合 最適化
     state_tactic_str = f"{'|'.join(premises)}|{goal}|{tactic_str}"
     return hashlib.md5(state_tactic_str.encode()).hexdigest()
 
 
 def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[TransformerClassifier, Dict[str, Any]]:
-    """階層分類モデルを読み込み"""
+    """階層分類Model 読み込み"""
     checkpoint = torch.load(model_path, map_location=device)
     
-    # 新しい形式のチェックポイントかどうかを判定
+    # 新しい形式のチェックポイントかどうか 判定
     if 'model_params' in checkpoint:
         # 新しい形式のチェックポイント
         model_params = checkpoint['model_params']
@@ -196,12 +196,12 @@ def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[Tran
         pad_id = checkpoint.get('pad_id', model_params['pad_id'])
         max_seq_len = checkpoint.get('max_seq_len', model_params['max_seq_len'])
         
-        # クラス数をチェックポイントから取得
+        # クラス数 チェックポイント from get
         num_main_classes = len(checkpoint['id_to_main'])
         num_arg1_classes = len(checkpoint['id_to_arg1'])
         num_arg2_classes = len(checkpoint['id_to_arg2'])
         
-        # ラベルマッピングを取得
+        # ラベルマッピング get
         label_mappings = {
             'main_to_id': checkpoint['main_to_id'],
             'arg1_to_id': checkpoint['arg1_to_id'],
@@ -227,18 +227,18 @@ def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[Tran
         
         model.load_state_dict(checkpoint['model_state_dict'])
     else:
-        # 古い形式のチェックポイント（重みのみ）
+        # 古い形式のチェックポイント（重みonly）
         print("Loading old format checkpoint (weights only)")
         
-        # デフォルトのモデルパラメータを取得
+        # デフォルトのModelパラメータ get
         from src.core.parameter import get_model_params
         model_params = get_model_params()
         
-        # チェックポイントからvocab_sizeを取得（embedding層のサイズから）
+        # チェックポイント from vocab_size get（embedding層のサイズ from ）
         vocab_size = checkpoint['embedding.weight'].shape[0]
         print(f"Detected vocab_size from checkpoint: {vocab_size}")
         
-        # デフォルトのラベルマッピングを取得
+        # デフォルトのラベルマッピング get
         from src.core.parameter import get_hierarchical_labels
         from src.core.transformer_classifier import build_hierarchical_label_mappings
         hierarchical_labels = get_hierarchical_labels()
@@ -257,7 +257,7 @@ def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[Tran
             'id_to_arg2': id_to_arg2,
         }
         
-        # モデルを作成（チェックポイントから取得したvocab_sizeを使用）
+        # Create model（チェックポイント from getdidvocab_size 使用）
         model = TransformerClassifier(
             vocab_size=vocab_size,
             pad_id=model_params.pad_id,
@@ -272,7 +272,7 @@ def load_hierarchical_model(model_path: str, device: torch.device) -> Tuple[Tran
             num_arg2_classes=len(id_to_arg2),
         )
         
-        # 重みを読み込み
+        # 重み 読み込み
         model.load_state_dict(checkpoint)
     
     model.to(device)
@@ -290,7 +290,7 @@ def calculate_tactic_probability(
     arg2_confidence: float
 ) -> float:
     """
-    タクティクの種類に応じて適切な確率を計算
+    タクティクの種類 応じて適切な確率 計算
     
     Args:
         main_tactic: メインタクティク
@@ -301,21 +301,21 @@ def calculate_tactic_probability(
         arg2_confidence: 第2引数の確信度
     
     Returns:
-        計算された確率
+        計算was done確率
     """
     # 引数不要なタクティク
     if main_tactic in ['assumption', 'intro', 'split', 'left', 'right', 'add_dn']:
         return main_confidence
     
-    # 引数1つのタクティク
+    # 引数1のタクティク
     elif main_tactic in ['apply', 'destruct']:
         return main_confidence * arg1_confidence
     
-    # 引数2つのタクティク
+    # 引数2のタクティク
     elif main_tactic == 'specialize':
         return main_confidence * arg1_confidence * arg2_confidence
     
-    # その他のタクティク（引数不要として扱う）
+    # Other tactics（引数不要 as 扱う）
     else:
         return main_confidence
 
@@ -326,43 +326,43 @@ def select_tactic_probabilistically(
     failed_tactics: set = None
 ) -> Tuple[str, float]:
     """
-    temperatureを使用してタクティクを確率的に選択
+    temperature 使用andタクティク 確率的 選択
     
     Args:
         tactic_combinations: [(tactic_string, probability), ...] のリスト
-        temperature: 温度パラメータ（高いほどランダム、低いほど確率に従う）
-        failed_tactics: 失敗したタクティクのセット
+        temperature: 温度パラメータ（高いほどランダム、低いほど確率 従う）
+        failed_tactics: 失敗didタクティクのセット
     
     Returns:
-        選択されたタクティクとその調整後の確率
+        選択was doneタクティクとその調整後の確率
     """
     if failed_tactics is None:
         failed_tactics = set()
     
-    # 失敗していないタクティクのみをフィルタリング
+    # 失敗andいno/notタクティクonly フィルタリング
     available_tactics = [(tactic, prob) for tactic, prob in tactic_combinations 
                         if tactic not in failed_tactics]
     
     if not available_tactics:
-        # 利用可能なタクティクがない場合は空を返す
+        # 利用可能なタクティク no/not場合は空 返す
         return "", 0.0
     
-    # 確率を温度で調整
+    # 確率 温度 with/at 調整
     tactics, probabilities = zip(*available_tactics)
     probabilities = np.array(probabilities)
     
-    # 温度を適用（log確率に変換してから温度で割る）
-    log_probs = np.log(probabilities + 1e-8)  # 数値安定性のため小さな値を追加
+    # 温度 適用（log確率 変換and from 温度 with/at 割る）
+    log_probs = np.log(probabilities + 1e-8)  # 数値安定性のため小さな値Add
     scaled_log_probs = log_probs / temperature
     
-    # softmaxで正規化
+    # softmax with/at 正規化
     exp_probs = np.exp(scaled_log_probs - np.max(scaled_log_probs))  # 数値安定性のため
     softmax_probs = exp_probs / np.sum(exp_probs)
     
-    # 確率的に選択
+    # 確率的 選択
     selected_idx = np.random.choice(len(tactics), p=softmax_probs)
     selected_tactic = tactics[selected_idx]
-    selected_prob = softmax_probs[selected_idx]  # 調整後の確率を返す
+    selected_prob = softmax_probs[selected_idx]  # 調整後の確率 返す
     
     return selected_tactic, selected_prob
 
@@ -378,13 +378,13 @@ def generate_tactic_combinations(
     temperature: float = 1.0
 ) -> List[Tuple[str, float]]:
     """
-    すべての可能なタクティク組み合わせを生成
+    allの可能なタクティク組み合わせ Generation
     
     Returns:
         [(tactic_string, probability), ...] のリスト（確率の高い順）
     """
     
-    # 入力をエンコード
+    # Encode input
     input_ids, attention_mask, segment_ids = tokenizer.encode(goal, premises, max_seq_len)
     input_ids = input_ids.unsqueeze(0).to(device)
     attention_mask = attention_mask.unsqueeze(0).to(device)
@@ -393,9 +393,9 @@ def generate_tactic_combinations(
     with torch.no_grad():
         main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
         
-        # temperatureを適用してsoftmaxで確率に変換
+        # temperature 適用andsoftmax with/at 確率 変換
         if temperature == 0.0:
-            # temperature=0の場合は確定的（softmaxで確率を計算し、確率の高い順に試す）
+            # temperature=0の場合は確定的（softmax with/at 確率 計算し、確率の高い順 試す）
             main_probs = torch.softmax(main_logits, dim=-1)
             arg1_probs = torch.softmax(arg1_logits, dim=-1)
             arg2_probs = torch.softmax(arg2_logits, dim=-1)
@@ -405,10 +405,10 @@ def generate_tactic_combinations(
             arg1_probs = torch.softmax(arg1_logits / temperature, dim=-1)
             arg2_probs = torch.softmax(arg2_logits / temperature, dim=-1)
         
-        # 確率閾値を満たすタクティクを収集
+        # 確率閾値 満たすタクティク 収集
         tactic_combinations = []
         
-        # 引数が不要なタクティクを処理
+        # 引数 不要なタクティク 処理
         for main_id, main_tactic in enumerate(label_mappings['id_to_main']):
             main_confidence = main_probs[0, main_id].item()
             
@@ -421,7 +421,7 @@ def generate_tactic_combinations(
                 
                 tactic_combinations.append((tactic_string, probability))
             
-            # 引数1つのタクティクの場合
+            # 引数1のタクティクの場合
             elif main_tactic in ['apply', 'destruct']:
                 for arg1_id, arg1_value in enumerate(label_mappings['id_to_arg1']):
                     arg1_confidence = arg1_probs[0, arg1_id].item()
@@ -434,7 +434,7 @@ def generate_tactic_combinations(
                     
                     tactic_combinations.append((tactic_string, probability))
             
-            # 引数2つのタクティクの場合
+            # 引数2のタクティクの場合
             elif main_tactic == 'specialize':
                 for arg1_id, arg1_value in enumerate(label_mappings['id_to_arg1']):
                     arg1_confidence = arg1_probs[0, arg1_id].item()
@@ -450,7 +450,7 @@ def generate_tactic_combinations(
                         
                         tactic_combinations.append((tactic_string, probability))
             
-            # その他のタクティク（引数不要として扱う）
+            # Other tactics（引数不要 as 扱う）
             else:
                 tactic_string = main_tactic
                 probability = calculate_tactic_probability(
@@ -460,14 +460,14 @@ def generate_tactic_combinations(
                 
                 tactic_combinations.append((tactic_string, probability))
         
-        # 確率の高い順にソート
+        # 確率の高い順 ソート
         tactic_combinations.sort(key=lambda x: x[1], reverse=True)
         
         return tactic_combinations
 
 
 def apply_tactic_from_label(prover, label) -> bool:
-    """タクティクを適用"""
+    """タクティク 適用"""
     if isinstance(label, dict):
         tactic_str = format_tactic_string(label)
     else:
@@ -506,7 +506,7 @@ def apply_tactic_from_label(prover, label) -> bool:
             return not prover.specialize(func_idx, domain_idx)
         return False
     except Exception as e:
-        # pyproverのエラーをキャッチしてFalseを返す
+        # pyproverのエラー キャッチandFalse 返す
         return False
 
 
@@ -525,18 +525,18 @@ def collect_self_improvement_data(
     temperature: float = 1.0
 ) -> List[Dict[str, Any]]:
     """
-    Self improvement用のデータを収集
+    Self improvement用のデータ 収集
     
     Args:
         generated_data_dir: generated_dataディレクトリのパス
     
     Returns:
-        成功したタクティクのリスト（deduplicated_batch形式）
+        成功didタクティクのリスト（deduplicated_batch形式）
     """
-    # グローバル定数を初期化
+    # グローバル定数 初期化
     initialize_global_constants()
     
-    # generated_data配下のファイルから論理式を読み込み
+    # generated_data配下のファイル from 論理式 読み込み
     tautologies = load_tautologies_from_generated_data(
         generated_data_dir=generated_data_dir,
         max_examples=num_examples
@@ -551,26 +551,26 @@ def collect_self_improvement_data(
     for i in range(min(5, len(tautologies))):
         print(f"  {i+1}: {tautologies[i]}")
     
-    # 成功したタクティクを収集
+    # 成功didタクティク 収集
     successful_tactics = []
     solved_count = 0
     
-    # 進捗表示付きでループ実行
+    # 進捗表示付き with/at ループ実行
     progress_bar = tqdm(enumerate(tautologies), total=len(tautologies), desc="Processing tautologies", unit="formula")
     
     for i, goal_str in progress_bar:
         try:
-            # パースしてproverを作成
+            # パースandprover 作成
             parse_tree = PYPROVER_MODULES['PropParseTree']()
             goal_node = parse_tree.transform(PYPROVER_MODULES['prop_parser'].parse(goal_str))
             prover = PYPROVER_MODULES['Prover'](goal_node)
             
-            # 前提は空（トートロジーなので前提なしで証明可能）
+            # 前提は空（トートロジーなの with/at 前提なし with/at 証明可能）
             premises = []
             
             if verbose:
                 print(f"\nExample {i+1}: {goal_str}")
-                # 初期状態を表示
+                # 初期状態 表示
                 initial_state = encode_prover_state(prover)
                 initial_premises = initial_state["premises"]
                 initial_goal = initial_state["goal"]
@@ -578,20 +578,20 @@ def collect_self_improvement_data(
                 print(f"    Premises: {initial_premises if initial_premises else '[]'}")
                 print(f"    Goal: {initial_goal}")
             
-            # このexampleの成功したタクティクを一時的に保存
+            # thisexampleの成功didタクティク 一時的 保存
             example_successful_tactics = []
             
-            # 失敗したタクティクを記録するセット（このexample内でのみ有効）
+            # 失敗didタクティク 記録do/performセット（thisexample内 with/at only有効）
             failed_tactics = set()
             
             # 推論ループ
             step = 0
             solved = prover.goal is None
             example_terminated = False  # example全体の早期終了フラグ
-            consecutive_failures = 0  # 連続失敗数をステップ間で保持
+            consecutive_failures = 0  # 連続失敗数 ステップ間 with/at 保持
             
             while not solved and step < max_steps and not example_terminated:
-                # 現在の状態を取得
+                # 現在の状態 get
                 current_state = encode_prover_state(prover)
                 current_premises = current_state["premises"]
                 current_goal = current_state["goal"]
@@ -601,7 +601,7 @@ def collect_self_improvement_data(
                     print(f"    Premises: {current_premises if current_premises else '[]'}")
                     print(f"    Goal: {current_goal}")
                 
-                # 確率閾値を満たすタクティク組み合わせを生成
+                # 確率閾値 満たすタクティク組み合わせ Generation
                 tactic_combinations = generate_tactic_combinations(
                     model, tokenizer, current_premises, current_goal,
                     label_mappings, device, max_seq_len, temperature
@@ -615,29 +615,29 @@ def collect_self_improvement_data(
                         print(f"    Threshold filtered tactics: []")
                     print(f"    Failed tactics so far: {failed_tactics}")
                 
-                # 確率的にタクティクを選択して適用
+                # 確率的 タクティク 選択and適用
                 success = False
                 max_attempts = len(tactic_combinations)  # 利用可能なタクティク数
                 attempts = 0
                 
-                # 利用可能なタクティクを事前に計算
+                # 利用可能なタクティク 事前 計算
                 available_tactics = [tactic for tactic, _ in tactic_combinations 
                                    if tactic not in failed_tactics]
                 
                 while not success and attempts < max_attempts and not example_terminated and available_tactics:
-                    # 確率的にタクティクを選択
+                    # 確率的 タクティク 選択
                     selected_tactic, selected_prob = select_tactic_probabilistically(
                         tactic_combinations, temperature, failed_tactics
                     )
                     
                     if not selected_tactic:
-                        # 利用可能なタクティクがない場合
+                        # 利用可能なタクティク no/not場合
                         if verbose:
                             print(f"    No available tactics (all failed)")
                         example_terminated = True
                         break
                     
-                    # タクティクを適用
+                    # タクティク 適用
                     success = apply_tactic_from_label(prover, selected_tactic)
                     attempts += 1
                     
@@ -645,7 +645,7 @@ def collect_self_improvement_data(
                         print(f"    Attempt {attempts}: {selected_tactic} (prob: {selected_prob:.3f}) - {'Success' if success else 'Failed'}")
                     
                     if success:
-                        # 成功したタクティクを一時的に記録
+                        # 成功didタクティク 一時的 記録
                         tactic_dict = parse_tactic_string_cached(selected_tactic)
                         state_tactic_hash = create_state_hash(current_premises, current_goal, selected_tactic)
                         
@@ -657,10 +657,10 @@ def collect_self_improvement_data(
                             "tactic_apply": True,
                             "state_tactic_hash": state_tactic_hash
                         })
-                        consecutive_failures = 0  # 成功したら連続失敗数をリセット
+                        consecutive_failures = 0  # 成功didら連続失敗数 リセット
                         
                         if verbose:
-                            # タクティク適用後の状態を表示
+                            # タクティクAfter applyingの状態 表示
                             new_state = encode_prover_state(prover)
                             new_premises = new_state["premises"]
                             new_goal = new_state["goal"]
@@ -668,11 +668,11 @@ def collect_self_improvement_data(
                             print(f"      Premises: {new_premises if new_premises else '[]'}")
                             print(f"      Goal: {new_goal if new_goal else 'SOLVED!'}")
                     else:
-                        # 失敗したタクティクを記録
+                        # 失敗didタクティク 記録
                         failed_tactics.add(selected_tactic)
                         consecutive_failures += 1
                         
-                        # 利用可能なタクティクリストを更新
+                        # 利用可能なタクティクリスト 更新
                         available_tactics = [tactic for tactic, _ in tactic_combinations 
                                            if tactic not in failed_tactics]
                         
@@ -685,7 +685,7 @@ def collect_self_improvement_data(
                 step += 1
                 solved = prover.goal is None
             
-            # 解けた場合のみ、このexampleの成功したタクティクを追加
+            # 解けた場合only、thisexampleの成功didタクティクAdd
             if solved:
                 solved_count += 1
                 successful_tactics.extend(example_successful_tactics)
@@ -704,13 +704,13 @@ def collect_self_improvement_data(
             
                 
         except Exception as e:
-            # パースエラーなどで失敗した場合はスキップ
+            # パースエラーetc with/at 失敗did場合はスキップ
             if verbose:
                 print(f"Warning: Failed to process tautology {i+1}: {e}")
             
             continue
     
-    # 進捗バーを閉じる
+    # 進捗バー 閉じる
     progress_bar.close()
     
     print(f"\nSelf improvement data collection completed:")
@@ -721,7 +721,7 @@ def collect_self_improvement_data(
 
 
 def clear_self_improvement_data(output_dir: str = "self_improvement_data") -> None:
-    """Self improvementデータディレクトリをクリア"""
+    """Self improvementデータディレクトリ クリア"""
     if os.path.exists(output_dir):
         import shutil
         shutil.rmtree(output_dir)
@@ -735,11 +735,11 @@ def save_self_improvement_data(
     output_dir: str = "self_improvement_data",
     batch_size: int = 1000
 ) -> None:
-    """Self improvementデータをファイルに保存"""
-    # 出力ディレクトリを作成
+    """Self improvementデータ ファイル 保存"""
+    # 出力ディレクトリ 作成
     os.makedirs(output_dir, exist_ok=True)
     
-    # バッチごとに分割して保存
+    # バッチごと 分割and保存
     for i in range(0, len(data), batch_size):
         batch_data = data[i:i + batch_size]
         batch_num = i // batch_size
@@ -768,7 +768,7 @@ def main():
     
     args = parser.parse_args()
     
-    # デバイス設定
+    # Device setup
     if args.device == "auto":
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -776,7 +776,7 @@ def main():
     
     print(f"Using device: {device}")
     
-    # モデルを読み込み
+    # Model 読み込み
     if not os.path.exists(args.model_path):
         print(f"Model file not found: {args.model_path}")
         print("Please provide a valid model path.")
@@ -785,13 +785,13 @@ def main():
     model, label_mappings = load_hierarchical_model(args.model_path, device)
     print(f"Loaded model from {args.model_path}")
     
-    # トークナイザーを作成
+    # Create tokenizer
     root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     token_py_path = os.path.join(root_dir, "src", "core", "fof_tokens.py")
     base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
     tokenizer = CharTokenizer(base_tokens=base_tokens)
     
-    # モデルのmax_seq_lenを取得
+    # Modelのmax_seq_len get
     checkpoint = torch.load(args.model_path, map_location=device)
     max_seq_len = checkpoint.get('max_seq_len', 256)
     
@@ -802,10 +802,10 @@ def main():
     print(f"  Generated data directory: {args.generated_data_dir}")
     print(f"  Output directory: {args.output_dir}")
     
-    # 既存のデータをクリア
+    # 既存のデータ クリア
     clear_self_improvement_data(args.output_dir)
     
-    # Self improvementデータを収集
+    # Self improvementデータ 収集
     successful_tactics = collect_self_improvement_data(
         model=model,
         tokenizer=tokenizer,
@@ -820,7 +820,7 @@ def main():
     )
     
     if successful_tactics:
-        # データを保存
+        # データ 保存
         save_self_improvement_data(
             data=successful_tactics,
             output_dir=args.output_dir,

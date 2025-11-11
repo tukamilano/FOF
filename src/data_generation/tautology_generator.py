@@ -12,7 +12,7 @@ from typing import List, Tuple, Dict, Any, Optional
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, project_root)
 
@@ -24,12 +24,12 @@ from src.core.parameter import (
 
 
 def example_hash(formula: str) -> str:
-    """論理式の重複チェック用ハッシュを生成"""
+    """論理式の重複チェック用ハッシュ Generation"""
     return hashlib.md5(formula.encode()).hexdigest()
 
 
 def process_single_formula_worker(args: Tuple) -> Dict[str, Any]:
-    """単一の論理式を処理するワーカー関数
+    """単一の論理式 処理do/performワーカー関数
     
     Args:
         args: Tuple containing (formula_data, worker_id)
@@ -42,7 +42,7 @@ def process_single_formula_worker(args: Tuple) -> Dict[str, Any]:
     try:
         formula = formula_data['formula']
         
-        # 論理式が空の場合はスキップ
+        # 論理式 空の場合はスキップ
         if not formula:
             return {
                 'formula': '',
@@ -53,7 +53,7 @@ def process_single_formula_worker(args: Tuple) -> Dict[str, Any]:
         
         return {
             'formula': formula,
-            'is_tautology': True,  # filter_formulasで既にトートロジーがフィルタリングされている
+            'is_tautology': True,  # filter_formulas with/at 既 トートロジー フィルタリングされてexists
             'worker_id': worker_id,
             'formula_hash': example_hash(formula)
         }
@@ -69,7 +69,7 @@ def process_single_formula_worker(args: Tuple) -> Dict[str, Any]:
 
 
 class TautologyGenerator:
-    """トートロジーな論理式を生成してJSONに格納するクラス"""
+    """トートロジーな論理式 GenerationandJSON 格納do/performクラス"""
     
     def __init__(self, 
                  dataset_file_path: str = "tautology_data.json",
@@ -106,7 +106,7 @@ class TautologyGenerator:
         self.gcs_prefix = gcs_prefix
     
     def clear_global_hashes(self):
-        """グローバルハッシュファイルを削除してリセット"""
+        """グローバルハッシュファイル 削除andリセット"""
         if os.path.exists(self.global_hashes_file):
             os.remove(self.global_hashes_file)
             print(f"Cleared global hashes file: {self.global_hashes_file}")
@@ -117,12 +117,12 @@ class TautologyGenerator:
         print("Reset global hash state")
     
     def load_global_hashes(self):
-        """既存のグローバルハッシュを読み込み"""
+        """既存のグローバルハッシュ 読み込み"""
         if os.path.exists(self.global_hashes_file):
             try:
                 with open(self.global_hashes_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    # シンプルな形式：ハッシュのリストのみ
+                    # シンプルな形式：ハッシュのリストonly
                     if isinstance(data, list):
                         self.formula_hashes = set(data)
                     else:
@@ -136,18 +136,18 @@ class TautologyGenerator:
             self.formula_hashes = set()
     
     def save_global_hashes(self):
-        """グローバルハッシュを保存"""
-        # シンプルな形式：ハッシュのリストのみ
+        """グローバルハッシュ 保存"""
+        # シンプルな形式：ハッシュのリストonly
         with open(self.global_hashes_file, 'w', encoding='utf-8') as f:
             json.dump(list(self.formula_hashes), f, ensure_ascii=False, indent=2)
     
     def get_current_filename(self) -> str:
-        """現在のファイル名を取得"""
+        """現在のファイル名 get"""
         base_name = os.path.basename(self.dataset_file_path).replace('.json', '')
         return f"{base_name}_{self.current_file_index:05d}.json"
     
     def clear_generated_data(self):
-        """既存の出力ディレクトリをクリア"""
+        """既存の出力ディレクトリ クリア"""
         if os.path.exists(self.output_dir):
             import shutil
             shutil.rmtree(self.output_dir)
@@ -158,15 +158,15 @@ class TautologyGenerator:
             print(f"GCS upload: gs://{self.gcs_bucket}/{self.gcs_prefix}")
     
     def upload_file_to_gcs(self, local_file_path: str, gcs_filename: str) -> bool:
-        """ローカルファイルをGCSバケットにアップロード"""
+        """ローカルファイル GCSバケット アップロード"""
         if not self.gcs_bucket:
             return False
         
         try:
-            # GCSパスを構築
+            # GCSパス 構築
             gcs_path = f"gs://{self.gcs_bucket}/{self.gcs_prefix}{gcs_filename}"
             
-            # gcloudコマンドでアップロード
+            # gcloudコマンド with/at アップロード
             result = subprocess.run([
                 'gcloud', 'storage', 'cp', local_file_path, gcs_path
             ], capture_output=True, text=True, check=True)
@@ -182,7 +182,7 @@ class TautologyGenerator:
             return False
     
     def generate_tautologies_parallel(self, gen, gen_params) -> List[Dict]:
-        """並列でトートロジーを生成"""
+        """並列 with/at トートロジー Generation"""
         print(f"Starting parallel tautology generation with {self.num_workers} workers...")
         
         results = []
@@ -195,17 +195,17 @@ class TautologyGenerator:
             with tqdm(total=gen_params.count, desc="Generating tautologies", unit="formula", 
                      bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}') as pbar:
                 while processed_count < gen_params.count:
-                    # バッチの論理式を生成
+                    # バッチの論理式 Generation
                     batch_formulas = []
                     batch_count = min(batch_size, gen_params.count - processed_count)
                     
                     successful_count = 0
                     for i in range(batch_count):
-                        # require_tautology=Trueでトートロジーのみを生成
+                        # require_tautology=True with/at トートロジーonly Generation
                         goal_list = filter_formulas(gen, max_len=gen_params.max_len, require_tautology=True, limit=1)
                         if goal_list:
                             goal = goal_list[0]
-                            # 重複チェックは保存時に統合して行うため、ここではスキップ
+                            # 重複チェックは保存時 統合and行うため、ここ with/at はスキップ
                             
                             batch_formulas.append({
                                 "formula": goal,
@@ -213,33 +213,33 @@ class TautologyGenerator:
                             })
                             successful_count += 1
                         else:
-                            # 有効な論理式がない場合はプレースホルダー
+                            # 有効な論理式 no/not場合はプレースホルダー
                             batch_formulas.append({
                                 "formula": "",
                                 "index": successful_count
                             })
                             successful_count += 1
                     
-                    # バッチを並列処理
+                    # バッチ 並列処理
                     worker_args = [
                         (formula, os.getpid()) 
                         for formula in batch_formulas
                     ]
                     
-                    # バッチタスクを送信
+                    # バッチタスク 送信
                     future_to_index = {
                         executor.submit(process_single_formula_worker, args): formula["index"] 
                         for args, formula in zip(worker_args, batch_formulas)
                     }
                     
-                    # 完了したタスクを処理
+                    # 完了didタスク 処理
                     for future in as_completed(future_to_index):
                         index = future_to_index[future]
                         try:
                             result = future.result()
                             results.append(result)
                             
-                            # 成功した論理式を収集
+                            # 成功did論理式 収集
                             if result.get('is_tautology', False) and result.get('formula'):
                                 self.add_formula_and_check_save(result)
                                 successful_formulas += 1
@@ -255,7 +255,7 @@ class TautologyGenerator:
                         pbar.update(1)
                         processed_count += 1
                         
-                        # プログレスバーを更新
+                        # Update progress bar
                         if processed_count % 100 == 0:
                             pbar.set_postfix({
                                 'file': f"{self.current_file_index:05d}",
@@ -263,17 +263,17 @@ class TautologyGenerator:
                                 'skipped': skipped_duplicates
                             })
                         
-                        # 十分に処理したら終了
+                        # 十分 処理didら終了
                         if processed_count >= gen_params.count:
                             break
                     
                     # バッチ処理完了
                     
-                    # 十分に処理したら終了
+                    # 十分 処理didら終了
                     if processed_count >= gen_params.count:
                         break
         
-        # 結果を論理式でソートして順序を維持
+        # 結果 論理式 with/at ソートand順序 維持
         results.sort(key=lambda x: x.get('formula', ''))
         
         print(f"Completed: {successful_formulas}/{gen_params.count} tautologies generated")
@@ -283,41 +283,41 @@ class TautologyGenerator:
         return results
     
     def add_formula_and_check_save(self, formula_data: Dict):
-        """論理式を追加し、ファイル制限に達したら保存"""
-        # 重複チェックは保存時に統合して行うため、ここでは単純に追加
+        """論理式Addし、ファイル制限 達didら保存"""
+        # 重複チェックは保存時 統合and行うため、ここ with/at は単純 追加
         self.all_formulas.append(formula_data)
         self.formulas_in_current_file += 1
         self.buffer_formulas += 1
         
-        # バッファサイズまたはファイルサイズのいずれかに達したら保存
+        # バッファサイズorファイルサイズのいずれか 達didら保存
         if (self.buffer_formulas >= self.buffer_size or 
             self.buffer_formulas >= self.examples_per_file):
             self.save_current_data()
     
     def save_current_data(self):
-        """現在のデータを保存"""
+        """現在のデータ 保存"""
         if not self.all_formulas:
             return
             
-        # データを変換
+        # データ 変換
         transformed_data = self.transform_to_output_format(self.all_formulas)
         num_formulas = len(transformed_data)
         
-        # バッファの例数カウンターをリセット
+        # バッファの例数カウンター リセット
         self.buffer_formulas = 0
         
-        # グローバル統計を更新
+        # グローバル統計 更新
         self.total_generated += len(self.all_formulas)
         
-        # ローカルファイルに保存
+        # ローカルファイル 保存
         local_file_path = self._save_to_local_file(transformed_data)
         
-        # バッファをリセット
+        # バッファ リセット
         self.all_formulas = []
         self.formulas_in_current_file = 0
     
     def transform_to_output_format(self, formulas: List[Dict]) -> List[str]:
-        """出力形式に変換 - 論理式の文字列のみを返す"""
+        """出力形式 変換 - 論理式の文字列only 返す"""
         transformed_data = []
         seen_hashes = set()  # 重複チェック用
         
@@ -339,18 +339,18 @@ class TautologyGenerator:
         return transformed_data
     
     def _save_to_local_file(self, transformed_data: List[str]) -> str:
-        """ローカルファイルに保存してファイルパスを返す"""
+        """ローカルファイル 保存andファイルパス 返す"""
         filename = self.get_current_filename()
         num_formulas = len(transformed_data)
         
-        # 現在のファイルが存在し、スペースがあるかチェック
+        # 現在のファイル 存在し、スペース exists/hasかチェック
         local_file_path = os.path.join(self.output_dir, filename)
         if os.path.exists(local_file_path):
             try:
                 with open(local_file_path, 'r', encoding='utf-8') as f:
                     existing_data = json.load(f)
                 if len(existing_data) + num_formulas > self.examples_per_file:
-                    # 現在のファイルが満杯になるので、新しいファイルを作成
+                    # 現在のファイル 満杯 becomeの with/at 、新しいファイル 作成
                     self.current_file_index += 1
                     filename = self.get_current_filename()
                     local_file_path = os.path.join(self.output_dir, filename)
@@ -367,7 +367,7 @@ class TautologyGenerator:
         for formula in transformed_data:
             formula_hash = example_hash(formula)
             
-            # グローバル重複チェック（既にadd_formula_and_check_saveでチェック済みだが、念のため）
+            # グローバル重複チェック（既 add_formula_and_check_save with/at チェック済みだ 、念のため）
             if self.check_duplicates and formula_hash in self.formula_hashes:
                 duplicates_removed += 1
                 continue
@@ -377,9 +377,9 @@ class TautologyGenerator:
                 duplicates_removed += 1
                 continue
             
-            # 重複なし - データを追加
+            # 重複なし - データAdd
             filtered_data.append(formula)
-            # グローバルハッシュに追加（まだ追加されていない場合）
+            # グローバルハッシュ 追加（まだ追加されていno/not場合）
             if self.check_duplicates:
                 self.formula_hashes.add(formula_hash)
         
@@ -390,24 +390,24 @@ class TautologyGenerator:
         transformed_data = filtered_data
         num_formulas = len(transformed_data)
         
-        # 新しいデータを追加
+        # 新しいデータAdd
         existing_data.extend(transformed_data)
         
-        # ファイルに書き込み
+        # ファイル 書き込み
         with open(local_file_path, 'w', encoding='utf-8') as f:
             json.dump(existing_data, f, ensure_ascii=False, indent=2)
         
-        # 追跡を更新
+        # 追跡 更新
         self.formulas_in_current_file = len(existing_data)
         
-        # グローバルハッシュを保存
+        # グローバルハッシュ 保存
         self.save_global_hashes()
         
-        # GCSにアップロード
+        # GCS アップロード
         if self.gcs_bucket:
             self.upload_file_to_gcs(local_file_path, filename)
         
-        # ファイル保存時の統計を表示
+        # ファイル保存時の統計 表示
         if len(existing_data) == num_formulas:
             print(f"Created: {filename} ({num_formulas} formulas)")
         else:
@@ -416,13 +416,13 @@ class TautologyGenerator:
         return local_file_path
     
     def save_data(self):
-        """収集したデータを保存"""
-        # 残りのデータを保存
+        """収集didデータ 保存"""
+        # 残りのデータ 保存
         if self.all_formulas:
             self.save_current_data()
     
     def get_stats(self) -> Dict[str, int]:
-        """収集したデータの統計を取得"""
+        """収集didデータの統計 get"""
         total_formulas = self.total_generated + len(self.all_formulas)
         unique_formulas = len(self.formula_hashes)
         
@@ -434,7 +434,7 @@ class TautologyGenerator:
 
 
 def main() -> None:
-    # パラメータを初期化
+    # Initialize parameters
     gen_params = get_generation_params()
     train_params = get_training_params()
     system_params = get_system_params()
@@ -461,7 +461,7 @@ def main() -> None:
                        help="Keep existing global hashes file (continue from previous run)")
     args = parser.parse_args()
 
-    # パラメータを更新
+    # パラメータ 更新
     default_params.update_generation_params(
         count=args.count,
         difficulty=args.difficulty,
@@ -474,13 +474,13 @@ def main() -> None:
     
     root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     
-    # システムパラメータを更新
+    # システムパラメータ 更新
     default_params.update_system_params(
         root_dir=root_dir,
         pyprover_dir=os.path.join(root_dir, "pyprover")
     )
 
-    # ジェネレーターを構築
+    # ジェネレーター 構築
     gen = FormulaGenerator(
         variables=gen_params.variables, 
         allow_const=gen_params.allow_const, 
@@ -488,7 +488,7 @@ def main() -> None:
         seed=gen_params.seed
     )
     
-    # トートロジー生成器を初期化
+    # トートロジーGeneration器 初期化
     tautology_generator = TautologyGenerator(
         dataset_file_path=args.dataset_file,
         num_workers=args.workers,
@@ -500,7 +500,7 @@ def main() -> None:
         output_dir=args.output_dir
     )
     
-    # グローバルハッシュをクリア（--keep_global_hashesが指定されていない場合）
+    # グローバルハッシュ クリア（--keep_global_hashes 指定されていno/not場合）
     if not args.keep_global_hashes:
         tautology_generator.clear_global_hashes()
 
@@ -510,16 +510,16 @@ def main() -> None:
     else:
         print(f"Output: {args.output_dir}/{args.dataset_file}_XXXXX.json")
     
-    # 既存のgenerated_dataをクリア
+    # 既存のgenerated_data クリア
     tautology_generator.clear_generated_data()
     
     start_time = time.time()
     
     try:
-        # 論理式を並列処理で生成
+        # 論理式 並列処理 with/at Generation
         results = tautology_generator.generate_tautologies_parallel(gen, gen_params)
         
-        # 構造化された形式でデータを保存
+        # 構造化was done形式 with/at データ 保存
         tautology_generator.save_data()
         stats = tautology_generator.get_stats()
         
@@ -531,10 +531,10 @@ def main() -> None:
             print(f"Saved to: {args.output_dir}/")
 
     finally:
-        # 終了前にグローバルハッシュを保存
+        # 終了前 グローバルハッシュ 保存
         tautology_generator.save_global_hashes()
         
-        # 総時間を計算
+        # 総時間 計算
         total_time = time.time() - start_time
         print(f"Time: {total_time:.1f}s ({total_time/60:.1f}min), {total_time/gen_params.count:.2f}s/formula")
 

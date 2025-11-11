@@ -9,7 +9,7 @@ import time
 from typing import List, Tuple, Dict, Any, Optional
 from copy import deepcopy
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, project_root)
 
@@ -23,8 +23,8 @@ from src.core.utils import pushd, import_pyprover
 
 
 def apply_tactic_from_label(prover, label: str) -> bool:
-    """戦略を適用し、成功したかどうかを返す"""
-    # 証明が既に完了している場合は失敗
+    """戦略 適用し、成功didかどうか 返す"""
+    # 証明 既 完了andexists場合は失敗
     if prover.goal is None:
         return False
         
@@ -65,13 +65,13 @@ def apply_tactic_from_label(prover, label: str) -> bool:
 
 
 def record_hash(premises: List[str], goal: str, tactic: str) -> str:
-    """データレコードの重複チェック用ハッシュを生成"""
+    """データレコードの重複チェック用ハッシュ Generation"""
     record_str = f"{'|'.join(premises)}|{goal}|{tactic}"
     return hashlib.md5(record_str.encode()).hexdigest()
 
 
 def example_hash(original_goal: str) -> str:
-    """Example全体の重複チェック用ハッシュを生成（元の目標式のみ）"""
+    """Example全体の重複チェック用ハッシュ Generation（元の目標式only）"""
     return hashlib.md5(original_goal.encode()).hexdigest()
 
 
@@ -145,7 +145,7 @@ def transform_to_new_format(steps: List[Dict], start_example_id: int = 1) -> Lis
             goal = step['goal']
             tactic_str = format_tactic_string(step['tactic'])
             
-            # ハッシュを計算
+            # ハッシュ 計算
             state_hash_val = state_hash(premises, goal)
             state_tactic_hash_val = state_tactic_hash(premises, goal, tactic_str)
             
@@ -170,7 +170,7 @@ def transform_to_new_format(steps: List[Dict], start_example_id: int = 1) -> Lis
         
         example = {
             "example_id": example_id,
-            "example_hash": example_hash_val,  # 計算済みのハッシュを使用
+            "example_hash": example_hash_val,  # 計算済みのハッシュ 使用
             "meta": {
                 "goal_original": original_goal,
                 "is_proved": is_proved
@@ -185,7 +185,7 @@ def transform_to_new_format(steps: List[Dict], start_example_id: int = 1) -> Lis
 
 
 class AutoDataCollector:
-    """auto_classical()で証明を探索し、データを収集するクラス"""
+    """auto_classical() with/at 証明 探索し、データ 収集do/performクラス"""
     
     def __init__(self, 
                  dataset_file_path: str = "training_data.json",
@@ -201,11 +201,11 @@ class AutoDataCollector:
         self.check_step_duplicates = check_step_duplicates
         
     def collect_data_for_formula(self, prover, example_id: int) -> Dict[str, Any]:
-        """単一の式に対してauto_classical()で証明を探索し、データを収集"""
+        """単一の式 対andauto_classical() with/at 証明 探索し、データ 収集"""
         initial_state = encode_prover_state(prover)
         start_time = time.time()
         
-        # Example重複チェック（元の目標式でチェック）
+        # Example重複チェック（元の目標式 with/at チェック）
         if self.check_example_duplicates:
             original_goal = initial_state["goal"]
             example_hash_val = example_hash(original_goal)
@@ -224,21 +224,21 @@ class AutoDataCollector:
             self.example_hashes.add(example_hash_val)
             print(f"  ✓ Added new example: {original_goal[:50]}... (hash: {example_hash_val[:8]}...)")
         
-        # pyproverのauto_classical()メソッドで証明を試行
+        # pyproverのauto_classical()メソッド with/at 証明 試行
         prover_copy_for_auto = deepcopy(prover)
         proof_path = prover_copy_for_auto.auto_classical(depth_limit=self.max_depth)
         
         if proof_path:
-            # 証明が見つかった場合、各ステップを記録
-            current_prover = deepcopy(prover)  # 元のproverから新しくコピー
+            # 証明 見かった場合、各ステップ 記録
+            current_prover = deepcopy(prover)  # 元のprover from 新しくコピー
             for i, tactic in enumerate(proof_path):
-                # 証明が完了している場合はループを終了
+                # 証明 完了andexists場合はループ 終了
                 if current_prover.goal is None:
                     break
                     
                 current_state = encode_prover_state(current_prover)
                 
-                # ステップハッシュを常に計算
+                # ステップハッシュ 常 計算
                 record_hash_val = record_hash(current_state["premises"], current_state["goal"], tactic)
                 
                 # ステップ重複チェック（オプション）
@@ -249,18 +249,18 @@ class AutoDataCollector:
                     else:
                         self.record_hashes.add(record_hash_val)
                 
-                # 戦略を適用
+                # 戦略 適用
                 success = apply_tactic_from_label(current_prover, tactic)
                 
-                # データを記録（このexampleが解けたので、すべてのレコードでis_proved=true）
+                # データ 記録（thisexample 解けたの with/at 、allのレコード with/at is_proved=true）
                 if should_add_step:
                     record = {
                         "premises": current_state["premises"],
                         "goal": current_state["goal"],
-                        "tactic": parse_tactic_string(tactic),  # 構造化されたtactic形式に変換
+                        "tactic": parse_tactic_string(tactic),  # 構造化was donetactic形式 変換
                         "tactic_apply": success,
-                        "is_proved": True,  # このexampleが解けたので常にtrue
-                        "record_hash": record_hash_val  # 常にハッシュを保存
+                        "is_proved": True,  # thisexample 解けたの with/at 常 true
+                        "record_hash": record_hash_val  # 常 ハッシュ 保存
                     }
                     self.collected_data.append(record)
             
@@ -273,7 +273,7 @@ class AutoDataCollector:
                 "time_taken": time.time() - start_time
             }
         
-        # 証明が見つからなかった場合
+        # 証明 見 from なかった場合
         return {
             "example_id": example_id,
             "initial_state": initial_state,
@@ -285,7 +285,7 @@ class AutoDataCollector:
     
     
     def save_data(self):
-        """収集したデータをJSONファイルに保存（新しい形式）"""
+        """収集didデータ JSONファイル 保存（新しい形式）"""
         # Transform to new format
         transformed_data = transform_to_new_format(self.collected_data)
         
@@ -293,7 +293,7 @@ class AutoDataCollector:
             json.dump(transformed_data, f, ensure_ascii=False, indent=2)
     
     def get_stats(self) -> Dict[str, int]:
-        """収集したデータの統計情報を取得"""
+        """収集didデータの統計情報 get"""
         total_records = len(self.collected_data)
         successful_tactics = sum(1 for record in self.collected_data if record["tactic_apply"])
         proved_records = sum(1 for record in self.collected_data if record["is_proved"])
@@ -308,7 +308,7 @@ class AutoDataCollector:
 
 
 def main() -> None:
-    # パラメータを初期化
+    # Initialize parameters
     gen_params = get_generation_params()
     train_params = get_training_params()
     system_params = get_system_params()
@@ -321,7 +321,7 @@ def main() -> None:
     parser.add_argument("--dataset_file", type=str, default=train_params.dataset_file, help="output dataset file")
     args = parser.parse_args()
 
-    # パラメータを更新
+    # パラメータ 更新
     default_params.update_generation_params(
         count=args.count,
         difficulty=args.difficulty,
@@ -336,7 +336,7 @@ def main() -> None:
     root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     pyprover_dir = os.path.join(root_dir, "pyprover")
     
-    # システムパラメータを更新
+    # システムパラメータ 更新
     default_params.update_system_params(
         root_dir=root_dir,
         pyprover_dir=pyprover_dir
@@ -360,8 +360,8 @@ def main() -> None:
     data_collector = AutoDataCollector(
         dataset_file_path=train_params.dataset_file,
         max_depth=gen_params.max_depth,
-        check_example_duplicates=True,  # Example重複チェックを有効化
-        check_step_duplicates=False    # ステップ重複チェックを無効化
+        check_example_duplicates=True,  # Example重複チェック 有効化
+        check_step_duplicates=False    # ステップ重複チェック 無効化
     )
 
     print(f"Starting auto_classical() data collection for {gen_params.count} formulas...")
@@ -412,12 +412,12 @@ def main() -> None:
         print(f"Unique examples: {stats['unique_examples']}")
         print(f"Data saved to: {args.dataset_file}")
         
-        # 重複チェック統計を表示
+        # 重複チェック統計 表示
         if data_collector.check_example_duplicates:
             print(f"\nExample重複チェック統計:")
-            print(f"  処理した例数: {gen_params.count}")
+            print(f"  処理did例数: {gen_params.count}")
             print(f"  ユニークな例数: {stats['unique_examples']}")
-            print(f"  スキップされた重複例数: {gen_params.count - stats['unique_examples']}")
+            print(f"  スキップwas done重複例数: {gen_params.count - stats['unique_examples']}")
 
 
 if __name__ == "__main__":

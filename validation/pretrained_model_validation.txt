@@ -6,1456 +6,1456 @@ Loading old format checkpoint (weights only)
 Detected vocab_size from checkpoint: 65
 Loaded model from models/pretrained_model.pth
 
-733個の問題を比較中...
-進捗: 10/733
-進捗: 20/733
-進捗: 30/733
-進捗: 40/733
-進捗: 50/733
-進捗: 60/733
-進捗: 70/733
-進捗: 80/733
-進捗: 90/733
-進捗: 100/733
-進捗: 110/733
-進捗: 120/733
-進捗: 130/733
-進捗: 140/733
-進捗: 150/733
-進捗: 160/733
-進捗: 170/733
-進捗: 180/733
-進捗: 190/733
-進捗: 200/733
-進捗: 210/733
-進捗: 220/733
-進捗: 230/733
-進捗: 240/733
-進捗: 250/733
-進捗: 260/733
-進捗: 270/733
-進捗: 280/733
-進捗: 290/733
-進捗: 300/733
-進捗: 310/733
-進捗: 320/733
-進捗: 330/733
-進捗: 340/733
-進捗: 350/733
-進捗: 360/733
-進捗: 370/733
-進捗: 380/733
-進捗: 390/733
-進捗: 400/733
-進捗: 410/733
-進捗: 420/733
-進捗: 430/733
-進捗: 440/733
-進捗: 450/733
-進捗: 460/733
-進捗: 470/733
-進捗: 480/733
-進捗: 490/733
-進捗: 500/733
-進捗: 510/733
-進捗: 520/733
-進捗: 530/733
-進捗: 540/733
-進捗: 550/733
-進捗: 560/733
-進捗: 570/733
-進捗: 580/733
-進捗: 590/733
-進捗: 600/733
-進捗: 610/733
-進捗: 620/733
-進捗: 630/733
-進捗: 640/733
-進捗: 650/733
-進捗: 660/733
-進捗: 670/733
-進捗: 680/733
-進捗: 690/733
-進捗: 700/733
-進捗: 710/733
-進捗: 720/733
-進捗: 730/733
-進捗: 733/733
+733 problems comparing...
+Progress: 10/733
+Progress: 20/733
+Progress: 30/733
+Progress: 40/733
+Progress: 50/733
+Progress: 60/733
+Progress: 70/733
+Progress: 80/733
+Progress: 90/733
+Progress: 100/733
+Progress: 110/733
+Progress: 120/733
+Progress: 130/733
+Progress: 140/733
+Progress: 150/733
+Progress: 160/733
+Progress: 170/733
+Progress: 180/733
+Progress: 190/733
+Progress: 200/733
+Progress: 210/733
+Progress: 220/733
+Progress: 230/733
+Progress: 240/733
+Progress: 250/733
+Progress: 260/733
+Progress: 270/733
+Progress: 280/733
+Progress: 290/733
+Progress: 300/733
+Progress: 310/733
+Progress: 320/733
+Progress: 330/733
+Progress: 340/733
+Progress: 350/733
+Progress: 360/733
+Progress: 370/733
+Progress: 380/733
+Progress: 390/733
+Progress: 400/733
+Progress: 410/733
+Progress: 420/733
+Progress: 430/733
+Progress: 440/733
+Progress: 450/733
+Progress: 460/733
+Progress: 470/733
+Progress: 480/733
+Progress: 490/733
+Progress: 500/733
+Progress: 510/733
+Progress: 520/733
+Progress: 530/733
+Progress: 540/733
+Progress: 550/733
+Progress: 560/733
+Progress: 570/733
+Progress: 580/733
+Progress: 590/733
+Progress: 600/733
+Progress: 610/733
+Progress: 620/733
+Progress: 630/733
+Progress: 640/733
+Progress: 650/733
+Progress: 660/733
+Progress: 670/733
+Progress: 680/733
+Progress: 690/733
+Progress: 700/733
+Progress: 710/733
+Progress: 720/733
+Progress: 730/733
+Progress: 733/733
 
 ==================================================
-比較結果
+Comparison Results
 ==================================================
-総問題数: 733
+Total Problems: 733
 
 auto_classical:     588/733 ( 80.2%)
-階層分類推論:       393/733 ( 53.6%)
+Hierarchical Classification Inference:       393/733 ( 53.6%)
 
-階層分類推論の優位性:
-  auto_classicalで解けなかった問題を解けた数:  19
-  追加成功率:   2.6%
+Advantage of Hierarchical Classification Inference:
+  Problems solved that auto_classical couldn't solve:  19
+  Additional success rate:   2.6%
 
-階層分類推論で解けたがauto_classicalで解けなかった問題:
+Problems solved by hierarchical classification inference but not by auto_classical:
 ==================================================
  1. (¬c → (¬b ∨ (¬(((b → ¬c) ∧ ¬((¬c ∧ c)))) → a)))
-    使用タクティク: intro, right, intro, destruct 1, add_dn, intro, apply 1, split, intro, assumption, intro, apply 0, assumption, destruct 3, destruct 4, assumption
-    実行時間: 0.109s
+    Tactics used: intro, right, intro, destruct 1, add_dn, intro, apply 1, split, intro, assumption, intro, apply 0, assumption, destruct 3, destruct 4, assumption
+    Execution time: 0.109s
 
  2. (¬(((¬(((a ∨ a) → (a → a))) → b) ∨ b)) → a)
-    使用タクティク: intro, add_dn, intro, apply 0, left, intro, add_dn, intro, apply 0, left, intro, assumption, apply 3, apply 4, specialize 3 3, destruct 3, specialize 4 3, specialize 3 4, apply 2, specialize 3 2, destruct 4, specialize 3 1, specialize 4 4, specialize 4 2, specialize 4 1, specialize 2 3, add_dn, intro, apply 2, intro, intro, assumption
-    実行時間: 0.137s
+    Tactics used: intro, add_dn, intro, apply 0, left, intro, add_dn, intro, apply 0, left, intro, assumption, apply 3, apply 4, specialize 3 3, destruct 3, specialize 4 3, specialize 3 4, apply 2, specialize 3 2, destruct 4, specialize 3 1, specialize 4 4, specialize 4 2, specialize 4 1, specialize 2 3, add_dn, intro, apply 2, intro, intro, assumption
+    Execution time: 0.137s
 
  3. ((¬c ∧ ¬((b → ((¬b → a) ∧ (b ∨ ¬c))))) → a)
-    使用タクティク: intro, destruct 0, add_dn, intro, apply 1, intro, split, intro, assumption, specialize 3 3, specialize 4 3, destruct 4, destruct 3, left, destruct 4
-    実行時間: 0.097s
+    Tactics used: intro, destruct 0, add_dn, intro, apply 1, intro, split, intro, assumption, specialize 3 3, specialize 4 3, destruct 4, destruct 3, left, destruct 4
+    Execution time: 0.097s
 
  4. (a ∨ ((a ∧ (¬((b → a)) ∨ (b ∧ a))) → b))
-    使用タクティク: right, intro, destruct 0, assumption, destruct 1, assumption, add_dn, intro, apply 1, intro, assumption, destruct 1, assumption
-    実行時間: 0.084s
+    Tactics used: right, intro, destruct 0, assumption, destruct 1, assumption, add_dn, intro, apply 1, intro, assumption, destruct 1, assumption
+    Execution time: 0.084s
 
  5. (b ∨ (c ∨ ((¬((¬b → c)) ∧ (b ∨ b)) → a)))
-    使用タクティク: right, right, intro, destruct 0, destruct 1, assumption, add_dn, intro, apply 0, intro, assumption, specialize 3 1, destruct 3, assumption, add_dn, intro, apply 0, intro, assumption, specialize 3 1, destruct 3
-    実行時間: 0.123s
+    Tactics used: right, right, intro, destruct 0, destruct 1, assumption, add_dn, intro, apply 0, intro, assumption, specialize 3 1, destruct 3, assumption, add_dn, intro, apply 0, intro, assumption, specialize 3 1, destruct 3
+    Execution time: 0.123s
 
  6. (¬(((c ∧ ¬((¬c ∧ (a ∧ c)))) ∧ c)) → ¬c)
-    使用タクティク: intro, intro, apply 0, split, split, assumption, intro, apply 0, destruct 1, destruct 2, destruct 1, destruct 2, destruct 3, destruct 3, destruct 1, destruct 2, destruct 4, specialize 3 3, specialize 3 2, specialize 1 3, specialize 3 0, specialize 2 3, specialize 1 2, specialize 2 2, specialize 1 0, specialize 3 1, specialize 2 0, specialize 3 4, specialize 4 3, split, destruct 3, destruct 4, destruct 2, specialize 3 3, assumption, specialize 3 2, specialize 3 1, destruct 1, specialize 4 3, specialize 3 4, specialize 2 3, specialize 3 0, specialize 4 2, split, assumption, destruct 3, destruct 2, destruct 4, intro, apply 0, destruct 3, destruct 2, destruct 4, specialize 3 3, destruct 1, specialize 3 2, specialize 2 3, specialize 3 0, specialize 4 3, specialize 1 3, specialize 2 2, specialize 3 4, specialize 3 1, specialize 4 2, specialize 1 2, assumption, specialize 2 0, intro, split, destruct 3, destruct 4, destruct 2, specialize 3 3, assumption, specialize 4 3, destruct 1, specialize 3 2, specialize 2 3, specialize 3 1, specialize 3 4, split, assumption, destruct 2, destruct 3, intro, apply 4, apply 3, apply 2, assumption, assumption, assumption, assumption
-    実行時間: 0.184s
+    Tactics used: intro, intro, apply 0, split, split, assumption, intro, apply 0, destruct 1, destruct 2, destruct 1, destruct 2, destruct 3, destruct 3, destruct 1, destruct 2, destruct 4, specialize 3 3, specialize 3 2, specialize 1 3, specialize 3 0, specialize 2 3, specialize 1 2, specialize 2 2, specialize 1 0, specialize 3 1, specialize 2 0, specialize 3 4, specialize 4 3, split, destruct 3, destruct 4, destruct 2, specialize 3 3, assumption, specialize 3 2, specialize 3 1, destruct 1, specialize 4 3, specialize 3 4, specialize 2 3, specialize 3 0, specialize 4 2, split, assumption, destruct 3, destruct 2, destruct 4, intro, apply 0, destruct 3, destruct 2, destruct 4, specialize 3 3, destruct 1, specialize 3 2, specialize 2 3, specialize 3 0, specialize 4 3, specialize 1 3, specialize 2 2, specialize 3 4, specialize 3 1, specialize 4 2, specialize 1 2, assumption, specialize 2 0, intro, split, destruct 3, destruct 4, destruct 2, specialize 3 3, assumption, specialize 4 3, destruct 1, specialize 3 2, specialize 2 3, specialize 3 1, specialize 3 4, split, assumption, destruct 2, destruct 3, intro, apply 4, apply 3, apply 2, assumption, assumption, assumption, assumption
+    Execution time: 0.184s
 
  7. (((¬(((a → a) ∧ (b → c))) ∧ ¬b) ∨ a) → a)
-    使用タクティク: intro, destruct 0, destruct 0, add_dn, intro, apply 0, split, intro, assumption, intro, assumption, specialize 3 3, specialize 3 2, specialize 2 3, destruct 2, assumption
-    実行時間: 0.105s
+    Tactics used: intro, destruct 0, destruct 0, add_dn, intro, apply 0, split, intro, assumption, intro, assumption, specialize 3 3, specialize 3 2, specialize 2 3, destruct 2, assumption
+    Execution time: 0.105s
 
  8. ((((¬b ∧ a) ∧ (¬((¬c ∨ b)) ∨ (b ∧ c))) ∧ ¬c) → c)
-    使用タクティク: intro, destruct 0, destruct 0, destruct 1, assumption, specialize 2 3, specialize 2 2, specialize 3 3, specialize 2 1, specialize 1 3, specialize 3 2, specialize 0 3, specialize 3 1, specialize 4 3, specialize 2 4, specialize 1 2, specialize 0 2, specialize 2 0, specialize 1 1, specialize 4 2, specialize 0 1, destruct 2, specialize 3 4, specialize 4 1, apply 2, specialize 3 0, specialize 1 4, destruct 3, specialize 0 4, specialize 1 0, apply 3, specialize 4 4, specialize 0 0, destruct 1, assumption, specialize 2 3, specialize 2 1, specialize 2 2, specialize 0 3, specialize 0 1, specialize 3 3, specialize 2 4, specialize 0 2, specialize 1 3, specialize 3 1, specialize 2 0, specialize 1 1, specialize 3 2, specialize 4 3, specialize 1 2, specialize 4 1, apply 2, specialize 4 2, destruct 2, specialize 0 4, specialize 0 0, specialize 3 4, specialize 3 0, add_dn, intro, apply 3, apply 1, left, assumption, assumption, destruct 1, assumption
-    実行時間: 0.113s
+    Tactics used: intro, destruct 0, destruct 0, destruct 1, assumption, specialize 2 3, specialize 2 2, specialize 3 3, specialize 2 1, specialize 1 3, specialize 3 2, specialize 0 3, specialize 3 1, specialize 4 3, specialize 2 4, specialize 1 2, specialize 0 2, specialize 2 0, specialize 1 1, specialize 4 2, specialize 0 1, destruct 2, specialize 3 4, specialize 4 1, apply 2, specialize 3 0, specialize 1 4, destruct 3, specialize 0 4, specialize 1 0, apply 3, specialize 4 4, specialize 0 0, destruct 1, assumption, specialize 2 3, specialize 2 1, specialize 2 2, specialize 0 3, specialize 0 1, specialize 3 3, specialize 2 4, specialize 0 2, specialize 1 3, specialize 3 1, specialize 2 0, specialize 1 1, specialize 3 2, specialize 4 3, specialize 1 2, specialize 4 1, apply 2, specialize 4 2, destruct 2, specialize 0 4, specialize 0 0, specialize 3 4, specialize 3 0, add_dn, intro, apply 3, apply 1, left, assumption, assumption, destruct 1, assumption
+    Execution time: 0.113s
 
  9. (((b → (¬((a → a)) → c)) ∧ (¬c ∨ a)) ∨ c)
-    使用タクティク: left, split, intro, intro, assumption, add_dn, intro, apply 1, intro, assumption, left, assumption
-    実行時間: 0.099s
+    Tactics used: left, split, intro, intro, assumption, add_dn, intro, apply 1, intro, assumption, left, assumption
+    Execution time: 0.099s
 
 10. ¬((¬c ∧ ((((b ∨ b) ∧ (¬b → ¬a)) ∨ c) ∧ ¬b)))
-    使用タクティク: intro, destruct 0, apply 0, destruct 1, destruct 3, destruct 2, destruct 1, destruct 1, destruct 2, assumption, specialize 3 0, specialize 3 2, specialize 3 3, specialize 3 1, assumption, specialize 3 2, specialize 3 3, specialize 3 0, specialize 3 1, specialize 3 4, specialize 1 2, destruct 2, destruct 1, assumption, specialize 3 0, specialize 3 2, specialize 3 3, specialize 3 1, assumption, specialize 3 2, specialize 3 3, specialize 3 0, specialize 3 1, specialize 3 4, specialize 1 2, destruct 2, destruct 1, assumption
-    実行時間: 0.135s
+    Tactics used: intro, destruct 0, apply 0, destruct 1, destruct 3, destruct 2, destruct 1, destruct 1, destruct 2, assumption, specialize 3 0, specialize 3 2, specialize 3 3, specialize 3 1, assumption, specialize 3 2, specialize 3 3, specialize 3 0, specialize 3 1, specialize 3 4, specialize 1 2, destruct 2, destruct 1, assumption, specialize 3 0, specialize 3 2, specialize 3 3, specialize 3 1, assumption, specialize 3 2, specialize 3 3, specialize 3 0, specialize 3 1, specialize 3 4, specialize 1 2, destruct 2, destruct 1, assumption
+    Execution time: 0.135s
 
 11. ((b ∧ ¬((b → ((b → ¬a) ∧ (c → ¬a))))) → a)
-    使用タクティク: intro, destruct 0, assumption, add_dn, intro, apply 1, intro, split, intro, assumption, intro, assumption
-    実行時間: 0.116s
+    Tactics used: intro, destruct 0, assumption, add_dn, intro, apply 1, intro, split, intro, assumption, intro, assumption
+    Execution time: 0.116s
 
 12. ((b → (¬((¬((¬b ∧ c)) ∧ ¬((b → a)))) → ¬c)) ∨ a)
-    使用タクティク: left, intro, intro, intro, apply 1, split, intro, apply 1, split, intro, apply 1, split, intro, apply 3, apply 2, apply 1, destruct 2, split, destruct 3, destruct 3, destruct 3, destruct 3, destruct 4, destruct 2, specialize 3 3, assumption, specialize 4 3, intro, apply 4, apply 3, assumption, destruct 4, destruct 3, assumption, specialize 4 3, specialize 3 3, destruct 2, specialize 4 4, specialize 3 4, specialize 4 1, specialize 3 1, specialize 4 2, specialize 4 0, specialize 3 2, specialize 3 0, destruct 4, destruct 3, destruct 4, destruct 3, destruct 4, destruct 3, destruct 4, destruct 3
-    実行時間: 0.225s
+    Tactics used: left, intro, intro, intro, apply 1, split, intro, apply 1, split, intro, apply 1, split, intro, apply 3, apply 2, apply 1, destruct 2, split, destruct 3, destruct 3, destruct 3, destruct 3, destruct 4, destruct 2, specialize 3 3, assumption, specialize 4 3, intro, apply 4, apply 3, assumption, destruct 4, destruct 3, assumption, specialize 4 3, specialize 3 3, destruct 2, specialize 4 4, specialize 3 4, specialize 4 1, specialize 3 1, specialize 4 2, specialize 4 0, specialize 3 2, specialize 3 0, destruct 4, destruct 3, destruct 4, destruct 3, destruct 4, destruct 3, destruct 4, destruct 3
+    Execution time: 0.225s
 
 13. ¬((b ∧ (¬((((¬b → a) ∧ (a ∨ b)) ∧ b)) ∧ b)))
-    使用タクティク: intro, destruct 0, destruct 1, apply 1, split, split, intro, assumption, specialize 3 0, destruct 3, destruct 3, destruct 3
-    実行時間: 0.080s
+    Tactics used: intro, destruct 0, destruct 1, apply 1, split, split, intro, assumption, specialize 3 0, destruct 3, destruct 3, destruct 3
+    Execution time: 0.080s
 
 14. ((b ∧ ¬((c → ((¬a ∨ a) ∧ ¬((¬a ∧ c)))))) → ¬a)
-    使用タクティク: intro, intro, destruct 0, destruct 2, apply 2, intro, split, right, assumption, intro, apply 2, intro, destruct 2, specialize 2 3, split, right, assumption, destruct 4, destruct 4, destruct 3, intro, apply 4, apply 3, apply 2, destruct 3, destruct 4, intro, specialize 3 3, specialize 2 3, destruct 3, destruct 2, specialize 4 3, specialize 3 2, destruct 4, specialize 2 2, specialize 3 1, specialize 2 1, split, destruct 4, destruct 3, right, assumption, destruct 4, destruct 3, intro, apply 4, apply 3, destruct 4, apply 5, assumption
-    実行時間: 0.200s
+    Tactics used: intro, intro, destruct 0, destruct 2, apply 2, intro, split, right, assumption, intro, apply 2, intro, destruct 2, specialize 2 3, split, right, assumption, destruct 4, destruct 4, destruct 3, intro, apply 4, apply 3, apply 2, destruct 3, destruct 4, intro, specialize 3 3, specialize 2 3, destruct 3, destruct 2, specialize 4 3, specialize 3 2, destruct 4, specialize 2 2, specialize 3 1, specialize 2 1, split, destruct 4, destruct 3, right, assumption, destruct 4, destruct 3, intro, apply 4, apply 3, destruct 4, apply 5, assumption
+    Execution time: 0.200s
 
 15. ((¬((b → ¬((¬((b ∧ b)) ∧ (b → a))))) ∧ ¬c) → a)
-    使用タクティク: intro, destruct 0, add_dn, intro, apply 0, intro, intro, apply 0, intro, destruct 2, intro, apply 3, apply 4, apply 2, assumption, destruct 4, assumption, destruct 4, destruct 3, specialize 4 3, specialize 4 4, apply 4, specialize 3 3, specialize 3 4, apply 3, specialize 4 1, specialize 4 2, specialize 3 1, destruct 5, assumption, destruct 4, destruct 3, specialize 4 3, specialize 4 4, apply 4, specialize 3 3, specialize 3 4, specialize 4 1, apply 3, specialize 4 2, right, specialize 3 1, left, destruct 5, specialize 3 2, specialize 4 0, split, destruct 2, intro, specialize 3 0, specialize 4 5, specialize 5 3, specialize 5 4, add_dn, destruct 3, destruct 4, assumption, specialize 3 3, destruct 2, intro, apply 4, apply 3, apply 5, assumption, specialize 4 3, specialize 3 3, destruct 4, destruct 3, specialize 4 4, specialize 3 4, specialize 4 2, specialize 3 2, specialize 4 1, specialize 3 1, split, assumption, assumption
-    実行時間: 0.150s
+    Tactics used: intro, destruct 0, add_dn, intro, apply 0, intro, intro, apply 0, intro, destruct 2, intro, apply 3, apply 4, apply 2, assumption, destruct 4, assumption, destruct 4, destruct 3, specialize 4 3, specialize 4 4, apply 4, specialize 3 3, specialize 3 4, apply 3, specialize 4 1, specialize 4 2, specialize 3 1, destruct 5, assumption, destruct 4, destruct 3, specialize 4 3, specialize 4 4, apply 4, specialize 3 3, specialize 3 4, specialize 4 1, apply 3, specialize 4 2, right, specialize 3 1, left, destruct 5, specialize 3 2, specialize 4 0, split, destruct 2, intro, specialize 3 0, specialize 4 5, specialize 5 3, specialize 5 4, add_dn, destruct 3, destruct 4, assumption, specialize 3 3, destruct 2, intro, apply 4, apply 3, apply 5, assumption, specialize 4 3, specialize 3 3, destruct 4, destruct 3, specialize 4 4, specialize 3 4, specialize 4 2, specialize 3 2, specialize 4 1, specialize 3 1, split, assumption, assumption
+    Execution time: 0.150s
 
 16. (c ∨ (¬((¬c ∨ (¬((a ∨ b)) → (b ∨ c)))) → b))
-    使用タクティク: right, intro, add_dn, intro, apply 0, right, intro, right, assumption, apply 3, add_dn, intro, apply 0, left, assumption
-    実行時間: 0.101s
+    Tactics used: right, intro, add_dn, intro, apply 0, right, intro, right, assumption, apply 3, add_dn, intro, apply 0, left, assumption
+    Execution time: 0.101s
 
 17. (c → ((((¬b ∧ a) → ¬((¬a ∨ b))) ∨ a) ∨ a))
-    使用タクティク: intro, left, left, intro, intro, destruct 1, apply 2, assumption, specialize 2 0, specialize 3 0, specialize 1 0, specialize 2 3, specialize 2 2, specialize 3 3, specialize 3 2, specialize 1 3, specialize 2 1, specialize 1 2, destruct 2, specialize 3 1, destruct 3, specialize 1 1, destruct 1, assumption, specialize 1 0, specialize 2 0, specialize 1 2, specialize 2 2, specialize 1 3, destruct 1, assumption
-    実行時間: 0.102s
+    Tactics used: intro, left, left, intro, intro, destruct 1, apply 2, assumption, specialize 2 0, specialize 3 0, specialize 1 0, specialize 2 3, specialize 2 2, specialize 3 3, specialize 3 2, specialize 1 3, specialize 2 1, specialize 1 2, destruct 2, specialize 3 1, destruct 3, specialize 1 1, destruct 1, assumption, specialize 1 0, specialize 2 0, specialize 1 2, specialize 2 2, specialize 1 3, destruct 1, assumption
+    Execution time: 0.102s
 
 18. (a ∨ ((c ∨ b) ∨ (¬(((b → a) ∧ ¬((¬c ∧ a)))) → b)))
-    使用タクティク: right, right, intro, add_dn, intro, apply 0, split, intro, assumption, specialize 1 2, destruct 1, destruct 2, destruct 1
-    実行時間: 0.093s
+    Tactics used: right, right, intro, add_dn, intro, apply 0, split, intro, assumption, specialize 1 2, destruct 1, destruct 2, destruct 1
+    Execution time: 0.093s
 
 19. (¬c → ((¬((¬((b → c)) → b)) → b) ∨ b))
-    使用タクティク: intro, left, intro, add_dn, intro, apply 1, intro, assumption, apply 3, apply 2, apply 4, add_dn, intro, apply 3, intro, assumption, specialize 4 3, specialize 4 4, specialize 4 1, specialize 3 3, specialize 3 4, specialize 4 2, apply 4, destruct 4, specialize 3 1, specialize 3 2, specialize 4 0, apply 3, destruct 3, specialize 3 0, right, left, specialize 5 3, specialize 5 4, specialize 4 5, assumption, destruct 4
-    実行時間: 0.102s
+    Tactics used: intro, left, intro, add_dn, intro, apply 1, intro, assumption, apply 3, apply 2, apply 4, add_dn, intro, apply 3, intro, assumption, specialize 4 3, specialize 4 4, specialize 4 1, specialize 3 3, specialize 3 4, specialize 4 2, apply 4, destruct 4, specialize 3 1, specialize 3 2, specialize 4 0, apply 3, destruct 3, specialize 3 0, right, left, specialize 5 3, specialize 5 4, specialize 4 5, assumption, destruct 4
+    Execution time: 0.102s
 
 
-auto_classicalで解けたが階層分類推論で解けなかった問題:
+auto_classical with/at 解けた 階層分類推論 with/at 解けなかった問題:
 ==================================================
  1. ¬((a ∧ ¬(((((c → ¬b) ∨ b) ∨ c) → ¬((¬c ∧ ¬a))))))
-    auto_classical使用タクティク: intro, destruct 0, apply 1, intro, intro, apply 1, intro, destruct 3, specialize 5 0, destruct 5
-    auto_classical実行時間: 0.021s
-    階層分類推論実行時間: 0.285s
+    auto_classicalTactics used: intro, destruct 0, apply 1, intro, intro, apply 1, intro, destruct 3, specialize 5 0, destruct 5
+    auto_classicalExecution time: 0.021s
+    階層分類推論Execution time: 0.285s
     階層分類推論平均信頼度: 0.100
 
  2. (c ∨ ¬(((¬c ∨ (b ∨ ¬((a → b)))) ∧ c)))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
-    auto_classical実行時間: 1.793s
-    階層分類推論実行時間: 0.580s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
+    auto_classicalExecution time: 1.793s
+    階層分類推論Execution time: 0.580s
     階層分類推論平均信頼度: 0.527
 
  3. (¬b ∨ (c ∨ ((b → c) ∨ (¬((b → b)) → (b → b)))))
-    auto_classical使用タクティク: right, right, right, intro, intro, assumption
-    auto_classical実行時間: 0.237s
-    階層分類推論実行時間: 0.302s
+    auto_classicalTactics used: right, right, right, intro, intro, assumption
+    auto_classicalExecution time: 0.237s
+    階層分類推論Execution time: 0.302s
     階層分類推論平均信頼度: 0.154
 
  4. (((a ∨ ¬a) ∨ (c ∧ ((a → b) ∨ a))) ∨ c)
-    auto_classical使用タクティク: left, left, add_dn, intro, apply 0, right, intro, apply 0, left, assumption
-    auto_classical実行時間: 0.041s
-    階層分類推論実行時間: 0.315s
+    auto_classicalTactics used: left, left, add_dn, intro, apply 0, right, intro, apply 0, left, assumption
+    auto_classicalExecution time: 0.041s
+    階層分類推論Execution time: 0.315s
     階層分類推論平均信頼度: 0.054
 
  5. (c ∨ ¬((c ∧ ¬a)))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
-    auto_classical実行時間: 0.556s
-    階層分類推論実行時間: 0.264s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
+    auto_classicalExecution time: 0.556s
+    階層分類推論Execution time: 0.264s
     階層分類推論平均信頼度: 0.126
 
  6. (¬b ∨ (¬((((b ∧ c) ∧ (b ∨ a)) ∧ a)) ∨ (b ∨ ¬c)))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, right, left, assumption
-    auto_classical実行時間: 0.996s
-    階層分類推論実行時間: 0.389s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, right, left, assumption
+    auto_classicalExecution time: 0.996s
+    階層分類推論Execution time: 0.389s
     階層分類推論平均信頼度: 0.293
 
  7. ((b ∨ (¬c ∨ ¬b)) ∨ ¬a)
-    auto_classical使用タクティク: left, add_dn, intro, apply 0, right, right, intro, apply 0, left, assumption
-    auto_classical実行時間: 0.164s
-    階層分類推論実行時間: 0.241s
+    auto_classicalTactics used: left, add_dn, intro, apply 0, right, right, intro, apply 0, left, assumption
+    auto_classicalExecution time: 0.164s
+    階層分類推論Execution time: 0.241s
     階層分類推論平均信頼度: 0.630
 
  8. ((¬b ∨ (¬((a → (a → c))) ∨ b)) ∨ ¬b)
-    auto_classical使用タクティク: left, add_dn, intro, apply 0, left, intro, apply 0, right, right, assumption
-    auto_classical実行時間: 0.138s
-    階層分類推論実行時間: 0.268s
+    auto_classicalTactics used: left, add_dn, intro, apply 0, left, intro, apply 0, right, right, assumption
+    auto_classicalExecution time: 0.138s
+    階層分類推論Execution time: 0.268s
     階層分類推論平均信頼度: 0.054
 
  9. (¬b ∨ b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.307s
-    階層分類推論実行時間: 0.281s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.307s
+    階層分類推論Execution time: 0.281s
     階層分類推論平均信頼度: 0.048
 
 10. ((¬a ∨ (c ∨ a)) ∨ ¬b)
-    auto_classical使用タクティク: left, add_dn, intro, apply 0, left, intro, apply 0, right, right, assumption
-    auto_classical実行時間: 0.159s
-    階層分類推論実行時間: 0.251s
+    auto_classicalTactics used: left, add_dn, intro, apply 0, left, intro, apply 0, right, right, assumption
+    auto_classicalExecution time: 0.159s
+    階層分類推論Execution time: 0.251s
     階層分類推論平均信頼度: 0.053
 
 11. (¬a ∨ (b → (a ∨ (¬a ∨ (a ∨ c)))))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, intro, left, assumption
-    auto_classical実行時間: 0.640s
-    階層分類推論実行時間: 0.335s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, intro, left, assumption
+    auto_classicalExecution time: 0.640s
+    階層分類推論Execution time: 0.335s
     階層分類推論平均信頼度: 0.146
 
 12. ((b ∨ a) ∨ ((¬(((c → b) ∨ (c → a))) ∧ a) → b))
-    auto_classical使用タクティク: right, intro, destruct 0, add_dn, intro, apply 0, right, intro, assumption
-    auto_classical実行時間: 0.185s
-    階層分類推論実行時間: 0.258s
+    auto_classicalTactics used: right, intro, destruct 0, add_dn, intro, apply 0, right, intro, assumption
+    auto_classicalExecution time: 0.185s
+    階層分類推論Execution time: 0.258s
     階層分類推論平均信頼度: 0.118
 
 13. ((b → a) ∨ (c → (c ∧ b)))
-    auto_classical使用タクティク: right, intro, split, add_dn, intro, apply 1, assumption, specialize 1 0, destruct 1
-    auto_classical実行時間: 0.175s
-    階層分類推論実行時間: 0.250s
+    auto_classicalTactics used: right, intro, split, add_dn, intro, apply 1, assumption, specialize 1 0, destruct 1
+    auto_classicalExecution time: 0.175s
+    階層分類推論Execution time: 0.250s
     階層分類推論平均信頼度: 0.130
 
 14. (((c → (b ∨ c)) ∨ b) ∨ ¬c)
-    auto_classical使用タクティク: left, left, intro, right, assumption
-    auto_classical実行時間: 0.008s
-    階層分類推論実行時間: 0.294s
+    auto_classicalTactics used: left, left, intro, right, assumption
+    auto_classicalExecution time: 0.008s
+    階層分類推論Execution time: 0.294s
     階層分類推論平均信頼度: 0.152
 
 15. (a ∨ ¬a)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.270s
-    階層分類推論実行時間: 0.260s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.270s
+    階層分類推論Execution time: 0.260s
     階層分類推論平均信頼度: 0.606
 
 16. (¬c ∨ ((((b ∨ a) ∧ (a ∨ b)) ∨ ¬c) → c))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, intro, assumption
-    auto_classical実行時間: 1.482s
-    階層分類推論実行時間: 0.241s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, intro, assumption
+    auto_classicalExecution time: 1.482s
+    階層分類推論Execution time: 0.241s
     階層分類推論平均信頼度: 0.162
 
 17. (a ∨ ¬((b ∧ a)))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
-    auto_classical実行時間: 0.458s
-    階層分類推論実行時間: 0.228s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
+    auto_classicalExecution time: 0.458s
+    階層分類推論Execution time: 0.228s
     階層分類推論平均信頼度: 0.483
 
 18. ((b → ¬a) ∨ a)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.295s
-    階層分類推論実行時間: 0.217s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.295s
+    階層分類推論Execution time: 0.217s
     階層分類推論平均信頼度: 0.048
 
 19. (b ∨ ¬b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.246s
-    階層分類推論実行時間: 0.215s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.246s
+    階層分類推論Execution time: 0.215s
     階層分類推論平均信頼度: 0.617
 
 20. (((¬(((b → a) → (c ∨ c))) ∧ ¬b) ∨ c) ∨ ¬c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.538s
-    階層分類推論実行時間: 0.230s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.538s
+    階層分類推論Execution time: 0.230s
     階層分類推論平均信頼度: 0.695
 
 21. (c ∨ (¬((c ∧ ¬(((c → b) ∨ ¬((b ∨ ¬b)))))) ∨ c))
-    auto_classical使用タクティク: right, add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
-    auto_classical実行時間: 0.410s
-    階層分類推論実行時間: 0.234s
+    auto_classicalTactics used: right, add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
+    auto_classicalExecution time: 0.410s
+    階層分類推論Execution time: 0.234s
     階層分類推論平均信頼度: 0.132
 
 22. ((b ∨ c) ∨ ¬c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.338s
-    階層分類推論実行時間: 0.213s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.338s
+    階層分類推論Execution time: 0.213s
     階層分類推論平均信頼度: 0.050
 
 23. ¬((¬((a ∨ ¬((a ∧ (¬((b → a)) ∧ (b ∨ b)))))) ∧ b))
-    auto_classical使用タクティク: intro, destruct 0, apply 0, right, intro, apply 0, left, destruct 2, assumption
-    auto_classical実行時間: 0.024s
-    階層分類推論実行時間: 0.251s
+    auto_classicalTactics used: intro, destruct 0, apply 0, right, intro, apply 0, left, destruct 2, assumption
+    auto_classicalExecution time: 0.024s
+    階層分類推論Execution time: 0.251s
     階層分類推論平均信頼度: 0.094
 
 24. (¬((b ∧ c)) ∨ c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
-    auto_classical実行時間: 0.403s
-    階層分類推論実行時間: 0.212s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
+    auto_classicalExecution time: 0.403s
+    階層分類推論Execution time: 0.212s
     階層分類推論平均信頼度: 0.048
 
 25. (a ∨ (¬c ∨ (((¬c ∨ b) ∨ (c → a)) ∨ c)))
-    auto_classical使用タクティク: right, add_dn, intro, apply 0, left, intro, apply 0, right, right, assumption
-    auto_classical実行時間: 0.294s
-    階層分類推論実行時間: 0.221s
+    auto_classicalTactics used: right, add_dn, intro, apply 0, left, intro, apply 0, right, right, assumption
+    auto_classicalExecution time: 0.294s
+    階層分類推論Execution time: 0.221s
     階層分類推論平均信頼度: 0.158
 
 26. (¬a ∨ a)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.245s
-    階層分類推論実行時間: 0.220s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.245s
+    階層分類推論Execution time: 0.220s
     階層分類推論平均信頼度: 0.048
 
 27. (b → (c ∨ ¬c))
-    auto_classical使用タクティク: intro, add_dn, intro, apply 1, left, add_dn, intro, apply 1, right, assumption
-    auto_classical実行時間: 0.100s
-    階層分類推論実行時間: 0.217s
+    auto_classicalTactics used: intro, add_dn, intro, apply 1, left, add_dn, intro, apply 1, right, assumption
+    auto_classicalExecution time: 0.100s
+    階層分類推論Execution time: 0.217s
     階層分類推論平均信頼度: 0.131
 
 28. ((¬(((¬((c → c)) → b) ∧ (b ∨ (a ∨ b)))) ∨ b) ∨ ¬b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.764s
-    階層分類推論実行時間: 0.226s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.764s
+    階層分類推論Execution time: 0.226s
     階層分類推論平均信頼度: 0.285
 
 29. ((a ∨ a) → (¬c ∨ c))
-    auto_classical使用タクティク: intro, add_dn, intro, apply 1, left, intro, apply 1, right, assumption
-    auto_classical実行時間: 0.618s
-    階層分類推論実行時間: 0.223s
+    auto_classicalTactics used: intro, add_dn, intro, apply 1, left, intro, apply 1, right, assumption
+    auto_classicalExecution time: 0.618s
+    階層分類推論Execution time: 0.223s
     階層分類推論平均信頼度: 0.150
 
 30. (¬((¬b ∨ (((c → c) ∨ (b ∧ ¬a)) ∨ ¬c))) → c)
-    auto_classical使用タクティク: intro, add_dn, intro, apply 0, left, intro, apply 0, right, right, assumption
-    auto_classical実行時間: 0.004s
-    階層分類推論実行時間: 0.252s
+    auto_classicalTactics used: intro, add_dn, intro, apply 0, left, intro, apply 0, right, right, assumption
+    auto_classicalExecution time: 0.004s
+    階層分類推論Execution time: 0.252s
     階層分類推論平均信頼度: 0.051
 
 31. (¬(((b ∨ ((b → a) ∧ (b ∨ b))) ∧ b)) ∨ b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
-    auto_classical実行時間: 0.892s
-    階層分類推論実行時間: 0.232s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
+    auto_classicalExecution time: 0.892s
+    階層分類推論Execution time: 0.232s
     階層分類推論平均信頼度: 0.546
 
 32. (¬((¬c ∨ ¬((a ∨ ((b → a) → c))))) → c)
-    auto_classical使用タクティク: intro, add_dn, intro, apply 0, left, assumption
-    auto_classical実行時間: 0.001s
-    階層分類推論実行時間: 0.242s
+    auto_classicalTactics used: intro, add_dn, intro, apply 0, left, assumption
+    auto_classicalExecution time: 0.001s
+    階層分類推論Execution time: 0.242s
     階層分類推論平均信頼度: 0.201
 
 33. ((a ∧ ¬((¬b → ((c ∧ a) ∨ a)))) → c)
-    auto_classical使用タクティク: intro, destruct 0, add_dn, intro, apply 1, intro, right, assumption
-    auto_classical実行時間: 0.005s
-    階層分類推論実行時間: 0.248s
+    auto_classicalTactics used: intro, destruct 0, add_dn, intro, apply 1, intro, right, assumption
+    auto_classicalExecution time: 0.005s
+    階層分類推論Execution time: 0.248s
     階層分類推論平均信頼度: 0.118
 
 34. ((b ∧ ((b → (a ∧ a)) ∧ ((a → c) → a))) → a)
-    auto_classical使用タクティク: intro, destruct 0, destruct 1, specialize 1 0, destruct 1, assumption
-    auto_classical実行時間: 0.001s
-    階層分類推論実行時間: 0.224s
+    auto_classicalTactics used: intro, destruct 0, destruct 1, specialize 1 0, destruct 1, assumption
+    auto_classicalExecution time: 0.001s
+    階層分類推論Execution time: 0.224s
     階層分類推論平均信頼度: 0.117
 
 35. (¬((((a → (a ∨ ¬b)) ∧ b) ∨ a)) → ¬b)
-    auto_classical使用タクティク: intro, intro, apply 0, left, split, intro, left, assumption, assumption
-    auto_classical実行時間: 0.002s
-    階層分類推論実行時間: 0.239s
+    auto_classicalTactics used: intro, intro, apply 0, left, split, intro, left, assumption, assumption
+    auto_classicalExecution time: 0.002s
+    階層分類推論Execution time: 0.239s
     階層分類推論平均信頼度: 0.103
 
 36. (b ∨ (¬a ∨ a))
-    auto_classical使用タクティク: right, add_dn, intro, apply 0, left, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.170s
-    階層分類推論実行時間: 0.214s
+    auto_classicalTactics used: right, add_dn, intro, apply 0, left, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.170s
+    階層分類推論Execution time: 0.214s
     階層分類推論平均信頼度: 0.050
 
 37. ¬((b ∧ ¬((c ∨ (a ∨ ¬c)))))
-    auto_classical使用タクティク: intro, destruct 0, apply 1, left, add_dn, intro, apply 1, right, right, assumption
-    auto_classical実行時間: 0.003s
-    階層分類推論実行時間: 0.454s
+    auto_classicalTactics used: intro, destruct 0, apply 1, left, add_dn, intro, apply 1, right, right, assumption
+    auto_classicalExecution time: 0.003s
+    階層分類推論Execution time: 0.454s
     階層分類推論平均信頼度: 0.152
 
 38. (b ∨ (b → ¬((a ∧ ¬(((b → c) ∧ (¬b ∨ c)))))))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, intro, apply 0, left, assumption
-    auto_classical実行時間: 0.566s
-    階層分類推論実行時間: 0.240s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, intro, apply 0, left, assumption
+    auto_classicalExecution time: 0.566s
+    階層分類推論Execution time: 0.240s
     階層分類推論平均信頼度: 0.139
 
 39. (¬a → ¬((c ∧ ¬((¬(((a ∧ a) ∧ (a ∨ ¬c))) ∨ b)))))
-    auto_classical使用タクティク: intro, intro, destruct 1, apply 2, left, intro, apply 0, destruct 3, destruct 3, assumption
-    auto_classical実行時間: 0.224s
-    階層分類推論実行時間: 0.245s
+    auto_classicalTactics used: intro, intro, destruct 1, apply 2, left, intro, apply 0, destruct 3, destruct 3, assumption
+    auto_classicalExecution time: 0.224s
+    階層分類推論Execution time: 0.245s
     階層分類推論平均信頼度: 0.104
 
 40. (¬b ∨ (¬((a ∧ b)) → b))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, intro, assumption
-    auto_classical実行時間: 0.371s
-    階層分類推論実行時間: 0.250s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, intro, assumption
+    auto_classicalExecution time: 0.371s
+    階層分類推論Execution time: 0.250s
     階層分類推論平均信頼度: 0.142
 
 41. (b ∨ ((¬b ∧ (¬((b ∧ a)) → (b ∨ a))) → (b ∨ ¬b)))
-    auto_classical使用タクティク: right, intro, right, intro, destruct 0, apply 1, assumption
-    auto_classical実行時間: 0.203s
-    階層分類推論実行時間: 0.257s
+    auto_classicalTactics used: right, intro, right, intro, destruct 0, apply 1, assumption
+    auto_classicalExecution time: 0.203s
+    階層分類推論Execution time: 0.257s
     階層分類推論平均信頼度: 0.098
 
 42. (¬c ∨ c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.232s
-    階層分類推論実行時間: 0.249s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.232s
+    階層分類推論Execution time: 0.249s
     階層分類推論平均信頼度: 0.048
 
 43. ((¬a → a) ∨ ((¬(((b ∧ c) → b)) ∧ c) → c))
-    auto_classical使用タクティク: right, intro, destruct 0, assumption
-    auto_classical実行時間: 0.184s
-    階層分類推論実行時間: 0.239s
+    auto_classicalTactics used: right, intro, destruct 0, assumption
+    auto_classicalExecution time: 0.184s
+    階層分類推論Execution time: 0.239s
     階層分類推論平均信頼度: 0.044
 
 44. ¬((b ∧ (¬a ∧ (¬((a ∧ ¬((¬b ∨ c)))) → a))))
-    auto_classical使用タクティク: intro, destruct 0, destruct 1, apply 1, apply 2, intro, apply 1, destruct 3, assumption
-    auto_classical実行時間: 0.003s
-    階層分類推論実行時間: 0.250s
+    auto_classicalTactics used: intro, destruct 0, destruct 1, apply 1, apply 2, intro, apply 1, destruct 3, assumption
+    auto_classicalExecution time: 0.003s
+    階層分類推論Execution time: 0.250s
     階層分類推論平均信頼度: 0.114
 
 45. (c ∨ (¬c ∨ (¬b ∧ (¬c → a))))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, left, assumption
-    auto_classical実行時間: 0.430s
-    階層分類推論実行時間: 0.216s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, left, assumption
+    auto_classicalExecution time: 0.430s
+    階層分類推論Execution time: 0.216s
     階層分類推論平均信頼度: 0.610
 
 46. (c ∨ (¬((c ∧ (¬((a ∨ a)) ∨ ¬((b → a))))) ∨ c))
-    auto_classical使用タクティク: right, add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
-    auto_classical実行時間: 0.442s
-    階層分類推論実行時間: 0.230s
+    auto_classicalTactics used: right, add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
+    auto_classicalExecution time: 0.442s
+    階層分類推論Execution time: 0.230s
     階層分類推論平均信頼度: 0.201
 
 47. ¬(((b ∨ b) ∧ (b → ¬b)))
-    auto_classical使用タクティク: intro, destruct 0, destruct 0, specialize 1 0, apply 1, assumption, specialize 1 0, apply 1, assumption
-    auto_classical実行時間: 0.001s
-    階層分類推論実行時間: 0.223s
+    auto_classicalTactics used: intro, destruct 0, destruct 0, specialize 1 0, apply 1, assumption, specialize 1 0, apply 1, assumption
+    auto_classicalExecution time: 0.001s
+    階層分類推論Execution time: 0.223s
     階層分類推論平均信頼度: 0.572
 
 48. (((c ∧ ¬(((c → a) ∧ (b ∨ b)))) ∨ b) ∨ ¬b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.480s
-    階層分類推論実行時間: 0.219s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.480s
+    階層分類推論Execution time: 0.219s
     階層分類推論平均信頼度: 0.050
 
 49. ((¬b → a) ∨ ¬((c ∧ a)))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, apply 0, left, intro, destruct 1, assumption
-    auto_classical実行時間: 0.533s
-    階層分類推論実行時間: 0.218s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, apply 0, left, intro, destruct 1, assumption
+    auto_classicalExecution time: 0.533s
+    階層分類推論Execution time: 0.218s
     階層分類推論平均信頼度: 0.044
 
 50. ((¬c → (b → ¬b)) ∨ b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, intro, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.357s
-    階層分類推論実行時間: 0.210s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, intro, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.357s
+    階層分類推論Execution time: 0.210s
     階層分類推論平均信頼度: 0.043
 
 51. (a ∨ ¬((((¬c ∨ (a ∨ a)) ∧ (c ∧ (c ∨ b))) ∧ a)))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
-    auto_classical実行時間: 2.333s
-    階層分類推論実行時間: 0.212s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
+    auto_classicalExecution time: 2.333s
+    階層分類推論Execution time: 0.212s
     階層分類推論平均信頼度: 0.302
 
 52. ((((¬a ∧ c) → a) ∨ (b ∨ ¬(((c ∨ b) ∨ b)))) ∨ ¬a)
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, apply 0, left, left, intro, assumption
-    auto_classical実行時間: 0.756s
-    階層分類推論実行時間: 0.221s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, apply 0, left, left, intro, assumption
+    auto_classicalExecution time: 0.756s
+    階層分類推論Execution time: 0.221s
     階層分類推論平均信頼度: 0.046
 
 53. ((a ∨ c) ∨ ¬c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.336s
-    階層分類推論実行時間: 0.231s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.336s
+    階層分類推論Execution time: 0.231s
     階層分類推論平均信頼度: 0.050
 
 54. (c → (a ∨ c))
-    auto_classical使用タクティク: intro, right, assumption
-    auto_classical実行時間: 0.036s
-    階層分類推論実行時間: 0.257s
+    auto_classicalTactics used: intro, right, assumption
+    auto_classicalExecution time: 0.036s
+    階層分類推論Execution time: 0.257s
     階層分類推論平均信頼度: 0.128
 
 55. ((b → ¬c) ∨ (¬b → c))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, intro, apply 0, right, intro, assumption
-    auto_classical実行時間: 0.380s
-    階層分類推論実行時間: 0.230s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, intro, apply 0, right, intro, assumption
+    auto_classicalExecution time: 0.380s
+    階層分類推論Execution time: 0.230s
     階層分類推論平均信頼度: 0.044
 
 56. (c → ((a ∨ ((c ∧ c) ∨ (b ∧ c))) ∨ c))
-    auto_classical使用タクティク: intro, left, right, left, split, assumption, assumption
-    auto_classical実行時間: 0.015s
-    階層分類推論実行時間: 0.218s
+    auto_classicalTactics used: intro, left, right, left, split, assumption, assumption
+    auto_classicalExecution time: 0.015s
+    階層分類推論Execution time: 0.218s
     階層分類推論平均信頼度: 0.145
 
 57. (b ∨ (¬c → (b → ((c ∨ ¬c) ∨ (c ∨ c)))))
-    auto_classical使用タクティク: right, intro, intro, left, right, assumption
-    auto_classical実行時間: 0.085s
-    階層分類推論実行時間: 0.233s
+    auto_classicalTactics used: right, intro, intro, left, right, assumption
+    auto_classicalExecution time: 0.085s
+    階層分類推論Execution time: 0.233s
     階層分類推論平均信頼度: 0.047
 
 58. (((((b → b) ∨ ¬((b ∨ c))) → c) ∨ a) ∨ (c → ¬a))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, intro, apply 0, left, right, assumption
-    auto_classical実行時間: 0.596s
-    階層分類推論実行時間: 0.240s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, intro, apply 0, left, right, assumption
+    auto_classicalExecution time: 0.596s
+    階層分類推論Execution time: 0.240s
     階層分類推論平均信頼度: 0.121
 
 59. ¬((¬a ∧ ¬((((¬((c ∨ ¬a)) ∧ (¬b ∨ a)) ∧ c) ∨ ¬a))))
-    auto_classical使用タクティク: intro, destruct 0, apply 0, add_dn, intro, apply 1, right, assumption
-    auto_classical実行時間: 0.012s
-    階層分類推論実行時間: 0.267s
+    auto_classicalTactics used: intro, destruct 0, apply 0, add_dn, intro, apply 1, right, assumption
+    auto_classicalExecution time: 0.012s
+    階層分類推論Execution time: 0.267s
     階層分類推論平均信頼度: 0.047
 
 60. (((((c ∨ c) ∧ ¬((a ∨ c))) ∧ c) ∧ b) → (¬c ∧ c))
-    auto_classical使用タクティク: intro, split, intro, destruct 0, destruct 1, destruct 2, apply 4, right, assumption, assumption
-    auto_classical実行時間: 0.009s
-    階層分類推論実行時間: 0.406s
+    auto_classicalTactics used: intro, split, intro, destruct 0, destruct 1, destruct 2, apply 4, right, assumption, assumption
+    auto_classicalExecution time: 0.009s
+    階層分類推論Execution time: 0.406s
     階層分類推論平均信頼度: 0.241
 
 61. (¬(((c → ((b ∧ a) ∨ c)) ∧ b)) ∨ b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
-    auto_classical実行時間: 0.546s
-    階層分類推論実行時間: 0.234s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
+    auto_classicalExecution time: 0.546s
+    階層分類推論Execution time: 0.234s
     階層分類推論平均信頼度: 0.246
 
 62. (¬(((¬(((c ∧ a) ∨ ¬b)) ∨ ¬b) ∧ b)) ∨ b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
-    auto_classical実行時間: 1.136s
-    階層分類推論実行時間: 0.233s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
+    auto_classicalExecution time: 1.136s
+    階層分類推論Execution time: 0.233s
     階層分類推論平均信頼度: 0.623
 
 63. ((¬a ∨ (b ∨ c)) ∨ ¬b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, apply 0, left, right, left, assumption
-    auto_classical実行時間: 0.472s
-    階層分類推論実行時間: 0.219s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, apply 0, left, right, left, assumption
+    auto_classicalExecution time: 0.472s
+    階層分類推論Execution time: 0.219s
     階層分類推論平均信頼度: 0.053
 
 64. (¬((¬a ∨ (b → ((c ∨ b) ∨ (¬c → c))))) → c)
-    auto_classical使用タクティク: intro, add_dn, intro, apply 0, right, intro, left, right, assumption
-    auto_classical実行時間: 0.028s
-    階層分類推論実行時間: 0.242s
+    auto_classicalTactics used: intro, add_dn, intro, apply 0, right, intro, left, right, assumption
+    auto_classicalExecution time: 0.028s
+    階層分類推論Execution time: 0.242s
     階層分類推論平均信頼度: 0.116
 
 65. (b → ((¬c → (a ∨ ¬((c → ¬c)))) ∨ b))
-    auto_classical使用タクティク: intro, right, assumption
-    auto_classical実行時間: 0.147s
-    階層分類推論実行時間: 0.231s
+    auto_classicalTactics used: intro, right, assumption
+    auto_classicalExecution time: 0.147s
+    階層分類推論Execution time: 0.231s
     階層分類推論平均信頼度: 0.125
 
 66. ((¬b ∨ c) ∨ ¬c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.397s
-    階層分類推論実行時間: 0.207s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.397s
+    階層分類推論Execution time: 0.207s
     階層分類推論平均信頼度: 0.051
 
 67. ((¬c → (¬((¬a ∨ (b → b))) ∧ (¬c ∧ (¬a ∧ a)))) → c)
-    auto_classical使用タクティク: intro, add_dn, intro, specialize 0 1, destruct 0, apply 0, destruct 2, destruct 3, specialize 3 4, destruct 3
-    auto_classical実行時間: 0.003s
-    階層分類推論実行時間: 0.243s
+    auto_classicalTactics used: intro, add_dn, intro, specialize 0 1, destruct 0, apply 0, destruct 2, destruct 3, specialize 3 4, destruct 3
+    auto_classicalExecution time: 0.003s
+    階層分類推論Execution time: 0.243s
     階層分類推論平均信頼度: 0.094
 
 68. ((¬((¬((¬a → (¬b ∧ a))) → b)) ∨ ¬c) ∨ c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, right, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.507s
-    階層分類推論実行時間: 0.231s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, right, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.507s
+    階層分類推論Execution time: 0.231s
     階層分類推論平均信頼度: 0.480
 
 69. (¬((c ∨ c)) ∨ c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption, assumption
-    auto_classical実行時間: 0.424s
-    階層分類推論実行時間: 0.225s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption, assumption
+    auto_classicalExecution time: 0.424s
+    階層分類推論Execution time: 0.225s
     階層分類推論平均信頼度: 0.048
 
 70. (c → (a ∨ (((¬b → ¬c) ∧ (b → ¬c)) ∨ c)))
-    auto_classical使用タクティク: intro, right, right, assumption
-    auto_classical実行時間: 0.086s
-    階層分類推論実行時間: 0.227s
+    auto_classicalTactics used: intro, right, right, assumption
+    auto_classicalExecution time: 0.086s
+    階層分類推論Execution time: 0.227s
     階層分類推論平均信頼度: 0.129
 
 71. ((a → (b ∧ b)) ∨ a)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.277s
-    階層分類推論実行時間: 0.225s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.277s
+    階層分類推論Execution time: 0.225s
     階層分類推論平均信頼度: 0.150
 
 72. (c → (((¬((c ∧ b)) → (¬a ∨ b)) ∨ c) ∧ c))
-    auto_classical使用タクティク: intro, split, right, assumption, assumption
-    auto_classical実行時間: 0.063s
-    階層分類推論実行時間: 0.223s
+    auto_classicalTactics used: intro, split, right, assumption, assumption
+    auto_classicalExecution time: 0.063s
+    階層分類推論Execution time: 0.223s
     階層分類推論平均信頼度: 0.176
 
 73. ((¬b ∨ (((b ∨ c) ∨ (a → ¬b)) ∨ ¬c)) ∨ c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, right, right, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.572s
-    階層分類推論実行時間: 0.219s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, right, right, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.572s
+    階層分類推論Execution time: 0.219s
     階層分類推論平均信頼度: 0.528
 
 74. (¬b ∨ ((((b → ¬a) ∨ (c ∨ c)) → a) → b))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, intro, assumption
-    auto_classical実行時間: 0.401s
-    階層分類推論実行時間: 0.247s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, intro, assumption
+    auto_classicalExecution time: 0.401s
+    階層分類推論Execution time: 0.247s
     階層分類推論平均信頼度: 0.102
 
 75. (¬(((c ∨ b) ∧ ¬b)) ∨ ¬b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
-    auto_classical実行時間: 1.005s
-    階層分類推論実行時間: 0.231s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
+    auto_classicalExecution time: 1.005s
+    階層分類推論Execution time: 0.231s
     階層分類推論平均信頼度: 0.131
 
 76. (c ∨ ¬c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.216s
-    階層分類推論実行時間: 0.217s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.216s
+    階層分類推論Execution time: 0.217s
     階層分類推論平均信頼度: 0.619
 
 77. ((¬a ∨ (c → a)) ∨ b)
-    auto_classical使用タクティク: left, add_dn, intro, apply 0, left, intro, apply 0, right, intro, assumption
-    auto_classical実行時間: 0.112s
-    階層分類推論実行時間: 0.225s
+    auto_classicalTactics used: left, add_dn, intro, apply 0, left, intro, apply 0, right, intro, assumption
+    auto_classicalExecution time: 0.112s
+    階層分類推論Execution time: 0.225s
     階層分類推論平均信頼度: 0.148
 
 78. (¬a ∨ ((a ∨ ((¬c ∧ a) ∧ (¬b → c))) ∨ ¬b))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, left, left, assumption
-    auto_classical実行時間: 0.603s
-    階層分類推論実行時間: 0.223s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, left, left, assumption
+    auto_classicalExecution time: 0.603s
+    階層分類推論Execution time: 0.223s
     階層分類推論平均信頼度: 0.626
 
 79. (a ∨ (c ∨ (c → ¬(((¬a ∨ c) → (¬c → b))))))
-    auto_classical使用タクティク: right, add_dn, intro, apply 0, right, intro, intro, apply 0, left, assumption
-    auto_classical実行時間: 0.251s
-    階層分類推論実行時間: 0.227s
+    auto_classicalTactics used: right, add_dn, intro, apply 0, right, intro, intro, apply 0, left, assumption
+    auto_classicalExecution time: 0.251s
+    階層分類推論Execution time: 0.227s
     階層分類推論平均信頼度: 0.581
 
 80. ¬(((c ∨ c) ∧ (b ∧ (¬((¬b ∨ (¬c → c))) ∧ a))))
-    auto_classical使用タクティク: intro, destruct 0, destruct 1, destruct 2, apply 2, right, intro, destruct 0, assumption, assumption
-    auto_classical実行時間: 0.418s
-    階層分類推論実行時間: 0.247s
+    auto_classicalTactics used: intro, destruct 0, destruct 1, destruct 2, apply 2, right, intro, destruct 0, assumption, assumption
+    auto_classicalExecution time: 0.418s
+    階層分類推論Execution time: 0.247s
     階層分類推論平均信頼度: 0.101
 
 81. (¬b ∨ (((¬((a → c)) ∧ ¬((b → ¬c))) → c) → b))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, intro, assumption
-    auto_classical実行時間: 0.414s
-    階層分類推論実行時間: 0.278s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, intro, assumption
+    auto_classicalExecution time: 0.414s
+    階層分類推論Execution time: 0.278s
     階層分類推論平均信頼度: 0.047
 
 82. ((a → c) ∨ a)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.210s
-    階層分類推論実行時間: 0.231s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.210s
+    階層分類推論Execution time: 0.231s
     階層分類推論平均信頼度: 0.132
 
 83. (¬(((c → ((¬b ∧ ¬b) → ¬a)) ∧ a)) ∨ a)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
-    auto_classical実行時間: 0.659s
-    階層分類推論実行時間: 0.235s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
+    auto_classicalExecution time: 0.659s
+    階層分類推論Execution time: 0.235s
     階層分類推論平均信頼度: 0.222
 
 84. (b → (a ∨ (a → (c ∨ (c → a)))))
-    auto_classical使用タクティク: intro, right, intro, right, intro, assumption
-    auto_classical実行時間: 0.067s
-    階層分類推論実行時間: 0.459s
+    auto_classicalTactics used: intro, right, intro, right, intro, assumption
+    auto_classicalExecution time: 0.067s
+    階層分類推論Execution time: 0.459s
     階層分類推論平均信頼度: 0.128
 
 85. (((b → (a ∨ b)) ∨ c) ∨ ¬a)
-    auto_classical使用タクティク: left, left, intro, right, assumption
-    auto_classical実行時間: 0.007s
-    階層分類推論実行時間: 0.461s
+    auto_classicalTactics used: left, left, intro, right, assumption
+    auto_classicalExecution time: 0.007s
+    階層分類推論Execution time: 0.461s
     階層分類推論平均信頼度: 0.150
 
 86. (¬b → ((¬((¬((c ∧ c)) → c)) ∨ b) ∨ (¬a ∨ ¬b)))
-    auto_classical使用タクティク: intro, right, right, assumption
-    auto_classical実行時間: 0.416s
-    階層分類推論実行時間: 0.414s
+    auto_classicalTactics used: intro, right, right, assumption
+    auto_classicalExecution time: 0.416s
+    階層分類推論Execution time: 0.414s
     階層分類推論平均信頼度: 0.101
 
 87. (a ∨ (¬((b → (c ∨ (c → b)))) → a))
-    auto_classical使用タクティク: right, intro, add_dn, intro, apply 0, intro, right, intro, assumption
-    auto_classical実行時間: 0.098s
-    階層分類推論実行時間: 0.558s
+    auto_classicalTactics used: right, intro, add_dn, intro, apply 0, intro, right, intro, assumption
+    auto_classicalExecution time: 0.098s
+    階層分類推論Execution time: 0.558s
     階層分類推論平均信頼度: 0.115
 
 88. (a → ((c ∨ ¬(((¬c → b) ∨ (c → b)))) ∨ a))
-    auto_classical使用タクティク: intro, right, assumption
-    auto_classical実行時間: 0.129s
-    階層分類推論実行時間: 0.330s
+    auto_classicalTactics used: intro, right, assumption
+    auto_classicalExecution time: 0.129s
+    階層分類推論Execution time: 0.330s
     階層分類推論平均信頼度: 0.147
 
 89. ((¬b → (¬(((a ∨ b) ∨ (¬a ∨ ¬c))) ∧ c)) → (¬b → c))
-    auto_classical使用タクティク: intro, intro, specialize 0 1, destruct 0, assumption
-    auto_classical実行時間: 0.000s
-    階層分類推論実行時間: 0.451s
+    auto_classicalTactics used: intro, intro, specialize 0 1, destruct 0, assumption
+    auto_classicalExecution time: 0.000s
+    階層分類推論Execution time: 0.451s
     階層分類推論平均信頼度: 0.131
 
 90. ((a → (¬c → ¬((¬((b → b)) ∨ (¬a → c))))) ∨ a)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, intro, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.485s
-    階層分類推論実行時間: 0.261s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, intro, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.485s
+    階層分類推論Execution time: 0.261s
     階層分類推論平均信頼度: 0.126
 
 91. ((((c ∨ (b → a)) → ¬c) → c) ∨ ¬c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.307s
-    階層分類推論実行時間: 0.261s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.307s
+    階層分類推論Execution time: 0.261s
     階層分類推論平均信頼度: 0.110
 
 92. ((c ∨ ¬c) ∨ (b → ¬b))
-    auto_classical使用タクティク: left, add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.088s
-    階層分類推論実行時間: 0.349s
+    auto_classicalTactics used: left, add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.088s
+    階層分類推論Execution time: 0.349s
     階層分類推論平均信頼度: 0.541
 
 93. ((¬c → ¬(((¬((c → a)) ∨ a) ∧ b))) ∨ ¬c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.741s
-    階層分類推論実行時間: 0.415s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.741s
+    階層分類推論Execution time: 0.415s
     階層分類推論平均信頼度: 0.101
 
 94. (¬a → ((((c → ¬a) ∧ b) ∨ (¬a ∨ (¬a ∨ ¬b))) ∨ b))
-    auto_classical使用タクティク: intro, left, left, split, intro, intro, apply 0, assumption, specialize 0 2, destruct 0
-    auto_classical実行時間: 0.004s
-    階層分類推論実行時間: 0.285s
+    auto_classicalTactics used: intro, left, left, split, intro, intro, apply 0, assumption, specialize 0 2, destruct 0
+    auto_classicalExecution time: 0.004s
+    階層分類推論Execution time: 0.285s
     階層分類推論平均信頼度: 0.043
 
 95. (b ∨ (¬b ∨ ((¬((c → a)) ∨ c) ∨ ((b → ¬a) → a))))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, left, assumption
-    auto_classical実行時間: 0.541s
-    階層分類推論実行時間: 0.250s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, left, assumption
+    auto_classicalExecution time: 0.541s
+    階層分類推論Execution time: 0.250s
     階層分類推論平均信頼度: 0.101
 
 96. (c ∨ ((¬c ∨ ((¬c ∨ b) → ¬((a ∧ a)))) ∨ a))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, left, left, intro, apply 0, left, assumption
-    auto_classical実行時間: 0.570s
-    階層分類推論実行時間: 0.765s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, left, left, intro, apply 0, left, assumption
+    auto_classicalExecution time: 0.570s
+    階層分類推論Execution time: 0.765s
     階層分類推論平均信頼度: 0.048
 
 97. (c → (a ∨ (((¬c ∨ c) ∧ ¬((¬a ∨ ¬a))) → a)))
-    auto_classical使用タクティク: intro, right, intro, destruct 1, add_dn, intro, apply 2, left, assumption
-    auto_classical実行時間: 0.070s
-    階層分類推論実行時間: 0.258s
+    auto_classicalTactics used: intro, right, intro, destruct 1, add_dn, intro, apply 2, left, assumption
+    auto_classicalExecution time: 0.070s
+    階層分類推論Execution time: 0.258s
     階層分類推論平均信頼度: 0.128
 
 98. ((¬((c ∧ ¬((a → c)))) ∨ ((b ∧ (b → b)) ∧ b)) ∨ c)
-    auto_classical使用タクティク: left, left, intro, destruct 0, apply 1, intro, assumption
-    auto_classical実行時間: 0.001s
-    階層分類推論実行時間: 0.236s
+    auto_classicalTactics used: left, left, intro, destruct 0, apply 1, intro, assumption
+    auto_classicalExecution time: 0.001s
+    階層分類推論Execution time: 0.236s
     階層分類推論平均信頼度: 0.057
 
 99. (¬((c → ¬((a ∨ a)))) → ¬(((b ∧ (b ∧ ¬b)) ∧ c)))
-    auto_classical使用タクティク: intro, intro, apply 0, intro, intro, destruct 1, destruct 3, destruct 5, apply 6, assumption
-    auto_classical実行時間: 0.055s
-    階層分類推論実行時間: 0.251s
+    auto_classicalTactics used: intro, intro, apply 0, intro, intro, destruct 1, destruct 3, destruct 5, apply 6, assumption
+    auto_classicalExecution time: 0.055s
+    階層分類推論Execution time: 0.251s
     階層分類推論平均信頼度: 0.197
 
 100. (¬(((((¬b ∧ ¬b) ∧ (c → b)) ∨ b) ∧ b)) → (¬a ∨ a))
-    auto_classical使用タクティク: intro, add_dn, intro, apply 1, left, intro, apply 1, right, assumption
-    auto_classical実行時間: 0.450s
-    階層分類推論実行時間: 0.345s
+    auto_classicalTactics used: intro, add_dn, intro, apply 1, left, intro, apply 1, right, assumption
+    auto_classicalExecution time: 0.450s
+    階層分類推論Execution time: 0.345s
     階層分類推論平均信頼度: 0.076
 
 101. ((((b ∨ (c → c)) ∨ ((c ∧ c) → a)) ∨ a) ∨ ¬b)
-    auto_classical使用タクティク: left, left, left, right, intro, assumption
-    auto_classical実行時間: 0.009s
-    階層分類推論実行時間: 0.258s
+    auto_classicalTactics used: left, left, left, right, intro, assumption
+    auto_classicalExecution time: 0.009s
+    階層分類推論Execution time: 0.258s
     階層分類推論平均信頼度: 0.141
 
 102. ((a → b) ∨ (((¬((c ∧ b)) → (b → b)) ∨ b) ∨ a))
-    auto_classical使用タクティク: right, left, left, intro, intro, assumption
-    auto_classical実行時間: 0.128s
-    階層分類推論実行時間: 0.238s
+    auto_classicalTactics used: right, left, left, intro, intro, assumption
+    auto_classicalExecution time: 0.128s
+    階層分類推論Execution time: 0.238s
     階層分類推論平均信頼度: 0.130
 
 103. (¬(((((¬a ∧ b) ∨ (c → c)) → ¬b) ∨ b)) → b)
-    auto_classical使用タクティク: intro, add_dn, intro, apply 0, left, intro, assumption
-    auto_classical実行時間: 0.001s
-    階層分類推論実行時間: 0.387s
+    auto_classicalTactics used: intro, add_dn, intro, apply 0, left, intro, assumption
+    auto_classicalExecution time: 0.001s
+    階層分類推論Execution time: 0.387s
     階層分類推論平均信頼度: 0.109
 
 104. (b ∨ (¬b ∨ (b → a)))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, left, assumption
-    auto_classical実行時間: 0.312s
-    階層分類推論実行時間: 0.217s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, left, assumption
+    auto_classicalExecution time: 0.312s
+    階層分類推論Execution time: 0.217s
     階層分類推論平均信頼度: 0.148
 
 105. (¬((¬a ∧ b)) ∨ (b ∨ b))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, left, destruct 1, assumption
-    auto_classical実行時間: 0.600s
-    階層分類推論実行時間: 0.384s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, left, destruct 1, assumption
+    auto_classicalExecution time: 0.600s
+    階層分類推論Execution time: 0.384s
     階層分類推論平均信頼度: 0.045
 
 106. (¬b → (a → (b ∨ ((a ∧ b) ∨ (a ∧ a)))))
-    auto_classical使用タクティク: intro, intro, right, left, split, add_dn, intro, specialize 2 1, assumption, destruct 2
-    auto_classical実行時間: 0.032s
-    階層分類推論実行時間: 0.278s
+    auto_classicalTactics used: intro, intro, right, left, split, add_dn, intro, specialize 2 1, assumption, destruct 2
+    auto_classicalExecution time: 0.032s
+    階層分類推論Execution time: 0.278s
     階層分類推論平均信頼度: 0.043
 
 107. ((c ∨ c) → (¬((((c ∨ ¬c) ∧ ¬c) ∧ ¬c)) ∨ b))
-    auto_classical使用タクティク: intro, left, intro, destruct 0, destruct 1, apply 2, assumption, destruct 1, apply 2, assumption
-    auto_classical実行時間: 0.136s
-    階層分類推論実行時間: 0.339s
+    auto_classicalTactics used: intro, left, intro, destruct 0, destruct 1, apply 2, assumption, destruct 1, apply 2, assumption
+    auto_classicalExecution time: 0.136s
+    階層分類推論Execution time: 0.339s
     階層分類推論平均信頼度: 0.148
 
 108. (¬a ∨ ((¬(((a ∨ c) → (¬a ∧ c))) ∨ a) ∨ ¬c))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, left, right, assumption
-    auto_classical実行時間: 0.609s
-    階層分類推論実行時間: 0.217s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, left, right, assumption
+    auto_classicalExecution time: 0.609s
+    階層分類推論Execution time: 0.217s
     階層分類推論平均信頼度: 0.406
 
 109. ((b ∨ b) ∨ ¬b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, left, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.272s
-    階層分類推論実行時間: 0.261s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, left, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.272s
+    階層分類推論Execution time: 0.261s
     階層分類推論平均信頼度: 0.050
 
 110. ((b → a) ∨ b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.224s
-    階層分類推論実行時間: 0.281s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.224s
+    階層分類推論Execution time: 0.281s
     階層分類推論平均信頼度: 0.129
 
 111. (a → (b ∨ (b ∨ (¬b → (b → a)))))
-    auto_classical使用タクティク: intro, right, right, intro, intro, assumption
-    auto_classical実行時間: 0.049s
-    階層分類推論実行時間: 0.310s
+    auto_classicalTactics used: intro, right, right, intro, intro, assumption
+    auto_classicalExecution time: 0.049s
+    階層分類推論Execution time: 0.310s
     階層分類推論平均信頼度: 0.129
 
 112. (¬((b ∨ ¬a)) ∨ (b ∨ ¬a))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.549s
-    階層分類推論実行時間: 0.267s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.549s
+    階層分類推論Execution time: 0.267s
     階層分類推論平均信頼度: 0.615
 
 113. ((¬a ∧ ¬((¬a ∧ ((c ∧ ¬c) ∨ (b → b))))) → b)
-    auto_classical使用タクティク: intro, destruct 0, add_dn, intro, apply 1, split, assumption, right, intro, assumption
-    auto_classical実行時間: 0.014s
-    階層分類推論実行時間: 0.311s
+    auto_classicalTactics used: intro, destruct 0, add_dn, intro, apply 1, split, assumption, right, intro, assumption
+    auto_classicalExecution time: 0.014s
+    階層分類推論Execution time: 0.311s
     階層分類推論平均信頼度: 0.042
 
 114. (a ∨ (a → b))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, add_dn, intro, apply 0, left, assumption
-    auto_classical実行時間: 0.197s
-    階層分類推論実行時間: 0.463s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, add_dn, intro, apply 0, left, assumption
+    auto_classicalExecution time: 0.197s
+    階層分類推論Execution time: 0.463s
     階層分類推論平均信頼度: 0.131
 
 115. (c → ((b ∨ a) ∨ (((a ∧ b) → (a ∨ b)) ∨ c)))
-    auto_classical使用タクティク: intro, right, left, intro, left, destruct 1, assumption
-    auto_classical実行時間: 0.122s
-    階層分類推論実行時間: 0.560s
+    auto_classicalTactics used: intro, right, left, intro, left, destruct 1, assumption
+    auto_classicalExecution time: 0.122s
+    階層分類推論Execution time: 0.560s
     階層分類推論平均信頼度: 0.147
 
 116. ¬((¬((¬c ∨ ¬((b ∨ ((b ∨ a) → (b → a)))))) ∧ ¬c))
-    auto_classical使用タクティク: intro, destruct 0, apply 0, left, assumption
-    auto_classical実行時間: 0.002s
-    階層分類推論実行時間: 0.288s
+    auto_classicalTactics used: intro, destruct 0, apply 0, left, assumption
+    auto_classicalExecution time: 0.002s
+    階層分類推論Execution time: 0.288s
     階層分類推論平均信頼度: 0.047
 
 117. (a ∨ (¬((c ∨ ((c → a) ∧ (c ∨ a)))) ∨ ¬a))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, right, assumption
-    auto_classical実行時間: 0.457s
-    階層分類推論実行時間: 0.324s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, right, assumption
+    auto_classicalExecution time: 0.457s
+    階層分類推論Execution time: 0.324s
     階層分類推論平均信頼度: 0.631
 
 118. (b ∨ ¬((¬a ∧ b)))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
-    auto_classical実行時間: 0.438s
-    階層分類推論実行時間: 0.382s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
+    auto_classicalExecution time: 0.438s
+    階層分類推論Execution time: 0.382s
     階層分類推論平均信頼度: 0.045
 
 119. (a ∨ (¬c ∨ c))
-    auto_classical使用タクティク: right, add_dn, intro, apply 0, left, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.133s
-    階層分類推論実行時間: 0.231s
+    auto_classicalTactics used: right, add_dn, intro, apply 0, left, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.133s
+    階層分類推論Execution time: 0.231s
     階層分類推論平均信頼度: 0.051
 
 120. ((¬b ∨ (¬b ∨ ((a ∧ a) ∨ (b ∨ ¬b)))) ∨ b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, left, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.425s
-    階層分類推論実行時間: 0.330s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, left, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.425s
+    階層分類推論Execution time: 0.330s
     階層分類推論平均信頼度: 0.645
 
 121. ((¬c ∨ c) ∨ ((a ∨ ¬(((b ∨ b) ∧ (b ∧ b)))) → a))
-    auto_classical使用タクティク: left, add_dn, intro, apply 0, left, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.071s
-    階層分類推論実行時間: 0.268s
+    auto_classicalTactics used: left, add_dn, intro, apply 0, left, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.071s
+    階層分類推論Execution time: 0.268s
     階層分類推論平均信頼度: 0.212
 
 122. (¬((b ∧ (a → ((b ∨ ¬a) → (¬c → b))))) ∨ b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
-    auto_classical実行時間: 0.583s
-    階層分類推論実行時間: 0.306s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
+    auto_classicalExecution time: 0.583s
+    階層分類推論Execution time: 0.306s
     階層分類推論平均信頼度: 0.393
 
 123. (a ∨ (¬a ∨ a))
-    auto_classical使用タクティク: right, add_dn, intro, apply 0, left, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.140s
-    階層分類推論実行時間: 0.312s
+    auto_classicalTactics used: right, add_dn, intro, apply 0, left, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.140s
+    階層分類推論Execution time: 0.312s
     階層分類推論平均信頼度: 0.050
 
 124. (b ∨ ((a → ¬b) ∨ a))
-    auto_classical使用タクティク: right, add_dn, intro, apply 0, left, intro, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.155s
-    階層分類推論実行時間: 0.256s
+    auto_classicalTactics used: right, add_dn, intro, apply 0, left, intro, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.155s
+    階層分類推論Execution time: 0.256s
     階層分類推論平均信頼度: 0.050
 
 125. ((¬((b ∧ ((¬a ∨ b) ∨ a))) ∨ ¬c) ∨ b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, left, intro, apply 0, right, destruct 1, assumption
-    auto_classical実行時間: 0.612s
-    階層分類推論実行時間: 0.405s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, left, intro, apply 0, right, destruct 1, assumption
+    auto_classicalExecution time: 0.612s
+    階層分類推論Execution time: 0.405s
     階層分類推論平均信頼度: 0.144
 
 126. (c → (¬b ∨ b))
-    auto_classical使用タクティク: intro, add_dn, intro, apply 1, left, intro, apply 1, right, assumption
-    auto_classical実行時間: 0.084s
-    階層分類推論実行時間: 0.305s
+    auto_classicalTactics used: intro, add_dn, intro, apply 1, left, intro, apply 1, right, assumption
+    auto_classicalExecution time: 0.084s
+    階層分類推論Execution time: 0.305s
     階層分類推論平均信頼度: 0.131
 
 127. (¬(((a ∨ b) ∧ ((c → (c ∨ a)) ∧ b))) → ¬b)
-    auto_classical使用タクティク: intro, intro, apply 0, split, right, add_dn, intro, specialize 2 1, assumption, destruct 2
-    auto_classical実行時間: 0.017s
-    階層分類推論実行時間: 0.346s
+    auto_classicalTactics used: intro, intro, apply 0, split, right, add_dn, intro, specialize 2 1, assumption, destruct 2
+    auto_classicalExecution time: 0.017s
+    階層分類推論Execution time: 0.346s
     階層分類推論平均信頼度: 0.244
 
 128. (a ∨ (a ∨ ¬((¬((b → ¬((¬c ∨ b)))) ∧ a))))
-    auto_classical使用タクティク: right, add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
-    auto_classical実行時間: 0.330s
-    階層分類推論実行時間: 0.426s
+    auto_classicalTactics used: right, add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
+    auto_classicalExecution time: 0.330s
+    階層分類推論Execution time: 0.426s
     階層分類推論平均信頼度: 0.114
 
 129. ((¬c → c) ∨ (b ∨ ¬b))
-    auto_classical使用タクティク: right, add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.218s
-    階層分類推論実行時間: 0.232s
+    auto_classicalTactics used: right, add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.218s
+    階層分類推論Execution time: 0.232s
     階層分類推論平均信頼度: 0.044
 
 130. ((¬((a → b)) ∨ a) ∨ ¬a)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.333s
-    階層分類推論実行時間: 0.256s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.333s
+    階層分類推論Execution time: 0.256s
     階層分類推論平均信頼度: 0.051
 
 131. ((b → a) ∨ ¬a)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.249s
-    階層分類推論実行時間: 0.307s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.249s
+    階層分類推論Execution time: 0.307s
     階層分類推論平均信頼度: 0.130
 
 132. (¬a ∨ (b ∨ (a ∨ ((b ∧ c) ∨ (b ∧ a)))))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, right, left, assumption
-    auto_classical実行時間: 0.459s
-    階層分類推論実行時間: 0.410s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, right, left, assumption
+    auto_classicalExecution time: 0.459s
+    階層分類推論Execution time: 0.410s
     階層分類推論平均信頼度: 0.061
 
 133. (a ∨ ¬((a ∧ ((a ∨ (¬b ∨ a)) ∧ ¬((c ∧ (b ∧ c)))))))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
-    auto_classical実行時間: 1.383s
-    階層分類推論実行時間: 0.367s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
+    auto_classicalExecution time: 1.383s
+    階層分類推論Execution time: 0.367s
     階層分類推論平均信頼度: 0.145
 
 134. (¬c ∨ (a ∨ c))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, right, assumption
-    auto_classical実行時間: 0.276s
-    階層分類推論実行時間: 0.351s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, right, assumption
+    auto_classicalExecution time: 0.276s
+    階層分類推論Execution time: 0.351s
     階層分類推論平均信頼度: 0.050
 
 135. ((¬((((¬c ∨ ¬b) ∨ (¬c ∧ a)) ∧ b)) → ¬c) ∨ c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.526s
-    階層分類推論実行時間: 0.345s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.526s
+    階層分類推論Execution time: 0.345s
     階層分類推論平均信頼度: 0.221
 
 136. ((¬a ∨ (((¬a ∨ c) ∨ (¬a ∨ ¬a)) → (¬c → c))) ∨ a)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, left, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.789s
-    階層分類推論実行時間: 0.251s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, left, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.789s
+    階層分類推論Execution time: 0.251s
     階層分類推論平均信頼度: 0.046
 
 137. (¬a ∨ (a ∨ (((a → a) ∧ (b ∨ ¬b)) → c)))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, left, assumption
-    auto_classical実行時間: 0.501s
-    階層分類推論実行時間: 0.212s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, left, assumption
+    auto_classicalExecution time: 0.501s
+    階層分類推論Execution time: 0.212s
     階層分類推論平均信頼度: 0.048
 
 138. (b ∨ ((¬(((b ∨ ¬c) → b)) → c) ∨ (b → b)))
-    auto_classical使用タクティク: right, right, intro, assumption
-    auto_classical実行時間: 0.149s
-    階層分類推論実行時間: 0.244s
+    auto_classicalTactics used: right, right, intro, assumption
+    auto_classicalExecution time: 0.149s
+    階層分類推論Execution time: 0.244s
     階層分類推論平均信頼度: 0.118
 
 139. ¬((¬c ∧ (¬c → (((b ∨ b) ∨ (a ∨ c)) ∧ c))))
-    auto_classical使用タクティク: intro, destruct 0, apply 0, specialize 1 0, destruct 1, assumption
-    auto_classical実行時間: 0.001s
-    階層分類推論実行時間: 0.276s
+    auto_classicalTactics used: intro, destruct 0, apply 0, specialize 1 0, destruct 1, assumption
+    auto_classicalExecution time: 0.001s
+    階層分類推論Execution time: 0.276s
     階層分類推論平均信頼度: 0.091
 
 140. ((¬((c ∨ (¬((a ∨ a)) ∨ ¬((¬b → ¬a))))) → c) ∨ ¬c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.453s
-    階層分類推論実行時間: 0.236s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.453s
+    階層分類推論Execution time: 0.236s
     階層分類推論平均信頼度: 0.059
 
 141. (a ∨ (a → c))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, add_dn, intro, apply 0, left, assumption
-    auto_classical実行時間: 0.204s
-    階層分類推論実行時間: 0.276s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, add_dn, intro, apply 0, left, assumption
+    auto_classicalExecution time: 0.204s
+    階層分類推論Execution time: 0.276s
     階層分類推論平均信頼度: 0.132
 
 142. (a ∨ (c → ¬a))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, intro, assumption
-    auto_classical実行時間: 0.233s
-    階層分類推論実行時間: 0.257s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, intro, assumption
+    auto_classicalExecution time: 0.233s
+    階層分類推論Execution time: 0.257s
     階層分類推論平均信頼度: 0.497
 
 143. (¬a ∨ (c → (a ∨ (¬((b ∧ ¬b)) → a))))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, intro, left, assumption
-    auto_classical実行時間: 0.404s
-    階層分類推論実行時間: 0.235s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, intro, left, assumption
+    auto_classicalExecution time: 0.404s
+    階層分類推論Execution time: 0.235s
     階層分類推論平均信頼度: 0.146
 
 144. (a ∨ ((¬b → ¬a) → ¬a))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, intro, assumption
-    auto_classical実行時間: 0.377s
-    階層分類推論実行時間: 0.324s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, intro, assumption
+    auto_classicalExecution time: 0.377s
+    階層分類推論Execution time: 0.324s
     階層分類推論平均信頼度: 0.192
 
 145. ¬(((¬b ∧ ¬((¬a → ((a ∧ a) → (b ∨ b))))) ∧ c))
-    auto_classical使用タクティク: intro, destruct 0, destruct 0, apply 2, intro, intro, left, destruct 4, specialize 3 4, destruct 3
-    auto_classical実行時間: 0.033s
-    階層分類推論実行時間: 0.307s
+    auto_classicalTactics used: intro, destruct 0, destruct 0, apply 2, intro, intro, left, destruct 4, specialize 3 4, destruct 3
+    auto_classicalExecution time: 0.033s
+    階層分類推論Execution time: 0.307s
     階層分類推論平均信頼度: 0.114
 
 146. ((b ∨ ¬((¬((c → (b ∨ c))) ∧ (a → (b ∧ a))))) ∨ b)
-    auto_classical使用タクティク: left, right, intro, destruct 0, apply 0, intro, right, assumption
-    auto_classical実行時間: 0.039s
-    階層分類推論実行時間: 0.276s
+    auto_classicalTactics used: left, right, intro, destruct 0, apply 0, intro, right, assumption
+    auto_classicalExecution time: 0.039s
+    階層分類推論Execution time: 0.276s
     階層分類推論平均信頼度: 0.130
 
 147. ((c ∨ (((b ∧ ¬a) → ¬((b ∨ b))) ∨ b)) ∨ ¬c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, left, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.559s
-    階層分類推論実行時間: 0.252s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, left, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.559s
+    階層分類推論Execution time: 0.252s
     階層分類推論平均信頼度: 0.140
 
 148. (c → ((((¬c → b) → ¬((b ∧ c))) ∨ c) ∨ a))
-    auto_classical使用タクティク: intro, left, right, assumption
-    auto_classical実行時間: 0.043s
-    階層分類推論実行時間: 0.334s
+    auto_classicalTactics used: intro, left, right, assumption
+    auto_classicalExecution time: 0.043s
+    階層分類推論Execution time: 0.334s
     階層分類推論平均信頼度: 0.128
 
 149. ¬((¬(((((¬a → ¬c) ∨ (c ∨ ¬c)) ∨ b) ∨ ¬a)) ∧ a))
-    auto_classical使用タクティク: intro, destruct 0, apply 0, left, left, left, intro, intro, apply 2, assumption
-    auto_classical実行時間: 0.004s
-    階層分類推論実行時間: 0.274s
+    auto_classicalTactics used: intro, destruct 0, apply 0, left, left, left, intro, intro, apply 2, assumption
+    auto_classicalExecution time: 0.004s
+    階層分類推論Execution time: 0.274s
     階層分類推論平均信頼度: 0.089
 
 150. (c ∨ (((b ∨ c) → ¬a) → ¬c))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, intro, assumption
-    auto_classical実行時間: 0.290s
-    階層分類推論実行時間: 0.213s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, intro, assumption
+    auto_classicalExecution time: 0.290s
+    階層分類推論Execution time: 0.213s
     階層分類推論平均信頼度: 0.369
 
 151. (((¬c → ¬c) ∨ (c → (a ∧ (c → a)))) ∨ a)
-    auto_classical使用タクティク: left, left, intro, assumption
-    auto_classical実行時間: 0.001s
-    階層分類推論実行時間: 0.227s
+    auto_classicalTactics used: left, left, intro, assumption
+    auto_classicalExecution time: 0.001s
+    階層分類推論Execution time: 0.227s
     階層分類推論平均信頼度: 0.149
 
 152. (¬b ∨ (b ∨ b))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, left, assumption
-    auto_classical実行時間: 0.293s
-    階層分類推論実行時間: 0.216s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, left, assumption
+    auto_classicalExecution time: 0.293s
+    階層分類推論Execution time: 0.216s
     階層分類推論平均信頼度: 0.050
 
 153. (((((a → ¬a) ∨ (a → b)) ∨ b) → ¬c) ∨ c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, intro, apply 0, right, assumption
-    auto_classical実行時間: 1.033s
-    階層分類推論実行時間: 0.211s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, intro, apply 0, right, assumption
+    auto_classicalExecution time: 1.033s
+    階層分類推論Execution time: 0.211s
     階層分類推論平均信頼度: 0.249
 
 154. ((¬b → a) ∨ (b → (a ∨ ((a ∨ ¬c) → (b ∨ ¬a)))))
-    auto_classical使用タクティク: right, intro, right, intro, left, assumption
-    auto_classical実行時間: 0.167s
-    階層分類推論実行時間: 0.221s
+    auto_classicalTactics used: right, intro, right, intro, left, assumption
+    auto_classicalExecution time: 0.167s
+    階層分類推論Execution time: 0.221s
     階層分類推論平均信頼度: 0.044
 
 155. ((a ∨ ¬b) ∨ b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, right, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.270s
-    階層分類推論実行時間: 0.221s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, right, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.270s
+    階層分類推論Execution time: 0.221s
     階層分類推論平均信頼度: 0.048
 
 156. (¬((b ∧ c)) ∨ b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
-    auto_classical実行時間: 0.370s
-    階層分類推論実行時間: 0.204s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
+    auto_classicalExecution time: 0.370s
+    階層分類推論Execution time: 0.204s
     階層分類推論平均信頼度: 0.048
 
 157. (c ∨ (c → b))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, add_dn, intro, apply 0, left, assumption
-    auto_classical実行時間: 0.197s
-    階層分類推論実行時間: 0.239s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, add_dn, intro, apply 0, left, assumption
+    auto_classicalExecution time: 0.197s
+    階層分類推論Execution time: 0.239s
     階層分類推論平均信頼度: 0.131
 
 158. (((¬(((a → ¬a) ∨ c)) ∨ ¬a) ∨ ¬c) ∨ c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, right, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.535s
-    階層分類推論実行時間: 0.252s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, right, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.535s
+    階層分類推論Execution time: 0.252s
     階層分類推論平均信頼度: 0.457
 
 159. ¬((¬b ∧ (c ∧ (¬((¬c → ¬((a ∧ ¬b)))) ∨ ¬c))))
-    auto_classical使用タクティク: intro, destruct 0, destruct 1, destruct 2, apply 2, intro, specialize 3 1, destruct 3, apply 2, assumption
-    auto_classical実行時間: 0.444s
-    階層分類推論実行時間: 0.306s
+    auto_classicalTactics used: intro, destruct 0, destruct 1, destruct 2, apply 2, intro, specialize 3 1, destruct 3, apply 2, assumption
+    auto_classicalExecution time: 0.444s
+    階層分類推論Execution time: 0.306s
     階層分類推論平均信頼度: 0.101
 
 160. (a → ((((c ∨ a) ∨ ¬((¬a ∧ c))) ∨ ¬a) ∨ ¬a))
-    auto_classical使用タクティク: intro, left, left, left, right, assumption
-    auto_classical実行時間: 0.002s
-    階層分類推論実行時間: 0.284s
+    auto_classicalTactics used: intro, left, left, left, right, assumption
+    auto_classicalExecution time: 0.002s
+    階層分類推論Execution time: 0.284s
     階層分類推論平均信頼度: 0.154
 
 161. (b ∨ ¬(((b ∧ ((¬c ∨ b) ∨ (c ∨ c))) ∧ b)))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
-    auto_classical実行時間: 1.205s
-    階層分類推論実行時間: 0.280s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
+    auto_classicalExecution time: 1.205s
+    階層分類推論Execution time: 0.280s
     階層分類推論平均信頼度: 0.131
 
 162. (((((b ∨ b) ∧ a) ∧ c) → ¬((c ∧ b))) ∨ c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, intro, apply 0, right, destruct 1, assumption
-    auto_classical実行時間: 1.894s
-    階層分類推論実行時間: 0.266s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, intro, apply 0, right, destruct 1, assumption
+    auto_classicalExecution time: 1.894s
+    階層分類推論Execution time: 0.266s
     階層分類推論平均信頼度: 0.301
 
 163. (a ∨ (a → ((a ∧ (a → ¬a)) ∨ ¬(((b ∧ b) → a)))))
-    auto_classical使用タクティク: right, intro, left, split, add_dn, intro, apply 1, assumption, intro, assumption
-    auto_classical実行時間: 0.085s
-    階層分類推論実行時間: 0.281s
+    auto_classicalTactics used: right, intro, left, split, add_dn, intro, apply 1, assumption, intro, assumption
+    auto_classicalExecution time: 0.085s
+    階層分類推論Execution time: 0.281s
     階層分類推論平均信頼度: 0.682
 
 164. (((¬(((c → b) → (b ∨ a))) ∧ a) ∧ a) → ¬a)
-    auto_classical使用タクティク: intro, intro, destruct 0, destruct 1, apply 2, intro, right, assumption
-    auto_classical実行時間: 0.004s
-    階層分類推論実行時間: 0.242s
+    auto_classicalTactics used: intro, intro, destruct 0, destruct 1, apply 2, intro, right, assumption
+    auto_classicalExecution time: 0.004s
+    階層分類推論Execution time: 0.242s
     階層分類推論平均信頼度: 0.167
 
 165. (((¬c → a) ∨ ¬a) ∨ a)
-    auto_classical使用タクティク: left, add_dn, intro, apply 0, right, intro, apply 0, left, intro, assumption
-    auto_classical実行時間: 0.128s
-    階層分類推論実行時間: 0.243s
+    auto_classicalTactics used: left, add_dn, intro, apply 0, right, intro, apply 0, left, intro, assumption
+    auto_classicalExecution time: 0.128s
+    階層分類推論Execution time: 0.243s
     階層分類推論平均信頼度: 0.046
 
 166. (a → ¬(((b ∧ (¬a ∨ ¬((c ∨ a)))) ∧ b)))
-    auto_classical使用タクティク: intro, intro, destruct 1, destruct 1, destruct 3, apply 3, assumption, apply 3, right, assumption
-    auto_classical実行時間: 0.002s
-    階層分類推論実行時間: 0.230s
+    auto_classicalTactics used: intro, intro, destruct 1, destruct 1, destruct 3, apply 3, assumption, apply 3, right, assumption
+    auto_classicalExecution time: 0.002s
+    階層分類推論Execution time: 0.230s
     階層分類推論平均信頼度: 0.166
 
 167. ((b ∨ ¬a) ∨ a)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, right, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.296s
-    階層分類推論実行時間: 0.231s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, right, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.296s
+    階層分類推論Execution time: 0.231s
     階層分類推論平均信頼度: 0.048
 
 168. (b ∨ ((((b ∨ a) ∨ ¬((c → c))) → a) ∨ ¬b))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, right, assumption
-    auto_classical実行時間: 0.532s
-    階層分類推論実行時間: 0.259s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, right, assumption
+    auto_classicalExecution time: 0.532s
+    階層分類推論Execution time: 0.259s
     階層分類推論平均信頼度: 0.156
 
 169. (¬c ∨ (¬((¬a ∨ ((¬c ∧ c) ∨ (c ∨ ¬b)))) → b))
-    auto_classical使用タクティク: right, intro, add_dn, intro, apply 0, right, right, right, assumption
-    auto_classical実行時間: 0.170s
-    階層分類推論実行時間: 0.271s
+    auto_classicalTactics used: right, intro, add_dn, intro, apply 0, right, right, right, assumption
+    auto_classicalExecution time: 0.170s
+    階層分類推論Execution time: 0.271s
     階層分類推論平均信頼度: 0.122
 
 170. ((c ∨ ¬c) ∨ c)
-    auto_classical使用タクティク: left, add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.080s
-    階層分類推論実行時間: 0.247s
+    auto_classicalTactics used: left, add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.080s
+    階層分類推論Execution time: 0.247s
     階層分類推論平均信頼度: 0.048
 
 171. (¬((¬((¬a ∧ (a ∧ (¬a ∧ a)))) ∨ b)) → b)
-    auto_classical使用タクティク: intro, add_dn, intro, apply 0, left, intro, destruct 2, apply 2, destruct 3, assumption
-    auto_classical実行時間: 0.015s
-    階層分類推論実行時間: 0.258s
+    auto_classicalTactics used: intro, add_dn, intro, apply 0, left, intro, destruct 2, apply 2, destruct 3, assumption
+    auto_classicalExecution time: 0.015s
+    階層分類推論Execution time: 0.258s
     階層分類推論平均信頼度: 0.097
 
 172. (¬b ∨ (¬((((¬c ∨ a) ∧ (b ∨ c)) ∧ b)) ∨ b))
-    auto_classical使用タクティク: right, add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
-    auto_classical実行時間: 0.585s
-    階層分類推論実行時間: 0.228s
+    auto_classicalTactics used: right, add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
+    auto_classicalExecution time: 0.585s
+    階層分類推論Execution time: 0.228s
     階層分類推論平均信頼度: 0.126
 
 173. (¬(((a ∧ ¬(((b ∧ c) ∨ ¬((¬a → b))))) → ¬b)) → a)
-    auto_classical使用タクティク: intro, add_dn, intro, apply 0, intro, intro, apply 0, destruct 2, specialize 1 3, destruct 1
-    auto_classical実行時間: 0.009s
-    階層分類推論実行時間: 0.293s
+    auto_classicalTactics used: intro, add_dn, intro, apply 0, intro, intro, apply 0, destruct 2, specialize 1 3, destruct 1
+    auto_classicalExecution time: 0.009s
+    階層分類推論Execution time: 0.293s
     階層分類推論平均信頼度: 0.159
 
 174. (b ∨ ((((¬c → b) → a) → ¬((c → (a ∧ ¬b)))) → ¬b))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, intro, assumption
-    auto_classical実行時間: 0.428s
-    階層分類推論実行時間: 0.283s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, intro, assumption
+    auto_classicalExecution time: 0.428s
+    階層分類推論Execution time: 0.283s
     階層分類推論平均信頼度: 0.347
 
 175. ((b ∨ ¬(((¬a ∨ ¬c) ∧ a))) ∨ (b ∨ (c ∨ ¬c)))
-    auto_classical使用タクティク: right, right, add_dn, intro, apply 0, right, intro, apply 0, left, assumption
-    auto_classical実行時間: 0.615s
-    階層分類推論実行時間: 0.234s
+    auto_classicalTactics used: right, right, add_dn, intro, apply 0, right, intro, apply 0, left, assumption
+    auto_classicalExecution time: 0.615s
+    階層分類推論Execution time: 0.234s
     階層分類推論平均信頼度: 0.622
 
 176. ((¬((¬((¬((¬b → c)) ∧ c)) ∨ b)) → c) ∨ c)
-    auto_classical使用タクティク: left, intro, add_dn, intro, apply 0, left, intro, apply 1, destruct 2, assumption
-    auto_classical実行時間: 0.003s
-    階層分類推論実行時間: 0.241s
+    auto_classicalTactics used: left, intro, add_dn, intro, apply 0, left, intro, apply 1, destruct 2, assumption
+    auto_classicalExecution time: 0.003s
+    階層分類推論Execution time: 0.241s
     階層分類推論平均信頼度: 0.106
 
 177. (a ∨ (¬a ∨ c))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, left, assumption
-    auto_classical実行時間: 0.279s
-    階層分類推論実行時間: 0.271s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, left, assumption
+    auto_classicalExecution time: 0.279s
+    階層分類推論Execution time: 0.271s
     階層分類推論平均信頼度: 0.051
 
 178. ((¬((¬((¬a → (b ∨ ¬a))) ∧ b)) → (c → ¬b)) ∨ c)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, intro, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.537s
-    階層分類推論実行時間: 0.295s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, intro, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.537s
+    階層分類推論Execution time: 0.295s
     階層分類推論平均信頼度: 0.075
 
 179. (c ∨ (c → (((b ∨ b) → (¬a ∧ b)) ∧ ((c ∧ c) ∨ b))))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, add_dn, intro, apply 0, left, assumption
-    auto_classical実行時間: 0.491s
-    階層分類推論実行時間: 0.372s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, add_dn, intro, apply 0, left, assumption
+    auto_classicalExecution time: 0.491s
+    階層分類推論Execution time: 0.372s
     階層分類推論平均信頼度: 0.445
 
 180. (¬b ∨ ((b ∨ ¬c) ∨ b))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, left, left, assumption
-    auto_classical実行時間: 0.393s
-    階層分類推論実行時間: 0.220s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, left, left, assumption
+    auto_classicalExecution time: 0.393s
+    階層分類推論Execution time: 0.220s
     階層分類推論平均信頼度: 0.051
 
 181. ((b → (((b ∨ c) ∧ (c ∨ a)) → (a ∨ (b ∨ b)))) ∨ b)
-    auto_classical使用タクティク: left, intro, intro, right, left, assumption
-    auto_classical実行時間: 0.098s
-    階層分類推論実行時間: 0.240s
+    auto_classicalTactics used: left, intro, intro, right, left, assumption
+    auto_classicalExecution time: 0.098s
+    階層分類推論Execution time: 0.240s
     階層分類推論平均信頼度: 0.131
 
 182. ((¬b ∧ ¬a) → (c ∨ (((c ∧ b) ∨ ¬((a ∨ ¬b))) ∨ ¬c)))
-    auto_classical使用タクティク: intro, add_dn, intro, apply 1, right, right, intro, apply 1, left, assumption
-    auto_classical実行時間: 1.957s
-    階層分類推論実行時間: 0.229s
+    auto_classicalTactics used: intro, add_dn, intro, apply 1, right, right, intro, apply 1, left, assumption
+    auto_classicalExecution time: 1.957s
+    階層分類推論Execution time: 0.229s
     階層分類推論平均信頼度: 0.049
 
 183. (b → (b ∧ (¬b ∨ (a ∨ (b ∨ c)))))
-    auto_classical使用タクティク: intro, split, assumption, right, right, left, assumption
-    auto_classical実行時間: 0.019s
-    階層分類推論実行時間: 0.231s
+    auto_classicalTactics used: intro, split, assumption, right, right, left, assumption
+    auto_classicalExecution time: 0.019s
+    階層分類推論Execution time: 0.231s
     階層分類推論平均信頼度: 0.156
 
 184. ((¬b ∨ a) ∨ b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, left, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.296s
-    階層分類推論実行時間: 0.230s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, left, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.296s
+    階層分類推論Execution time: 0.230s
     階層分類推論平均信頼度: 0.050
 
 185. ((b → ((¬c ∧ a) ∨ ((c → a) ∧ ¬((¬c ∧ c))))) ∨ b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.467s
-    階層分類推論実行時間: 0.251s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.467s
+    階層分類推論Execution time: 0.251s
     階層分類推論平均信頼度: 0.141
 
 186. (¬c ∨ ((¬a ∨ ¬((¬a ∨ (a → ¬a)))) ∨ c))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, right, assumption
-    auto_classical実行時間: 0.563s
-    階層分類推論実行時間: 0.222s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, right, assumption
+    auto_classicalExecution time: 0.563s
+    階層分類推論Execution time: 0.222s
     階層分類推論平均信頼度: 0.054
 
 187. (b → (c ∨ ¬((c ∧ (¬((c → c)) → (c ∨ c))))))
-    auto_classical使用タクティク: intro, add_dn, intro, apply 1, right, intro, apply 1, left, destruct 2, assumption
-    auto_classical実行時間: 0.222s
-    階層分類推論実行時間: 0.230s
+    auto_classicalTactics used: intro, add_dn, intro, apply 1, right, intro, apply 1, left, destruct 2, assumption
+    auto_classicalExecution time: 0.222s
+    階層分類推論Execution time: 0.230s
     階層分類推論平均信頼度: 0.131
 
 188. (b ∨ ¬(((¬a ∨ ((¬a → b) ∧ c)) ∧ b)))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
-    auto_classical実行時間: 0.949s
-    階層分類推論実行時間: 0.214s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, apply 0, left, destruct 1, assumption
+    auto_classicalExecution time: 0.949s
+    階層分類推論Execution time: 0.214s
     階層分類推論平均信頼度: 0.047
 
 189. (c ∨ (c → ¬b))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, intro, apply 0, left, assumption
-    auto_classical実行時間: 0.264s
-    階層分類推論実行時間: 0.216s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, intro, apply 0, left, assumption
+    auto_classicalExecution time: 0.264s
+    階層分類推論Execution time: 0.216s
     階層分類推論平均信頼度: 0.543
 
 190. (a → (c ∨ ¬c))
-    auto_classical使用タクティク: intro, add_dn, intro, apply 1, left, add_dn, intro, apply 1, right, assumption
-    auto_classical実行時間: 0.093s
-    階層分類推論実行時間: 0.226s
+    auto_classicalTactics used: intro, add_dn, intro, apply 1, left, add_dn, intro, apply 1, right, assumption
+    auto_classicalExecution time: 0.093s
+    階層分類推論Execution time: 0.226s
     階層分類推論平均信頼度: 0.131
 
 191. ((¬b ∧ (¬a → ((a → b) ∧ (b ∨ b)))) → a)
-    auto_classical使用タクティク: intro, destruct 0, add_dn, intro, apply 0, specialize 1 2, destruct 1, destruct 3, assumption, assumption
-    auto_classical実行時間: 0.003s
-    階層分類推論実行時間: 0.225s
+    auto_classicalTactics used: intro, destruct 0, add_dn, intro, apply 0, specialize 1 2, destruct 1, destruct 3, assumption, assumption
+    auto_classicalExecution time: 0.003s
+    階層分類推論Execution time: 0.225s
     階層分類推論平均信頼度: 0.042
 
 192. (¬((a ∧ a)) ∨ a)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
-    auto_classical実行時間: 0.371s
-    階層分類推論実行時間: 0.218s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, destruct 1, assumption
+    auto_classicalExecution time: 0.371s
+    階層分類推論Execution time: 0.218s
     階層分類推論平均信頼度: 0.048
 
 193. (c ∨ ¬((a ∧ ¬((a ∧ (¬((c ∧ ¬a)) ∨ (a → b)))))))
-    auto_classical使用タクティク: right, intro, destruct 0, apply 1, split, add_dn, intro, specialize 2 0, assumption, destruct 2
-    auto_classical実行時間: 0.090s
-    階層分類推論実行時間: 0.240s
+    auto_classicalTactics used: right, intro, destruct 0, apply 1, split, add_dn, intro, specialize 2 0, assumption, destruct 2
+    auto_classicalExecution time: 0.090s
+    階層分類推論Execution time: 0.240s
     階層分類推論平均信頼度: 0.154
 
 194. (a ∨ ((a → ((a ∨ b) ∧ (c ∧ c))) ∨ ¬c))
-    auto_classical使用タクティク: right, left, intro, split, left, add_dn, intro, specialize 1 0, assumption, destruct 1
-    auto_classical実行時間: 0.080s
-    階層分類推論実行時間: 0.226s
+    auto_classicalTactics used: right, left, intro, split, left, add_dn, intro, specialize 1 0, assumption, destruct 1
+    auto_classicalExecution time: 0.080s
+    階層分類推論Execution time: 0.226s
     階層分類推論平均信頼度: 0.191
 
 195. (¬a ∨ (a ∨ a))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, left, assumption
-    auto_classical実行時間: 0.297s
-    階層分類推論実行時間: 0.224s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, left, assumption
+    auto_classicalExecution time: 0.297s
+    階層分類推論Execution time: 0.224s
     階層分類推論平均信頼度: 0.050
 
 196. (((b ∧ (¬((¬a → a)) ∨ (c ∨ a))) ∨ ¬b) ∨ b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, right, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.452s
-    階層分類推論実行時間: 0.221s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, right, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.452s
+    階層分類推論Execution time: 0.221s
     階層分類推論平均信頼度: 0.053
 
 197. (((¬((a ∨ (b → b))) ∨ c) ∨ ¬c) ∨ b)
-    auto_classical使用タクティク: left, add_dn, intro, apply 0, right, intro, apply 0, left, right, assumption
-    auto_classical実行時間: 0.196s
-    階層分類推論実行時間: 0.223s
+    auto_classicalTactics used: left, add_dn, intro, apply 0, right, intro, apply 0, left, right, assumption
+    auto_classicalExecution time: 0.196s
+    階層分類推論Execution time: 0.223s
     階層分類推論平均信頼度: 0.054
 
 198. ((c ∨ a) ∨ ¬(((((b ∧ b) → c) → (c ∨ b)) ∧ c)))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, apply 0, left, left, destruct 1, assumption
-    auto_classical実行時間: 0.687s
-    階層分類推論実行時間: 0.220s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, apply 0, left, left, destruct 1, assumption
+    auto_classicalExecution time: 0.687s
+    階層分類推論Execution time: 0.220s
     階層分類推論平均信頼度: 0.483
 
 199. (b ∨ (b → (a ∧ (c → ¬((¬b ∧ a))))))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, intro, add_dn, intro, apply 0, left, assumption
-    auto_classical実行時間: 0.340s
-    階層分類推論実行時間: 0.224s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, intro, add_dn, intro, apply 0, left, assumption
+    auto_classicalExecution time: 0.340s
+    階層分類推論Execution time: 0.224s
     階層分類推論平均信頼度: 0.148
 
 200. ((¬b ∨ (((c ∧ c) → (¬a ∧ b)) → b)) ∨ ¬b)
-    auto_classical使用タクティク: left, add_dn, intro, apply 0, left, intro, apply 0, right, intro, assumption
-    auto_classical実行時間: 0.141s
-    階層分類推論実行時間: 0.230s
+    auto_classicalTactics used: left, add_dn, intro, apply 0, left, intro, apply 0, right, intro, assumption
+    auto_classicalExecution time: 0.141s
+    階層分類推論Execution time: 0.230s
     階層分類推論平均信頼度: 0.119
 
 201. (¬c ∨ ((a ∧ a) → c))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, intro, assumption
-    auto_classical実行時間: 0.411s
-    階層分類推論実行時間: 0.221s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, intro, assumption
+    auto_classicalExecution time: 0.411s
+    階層分類推論Execution time: 0.221s
     階層分類推論平均信頼度: 0.134
 
 202. (c ∨ (((c ∧ a) ∨ ((¬a ∧ ¬b) ∧ b)) → ¬c))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, intro, assumption
-    auto_classical実行時間: 1.146s
-    階層分類推論実行時間: 0.218s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, intro, assumption
+    auto_classicalExecution time: 1.146s
+    階層分類推論Execution time: 0.218s
     階層分類推論平均信頼度: 0.505
 
 203. ((c → (((a ∨ c) ∧ c) ∨ ¬c)) ∨ b)
-    auto_classical使用タクティク: left, intro, left, split, right, assumption, assumption
-    auto_classical実行時間: 0.004s
-    階層分類推論実行時間: 0.240s
+    auto_classicalTactics used: left, intro, left, split, right, assumption, assumption
+    auto_classicalExecution time: 0.004s
+    階層分類推論Execution time: 0.240s
     階層分類推論平均信頼度: 0.153
 
 204. (((¬a ∨ ((¬c ∨ c) ∨ b)) ∨ a) ∨ b)
-    auto_classical使用タクティク: left, add_dn, intro, apply 0, left, left, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.162s
-    階層分類推論実行時間: 0.217s
+    auto_classicalTactics used: left, add_dn, intro, apply 0, left, left, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.162s
+    階層分類推論Execution time: 0.217s
     階層分類推論平均信頼度: 0.061
 
 205. ((a → c) ∨ (c → (((c ∨ a) ∨ ¬((¬b ∧ c))) ∧ a)))
-    auto_classical使用タクティク: right, intro, split, left, left, add_dn, intro, specialize 1 0, assumption, destruct 1
-    auto_classical実行時間: 0.141s
-    階層分類推論実行時間: 0.224s
+    auto_classicalTactics used: right, intro, split, left, left, add_dn, intro, specialize 1 0, assumption, destruct 1
+    auto_classicalExecution time: 0.141s
+    階層分類推論Execution time: 0.224s
     階層分類推論平均信頼度: 0.132
 
 206. (a ∨ (¬((((a ∧ ¬a) → (b → ¬c)) ∧ a)) ∨ b))
-    auto_classical使用タクティク: add_dn, intro, apply 0, right, left, intro, apply 0, left, destruct 1, assumption
-    auto_classical実行時間: 0.522s
-    階層分類推論実行時間: 0.220s
+    auto_classicalTactics used: add_dn, intro, apply 0, right, left, intro, apply 0, left, destruct 1, assumption
+    auto_classicalExecution time: 0.522s
+    階層分類推論Execution time: 0.220s
     階層分類推論平均信頼度: 0.284
 
 207. (c ∨ (((¬((b ∨ ¬b)) → ¬((¬c ∨ ¬b))) → ¬c) ∨ ¬c))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, right, assumption
-    auto_classical実行時間: 0.536s
-    階層分類推論実行時間: 0.240s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, add_dn, intro, apply 0, right, right, assumption
+    auto_classicalExecution time: 0.536s
+    階層分類推論Execution time: 0.240s
     階層分類推論平均信頼度: 0.321
 
 208. ((¬((((¬b → b) → (c ∧ c)) ∨ a)) ∨ a) ∨ ¬a)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.579s
-    階層分類推論実行時間: 0.228s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.579s
+    階層分類推論Execution time: 0.228s
     階層分類推論平均信頼度: 0.531
 
 209. (¬a ∨ (a ∧ a))
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, intro, apply 0, right, split, assumption, assumption
-    auto_classical実行時間: 0.280s
-    階層分類推論実行時間: 0.217s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, intro, apply 0, right, split, assumption, assumption
+    auto_classicalExecution time: 0.280s
+    階層分類推論Execution time: 0.217s
     階層分類推論平均信頼度: 0.051
 
 210. ((¬a ∨ a) ∨ ¬c)
-    auto_classical使用タクティク: left, add_dn, intro, apply 0, left, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.090s
-    階層分類推論実行時間: 0.213s
+    auto_classicalTactics used: left, add_dn, intro, apply 0, left, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.090s
+    階層分類推論Execution time: 0.213s
     階層分類推論平均信頼度: 0.050
 
 211. (a → (¬(((¬((c ∧ b)) ∧ (b ∨ a)) ∧ ¬a)) ∨ c))
-    auto_classical使用タクティク: intro, left, intro, destruct 1, destruct 1, apply 1, assumption
-    auto_classical実行時間: 0.001s
-    階層分類推論実行時間: 0.228s
+    auto_classicalTactics used: intro, left, intro, destruct 1, destruct 1, apply 1, assumption
+    auto_classicalExecution time: 0.001s
+    階層分類推論Execution time: 0.228s
     階層分類推論平均信頼度: 0.132
 
 212. (((a ∨ ¬a) ∨ ¬((c ∨ ((a → b) → (¬a ∨ ¬b))))) ∨ a)
-    auto_classical使用タクティク: left, left, add_dn, intro, apply 0, right, intro, apply 0, left, assumption
-    auto_classical実行時間: 0.040s
-    階層分類推論実行時間: 0.225s
+    auto_classicalTactics used: left, left, add_dn, intro, apply 0, right, intro, apply 0, left, assumption
+    auto_classicalExecution time: 0.040s
+    階層分類推論Execution time: 0.225s
     階層分類推論平均信頼度: 0.629
 
 213. (((((c ∨ ¬a) ∨ (c → ¬a)) ∨ ¬a) ∨ a) ∨ a)
-    auto_classical使用タクティク: left, add_dn, intro, apply 0, left, right, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.195s
-    階層分類推論実行時間: 0.236s
+    auto_classicalTactics used: left, add_dn, intro, apply 0, left, right, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.195s
+    階層分類推論Execution time: 0.236s
     階層分類推論平均信頼度: 0.532
 
 214. (((((a ∧ c) ∨ (¬a ∧ a)) ∨ b) ∨ b) ∨ ¬b)
-    auto_classical使用タクティク: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
-    auto_classical実行時間: 0.515s
-    階層分類推論実行時間: 0.227s
+    auto_classicalTactics used: add_dn, intro, apply 0, left, right, add_dn, intro, apply 0, right, assumption
+    auto_classicalExecution time: 0.515s
+    階層分類推論Execution time: 0.227s
     階層分類推論平均信頼度: 0.633
 

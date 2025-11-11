@@ -34,7 +34,7 @@ try:
 except ImportError:
     GCS_AVAILABLE = False
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
@@ -52,9 +52,9 @@ except ImportError as e:
 
 @dataclass
 class BeamState:
-    """ビームサーチの状態を表すクラス"""
+    """ビームサーチの状態 表すクラス"""
     prover: Any  # Proverオブジェクト
-    tactic_sequence: List[str]  # これまでに適用したタクティクのシーケンス
+    tactic_sequence: List[str]  # これま with/at  適用didタクティクのシーケンス
     probability: float  # 現在の状態の確率
     step: int  # 現在のステップ数
     solved: bool  # 解決済みかどうか
@@ -125,7 +125,7 @@ def calculate_tactic_probability(
     arg2_confidence: float
 ) -> float:
     """
-    タクティクの種類に応じて適切な確率を計算
+    タクティクの種類 応じて適切な確率 計算
     
     Args:
         main_tactic: メインタクティク
@@ -136,21 +136,21 @@ def calculate_tactic_probability(
         arg2_confidence: 第2引数の確信度
     
     Returns:
-        計算された確率
+        計算was done確率
     """
     # 引数不要なタクティク
     if main_tactic in ['assumption', 'intro', 'split', 'left', 'right', 'add_dn']:
         return main_confidence
     
-    # 引数1つのタクティク
+    # 引数1のタクティク
     elif main_tactic in ['apply', 'destruct']:
         return main_confidence * arg1_confidence
     
-    # 引数2つのタクティク
+    # 引数2のタクティク
     elif main_tactic == 'specialize':
         return main_confidence * arg1_confidence * arg2_confidence
     
-    # その他のタクティク（引数不要として扱う）
+    # Other tactics（引数不要 as 扱う）
     else:
         return main_confidence
 
@@ -166,12 +166,12 @@ def generate_tactic_candidates(
     top_k: int = 10
 ) -> List[Tuple[str, float]]:
     """
-    現在の状態から可能なタクティク候補を生成し、上位k個を返す
+    現在の状態 from 可能なタクティク候補 Generationし、上位k 返す
     
     Returns:
         [(tactic_string, probability), ...] のリスト（確率の高い順）
     """
-    # 入力をエンコード
+    # Encode input
     input_ids, attention_mask, segment_ids = tokenizer.encode(goal, premises, max_seq_len)
     input_ids = input_ids.unsqueeze(0).to(device)
     attention_mask = attention_mask.unsqueeze(0).to(device)
@@ -180,18 +180,18 @@ def generate_tactic_candidates(
     with torch.no_grad():
         main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
         
-        # softmaxで確率に変換
+        # softmax with/at 確率 変換
         main_probs = torch.softmax(main_logits, dim=-1)
         arg1_probs = torch.softmax(arg1_logits, dim=-1)
         arg2_probs = torch.softmax(arg2_logits, dim=-1)
         
         tactic_candidates = []
         
-        # すべての可能な組み合わせを生成
+        # allの可能な組み合わせ Generation
         for main_id, main_tactic in enumerate(label_mappings['id_to_main']):
             main_confidence = main_probs[0, main_id].item()
             
-            # 引数が不要なタクティクの場合
+            # 引数 不要なタクティクの場合
             if main_tactic in ['assumption', 'intro', 'split', 'left', 'right', 'add_dn']:
                 tactic_string = main_tactic
                 probability = calculate_tactic_probability(
@@ -200,7 +200,7 @@ def generate_tactic_candidates(
                 )
                 tactic_candidates.append((tactic_string, probability))
             
-            # 引数1つのタクティクの場合
+            # 引数1のタクティクの場合
             elif main_tactic in ['apply', 'destruct']:
                 for arg1_id, arg1_value in enumerate(label_mappings['id_to_arg1']):
                     arg1_confidence = arg1_probs[0, arg1_id].item()
@@ -211,7 +211,7 @@ def generate_tactic_candidates(
                     )
                     tactic_candidates.append((tactic_string, probability))
             
-            # 引数2つのタクティクの場合
+            # 引数2のタクティクの場合
             elif main_tactic == 'specialize':
                 for arg1_id, arg1_value in enumerate(label_mappings['id_to_arg1']):
                     arg1_confidence = arg1_probs[0, arg1_id].item()
@@ -224,7 +224,7 @@ def generate_tactic_candidates(
                         )
                         tactic_candidates.append((tactic_string, probability))
             
-            # その他のタクティク（引数不要として扱う）
+            # Other tactics（引数不要 as 扱う）
             else:
                 tactic_string = main_tactic
                 probability = calculate_tactic_probability(
@@ -233,10 +233,10 @@ def generate_tactic_candidates(
                 )
                 tactic_candidates.append((tactic_string, probability))
         
-        # 確率の高い順にソートして上位k個を返す
+        # 確率の高い順 ソートand上位k 返す
         tactic_candidates.sort(key=lambda x: x[1], reverse=True)
         
-        # 確率の閾値で早期カット（高速化）
+        # 確率の閾値 with/at 早期カット（高速化）
         min_probability = 1e-8
         filtered_candidates = [
             (tactic, prob) for tactic, prob in tactic_candidates 
@@ -247,7 +247,7 @@ def generate_tactic_candidates(
 
 
 def apply_tactic_from_label(prover, label) -> bool:
-    """タクティクを適用"""
+    """タクティク 適用"""
     if isinstance(label, dict):
         tactic_str = format_tactic_string(label)
     else:
@@ -286,7 +286,7 @@ def apply_tactic_from_label(prover, label) -> bool:
             return not prover.specialize(func_idx, domain_idx)
         return False
     except Exception as e:
-        # pyproverのエラーをキャッチしてFalseを返す
+        # pyproverのエラー キャッチandFalse 返す
         return False
 
 
@@ -303,29 +303,29 @@ def beam_search_inference(
     verbose: bool = False
 ) -> Tuple[bool, int, List[str], List[float]]:
     """
-    ビームサーチを使用して推論を実行
+    ビームサーチ 使用and推論 実行
     
     Args:
-        model: 推論に使用するモデル
+        model: 推論 使用do/performModel
         tokenizer: トークナイザー
         label_mappings: ラベルマッピング
-        device: デバイス
+        device: Device
         prover: プロバーオブジェクト
         max_steps: 最大ステップ数
         beam_width: ビーム幅
-        top_k: 各ステップで考慮するタクティク候補数
-        max_seq_len: 最大シーケンス長
+        top_k: 各ステップ with/at 考慮do/performタクティク候補数
+        max_seq_len: Maximum sequence length
         verbose: 詳細出力フラグ
     
     Returns:
         (solved, steps, tactic_sequence, confidence_scores)
     """
-    # 初期状態を作成
+    # 初期状態 作成
     initial_state = encode_prover_state(prover)
     initial_premises = initial_state["premises"]
     initial_goal = initial_state["goal"]
     
-    # 初期ビーム状態を作成
+    # 初期ビーム状態 作成
     beam = [BeamState(
         prover=prover,
         tactic_sequence=[],
@@ -343,26 +343,26 @@ def beam_search_inference(
         if verbose:
             print(f"\nStep {step + 1}: Beam width = {len(beam)}")
         
-        # 解決済みの状態があるかチェック
+        # 解決済みの状態 exists/hasかチェック
         solved_states = [state for state in beam if state.solved]
         if solved_states:
-            # 最も確率の高い解決済み状態を返す
+            # 最も確率の高い解決済み状態 返す
             best_solved = max(solved_states, key=lambda s: s.probability)
             return True, best_solved.step, best_solved.tactic_sequence, best_solved.confidence_scores
         
-        # 新しい候補状態を生成
+        # 新しい候補状態 Generation
         new_candidates = []
         
         for state in beam:
             if state.solved:
                 continue
                 
-            # 現在の状態を取得
+            # 現在の状態 get
             current_state = encode_prover_state(state.prover)
             current_premises = current_state["premises"]
             current_goal = current_state["goal"]
             
-            # タクティク候補を生成
+            # タクティク候補 Generation
             tactic_candidates = generate_tactic_candidates(
                 model, tokenizer, current_premises, current_goal,
                 label_mappings, device, max_seq_len, top_k
@@ -372,16 +372,16 @@ def beam_search_inference(
                 print(f"  Generated {len(tactic_candidates)} candidates for current state")
                 print(f"    Top 3: {[(t, f'{p:.3f}') for t, p in tactic_candidates[:3]]}")
             
-            # 各タクティク候補を試す
+            # 各タクティク候補 試す
             for tactic_str, tactic_prob in tactic_candidates:
-                # プロバーのコピーを作成
+                # プロバーのコピー 作成
                 new_prover = copy.deepcopy(state.prover)
                 
-                # タクティクを適用
+                # タクティク 適用
                 success = apply_tactic_from_label(new_prover, tactic_str)
                 
                 if success:
-                    # 新しい状態を作成
+                    # 新しい状態 作成
                     new_sequence = state.tactic_sequence + [tactic_str]
                     new_probability = state.probability * tactic_prob
                     new_confidence_scores = state.confidence_scores + [tactic_prob]
@@ -405,10 +405,10 @@ def beam_search_inference(
                         print(f"    Applied {tactic_str} (prob: {tactic_prob:.3f}) - Failed")
         
         if not new_candidates:
-            # 新しい候補がない場合は失敗
+            # 新しい候補 no/not場合は失敗
             break
         
-        # ビーム幅分の最良の候補を選択
+        # ビーム幅分の最良の候補 選択
         new_candidates.sort(key=lambda x: x.probability, reverse=True)
         beam = new_candidates[:beam_width]
         
@@ -417,7 +417,7 @@ def beam_search_inference(
             for i, state in enumerate(beam):
                 print(f"    {i+1}: prob={state.probability:.6f}, steps={state.step}, solved={state.solved}")
     
-    # 最終的に最も確率の高い状態を返す
+    # 最終的 最も確率の高い状態 返す
     if beam:
         best_state = max(beam, key=lambda s: s.probability)
         return best_state.solved, best_state.step, best_state.tactic_sequence, best_state.confidence_scores
@@ -462,7 +462,7 @@ def _process_tautology_worker_beam_search(args: Tuple[Any, ...]) -> Dict[str, An
         )
         prover = base_collector.PYPROVER_MODULES["Prover"](goal_node)
 
-        # ビームサーチで推論を実行
+        # ビームサーチ with/at 推論 実行
         solved, steps, tactic_sequence, confidences = beam_search_inference(
             _WORKER_MODEL,
             _WORKER_TOKENIZER,
@@ -476,10 +476,10 @@ def _process_tautology_worker_beam_search(args: Tuple[Any, ...]) -> Dict[str, An
             verbose=False
         )
 
-        # 成功したタクティクのデータを構築
+        # 成功didタクティクのデータ 構築
         example_successful_tactics: List[Dict[str, Any]] = []
         if solved and tactic_sequence:
-            # 各ステップの状態を再構築してタクティクデータを作成
+            # 各ステップの状態 再構築andタクティクデータ 作成
             temp_prover = base_collector.PYPROVER_MODULES["Prover"](goal_node)
             
             for step_idx, (tactic_str, confidence) in enumerate(zip(tactic_sequence, confidences)):
@@ -487,12 +487,12 @@ def _process_tautology_worker_beam_search(args: Tuple[Any, ...]) -> Dict[str, An
                 current_premises = current_state["premises"]
                 current_goal = current_state["goal"]
                 
-                # タクティクを適用
+                # タクティク 適用
                 success = apply_tactic_from_label(temp_prover, tactic_str)
                 if not success:
                     break
                 
-                # タクティクデータを作成
+                # タクティクデータ 作成
                 tactic_dict = base_collector.parse_tactic_string_cached(tactic_str)
                 state_tactic_hash = base_collector.create_state_hash(
                     current_premises, current_goal, tactic_str
@@ -729,7 +729,7 @@ class StreamingBeamSearchCollector:
                 )
                 prover = base_collector.PYPROVER_MODULES["Prover"](goal_node)
                 
-                # ビームサーチで推論を実行
+                # ビームサーチ with/at 推論 実行
                 solved, steps, tactic_sequence, confidences = beam_search_inference(
                     model, tokenizer, label_mappings, self.device, prover,
                     max_steps=self.max_steps,
@@ -741,7 +741,7 @@ class StreamingBeamSearchCollector:
                 
                 if solved and tactic_sequence:
                     solved_count += 1
-                    # 各ステップの状態を再構築してタクティクデータを作成
+                    # 各ステップの状態 再構築andタクティクデータ 作成
                     temp_prover = base_collector.PYPROVER_MODULES["Prover"](goal_node)
                     
                     for step_idx, (tactic_str, confidence) in enumerate(zip(tactic_sequence, confidences)):
@@ -749,12 +749,12 @@ class StreamingBeamSearchCollector:
                         current_premises = current_state["premises"]
                         current_goal = current_state["goal"]
                         
-                        # タクティクを適用
+                        # タクティク 適用
                         success = apply_tactic_from_label(temp_prover, tactic_str)
                         if not success:
                             break
                         
-                        # タクティクデータを作成
+                        # タクティクデータ 作成
                         tactic_dict = base_collector.parse_tactic_string_cached(tactic_str)
                         state_tactic_hash = base_collector.create_state_hash(
                             current_premises, current_goal, tactic_str

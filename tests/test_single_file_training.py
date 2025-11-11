@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-generated_dataディレクトリの全データを使って学習して動作確認するテストスクリプト
-重複排除を行い、データn個ごとにvalidationを実行
+generated_dataディレクトリの全データ 使ってTrainingand動作確認do/performテストスクリプト
+重複排除 行い、データnごと validation 実行
 """
 import os
 import sys
 import argparse
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(__file__))  # tests/の親ディレクトリ
 sys.path.insert(0, project_root)
 
@@ -35,7 +35,7 @@ def main():
     
     args = parser.parse_args()
     
-    # generated_dataディレクトリを直接使用
+    # generated_dataディレクトリ 直接使用
     data_dir = os.path.join(project_root, "generated_data")
     
     if not os.path.exists(data_dir):
@@ -49,7 +49,7 @@ def main():
     else:
         print(f"📊 Training mode: data-point based (no epoch limit)")
     
-    # 学習スクリプトを実行
+    # Trainingスクリプト 実行
     cmd = [
         sys.executable, "src/training/train_with_generated_data.py",
         "--data_dir", data_dir,
@@ -58,7 +58,7 @@ def main():
         "--max_seq_len", str(args.max_seq_len),
         "--arg1_loss_weight", "0.8",
         "--arg2_loss_weight", "0.8",
-        # 重複排除はデフォルトで有効（--keep_duplicatesで無効化可能）
+        # 重複排除はデフォルト with/at 有効（--keep_duplicates with/at 無効化可能）
         "--validation_frequency", str(args.validation_frequency),
         "--save_path", args.save_path,
         "--num_workers", str(args.num_workers),
@@ -86,7 +86,7 @@ def main():
     print(f"🚀 Running command: {' '.join(cmd)}")
     print("=" * 60)
     
-    # コマンドを実行
+    # コマンド 実行
     import subprocess
     result = subprocess.run(cmd, cwd=project_root)
     

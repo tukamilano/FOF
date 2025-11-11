@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-並列化バッチ学習スクリプト（重複排除済みデータ専用）
+並列化バッチTrainingスクリプト（重複排除済みデータ専用）
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ except ImportError:
     WANDB_AVAILABLE = False
     print("Warning: wandb not available. Install with: pip install wandb")
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, project_root)
 
@@ -63,17 +63,17 @@ class BatchDataset(Dataset):
         self.arg2_to_id = arg2_to_id
         self.max_seq_len = max_seq_len
         
-        # 重複排除済みバッチデータを読み込み
+        # 重複排除済みバッチデータ 読み込み
         self.data = self._load_batch_data(data_dir)
     
     def _load_batch_data(self, data_dir: str) -> List[Dict[str, Any]]:
-        """データを読み込み（バッチファイルまたは通常のJSONファイル）"""
+        """データ 読み込み（バッチファイルor通常のJSONファイル）"""
         data = []
         
-        # まずバッチファイルを探す
+        # まずバッチファイル 探す
         batch_files = glob.glob(os.path.join(data_dir, "deduplicated_batch_*.json"))
         if batch_files:
-            # バッチファイルが存在する場合
+            # バッチファイル 存在do/perform場合
             batch_files.sort()
             print(f"Found {len(batch_files)} batch files in {data_dir}")
             
@@ -83,7 +83,7 @@ class BatchDataset(Dataset):
                     batch_data = json.load(f)
                 data.extend(batch_data)
         else:
-            # バッチファイルがない場合は通常のJSONファイルを探す
+            # バッチファイル no/not場合は通常のJSONファイル 探す
             json_files = glob.glob(os.path.join(data_dir, "*.json"))
             json_files.sort()
             print(f"Found {len(json_files)} JSON files in {data_dir}")
@@ -93,7 +93,7 @@ class BatchDataset(Dataset):
                 with open(json_file, 'r') as f:
                     file_data = json.load(f)
                 
-                # データの形式に応じて処理
+                # Process according to data format
                 if isinstance(file_data, list):
                     if file_data and isinstance(file_data[0], dict):
                         if 'premises' in file_data[0] and 'goal' in file_data[0] and 'tactic' in file_data[0]:
@@ -117,29 +117,29 @@ class BatchDataset(Dataset):
     def __getitem__(self, idx):
         item = self.data[idx]
         
-        # 入力をエンコード
+        # Encode input
         premises = item['premises']
         goal = item['goal']
         input_ids, attention_mask, segment_ids = self.tokenizer.encode(
             goal, premises, self.max_seq_len
         )
         
-        # タクティクを解析
+        # Parse tactic
         tactic = item['tactic']
         if isinstance(tactic, str):
             tactic_dict = parse_tactic_string(tactic)
         else:
             tactic_dict = tactic
         
-        # ラベルを取得
+        # Get label
         main_tactic = tactic_dict['main']
         arg1 = tactic_dict['arg1']
         arg2 = tactic_dict['arg2']
         
-        # IDに変換
+        # Convert to ID
         main_label = self.main_to_id.get(main_tactic, 0)
-        arg1_label = self.arg1_to_id.get(arg1, 0) if arg1 is not None else -1  # -1は無効値
-        arg2_label = self.arg2_to_id.get(arg2, 0) if arg2 is not None else -1  # -1は無効値
+        arg1_label = self.arg1_to_id.get(arg1, 0) if arg1 is not None else -1  # -1はInvalid value
+        arg2_label = self.arg2_to_id.get(arg2, 0) if arg2 is not None else -1  # -1はInvalid value
         
         return input_ids, attention_mask, main_label, arg1_label, arg2_label
 
@@ -162,12 +162,12 @@ def train_epoch(
     epoch: int = 0,
     log_frequency: int = 1000
 ) -> float:
-    """1エポックの学習を実行"""
+    """1エポックのTraining 実行"""
     model.train()
     total_loss = 0.0
     num_batches = 0
     
-    # 直近1000バッチの損失を記録するためのキュー
+    # 直近1000バッチの損失 記録do/performためのキュー
     recent_losses = []
     recent_entropy_reg_losses = []
     recent_kl_penalties = []
@@ -274,7 +274,7 @@ def train_epoch(
         arg1_labels = arg1_labels.to(device)
         arg2_labels = arg2_labels.to(device)
 
-        # オプティマイザーの勾配をリセット
+        # Reset optimizer gradients
         optimizer.zero_grad()
 
         reference_main_logits = None
@@ -288,10 +288,10 @@ def train_epoch(
             else:
                 raise ValueError("Reference model must return a tuple of three logits")
 
-        # 混合精度での推論
+        # 混合精度 with/at の推論
         if use_amp and scaler is not None:
             with autocast():
-                # モデル推論
+                # Model inference
                 main_logits, arg1_logits, arg2_logits = model(input_ids, attention_mask)
 
                 # 正則化込みの損失計算
@@ -305,7 +305,7 @@ def train_epoch(
                 )
                 total_loss_batch = total_loss_batch / gradient_accumulation_steps
 
-            # 混合精度での逆伝播
+            # 混合精度 with/at の逆伝播
             scaler.scale(total_loss_batch).backward()
         else:
             # 通常の推論
@@ -325,7 +325,7 @@ def train_epoch(
             # 通常の逆伝播
             total_loss_batch.backward()
 
-        # 勾配累積のステップが完了したらオプティマイザーを更新
+        # 勾配累積のステップ 完了didらオプティマイザー 更新
         if (batch_idx + 1) % gradient_accumulation_steps == 0:
             if use_amp and scaler is not None:
                 scaler.step(optimizer)
@@ -337,11 +337,11 @@ def train_epoch(
         total_loss += total_loss_batch.item() * gradient_accumulation_steps
         num_batches += 1
 
-        # 直近1000バッチの損失を記録
+        # 直近1000バッチの損失 記録
         current_loss = total_loss_batch.item() * gradient_accumulation_steps
         recent_losses.append(current_loss)
         if len(recent_losses) > 1000:
-            recent_losses.pop(0)  # 古い損失を削除
+            recent_losses.pop(0)  # Remove old loss
 
         if entropy_reg_weight != 0.0:
             entropy_contribution = loss_components["entropy_reg"].item()
@@ -355,10 +355,10 @@ def train_epoch(
             if len(recent_kl_penalties) > 1000:
                 recent_kl_penalties.pop(0)
 
-        # プログレスバーを更新
+        # Update progress bar
         pbar.set_postfix({'Loss': f'{total_loss / num_batches:.4f}'})
 
-        # 指定された頻度でwandbにログ
+        # Log to wandb at specified frequency
         if use_wandb and WANDB_AVAILABLE and batch_idx % log_frequency == 0:
             recent_avg_loss = sum(recent_losses) / len(recent_losses) if recent_losses else 0.0
             log_payload = {
@@ -414,13 +414,13 @@ def main():
     
     args = parser.parse_args()
     
-    # 実行されたコマンドライン引数をログ出力
+    # Log executed command line arguments
     print("🚀 Command line arguments:")
     print(f"   Script: {sys.argv[0]}")
     print(f"   Arguments: {' '.join(sys.argv[1:])}")
     print("=" * 60)
     
-    # 再現性のためのシード設定
+    # Set seed for reproducibility
     import random
     import numpy as np
     random.seed(args.random_seed)
@@ -430,13 +430,13 @@ def main():
         torch.cuda.manual_seed(args.random_seed)
         torch.cuda.manual_seed_all(args.random_seed)
     
-    # パラメータを初期化
+    # Initialize parameters
     model_params = get_model_params()
     training_params = get_training_params()
     system_params = get_system_params()
     hierarchical_labels = get_hierarchical_labels()
     
-    # デバイス設定
+    # Device setup
     if args.device == "auto":
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
@@ -444,7 +444,7 @@ def main():
     
     print(f"Using device: {device}")
     
-    # 実行設定の詳細をログ出力
+    # Log execution configuration details
     print("\n📋 Training Configuration:")
     print(f"   Data directory: {args.data_dir}")
     print(f"   Batch size: {args.batch_size}")
@@ -474,23 +474,23 @@ def main():
         scaler = GradScaler()
         print("Using Automatic Mixed Precision (AMP)")
     
-    # データディレクトリの設定
+    # Data directory configuration
     data_dir = os.path.join(project_root, args.data_dir)
     
-    # 保存パスの自動生成（指定されていない場合）
+    # Auto-generate save path (if not specified)
     if args.save_path is None:
-        # データディレクトリ名から保存名を生成
+        # Generate save name from data directory name
         data_dir_name = os.path.basename(args.data_dir.rstrip('/'))
         args.save_path = f"models/{data_dir_name}_parallel.pth"
         print(f"Auto-generated save path: {args.save_path}")
     
-    # データディレクトリの存在確認
+    # Check data directory exists
     if not os.path.exists(data_dir):
         print(f"❌ Data directory not found: {data_dir}")
         print("Please ensure the directory contains training data")
         return
     
-    # データファイルの存在確認
+    # Check data files exist
     json_files = glob.glob(os.path.join(data_dir, "*.json"))
     if not json_files:
         print(f"❌ No JSON files found in {data_dir}")
@@ -500,11 +500,11 @@ def main():
     print(f"✅ Using data from: {data_dir}")
     print(f"   Found {len(json_files)} JSON files")
     
-    # トークンとラベルを読み込み
+    # Load tokens and labels
     token_py_path = os.path.join(project_root, "src", "core", "fof_tokens.py")
     base_tokens, _ = load_tokens_and_labels_from_token_py(token_py_path)
     
-    # 階層分類用のラベルマッピングを構築
+    # Build label mapping for hierarchical classification
     main_to_id, arg1_to_id, arg2_to_id, id_to_main, id_to_arg1, id_to_arg2 = build_hierarchical_label_mappings(
         hierarchical_labels.main_tactics,
         hierarchical_labels.arg1_values,
@@ -515,14 +515,14 @@ def main():
     print(f"Arg1 values: {len(id_to_arg1)} classes")
     print(f"Arg2 values: {len(id_to_arg2)} classes")
     
-    # トークナイザーを作成
+    # Create tokenizer
     tokenizer = CharTokenizer(
         base_tokens=base_tokens,
         add_tactic_tokens=model_params.add_tactic_tokens,
         num_tactic_tokens=model_params.num_tactic_tokens
     )
     
-    # データセットを作成
+    # Create dataset
     print("📊 Creating BatchDataset")
     dataset = BatchDataset(
         data_dir=data_dir,
@@ -537,7 +537,7 @@ def main():
         print("No training data found. Please check the data directory.")
         return
     
-    # データローダーを作成
+    # データローダー 作成
     train_loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
@@ -547,7 +547,7 @@ def main():
         collate_fn=hierarchical_collate
     )
     
-    # モデルを作成
+    # Create model
     model = TransformerClassifier(
         vocab_size=tokenizer.vocab_size,
         pad_id=tokenizer.pad_id,
@@ -565,20 +565,20 @@ def main():
     print(f"Model vocab_size: {tokenizer.vocab_size}")
     print(f"Model pad_id: {tokenizer.pad_id}")
     
-    # 事前学習済みモデルを読み込み（指定されている場合）
+    # Load pretrained model (if specified)
     if args.load_model_path:
         load_model_path = os.path.join(project_root, args.load_model_path)
         if os.path.exists(load_model_path):
             print(f"🔄 Loading pretrained model from: {load_model_path}")
             try:
-                # state_dictを読み込み
+                # Load state_dict
                 state_dict = torch.load(load_model_path, map_location=device)
                 
-                # モデルのstate_dictを読み込み
+                # ModelのLoad state_dict
                 model.load_state_dict(state_dict)
                 print("✅ Pretrained model loaded successfully!")
                 
-                # モデル構造の互換性をチェック
+                # Check model structure compatibility
                 print(f"   Loaded model vocab_size: {model.vocab_size}")
                 print(f"   Loaded model pad_id: {model.pad_id}")
                 print(f"   Loaded model num_main_classes: {model.num_main_classes}")
@@ -594,7 +594,7 @@ def main():
     else:
         print("🆕 Using randomly initialized model")
     
-    # モデルをデバイスに移動
+    # Move model to device
     model = model.to(device)
     
     # 並列化設定
@@ -653,7 +653,7 @@ def main():
         for param in reference_model.parameters():
             param.requires_grad = False
 
-    # オプティマイザーと損失関数を作成
+    # Create optimizer and loss function
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
     criterion = nn.CrossEntropyLoss()
     
@@ -666,7 +666,7 @@ def main():
         else:
             print(f"Using existing checkpoint directory: {checkpoint_dir}")
     
-    # wandb初期化
+    # Initialize wandb
     if args.use_wandb and WANDB_AVAILABLE:
         run_name = args.wandb_run_name or f"training_{int(time.time())}"
         wandb.init(
@@ -692,7 +692,7 @@ def main():
     elif args.use_wandb and not WANDB_AVAILABLE:
         print("Warning: wandb requested but not available. Continuing without logging.")
     
-    # ラベルマッピングを作成（推論評価用）
+    # Create label mapping (for inference evaluation)
     label_mappings = {
         'main_to_id': main_to_id,
         'arg1_to_id': arg1_to_id,
@@ -702,7 +702,7 @@ def main():
         'id_to_arg2': id_to_arg2
     }
     
-    # 学習ループ
+    # Training loop
     print(f"\n🚀 Starting parallel training for {args.num_epochs} epochs...")
     print(f"📊 Training data: {len(dataset)} examples")
     print(f"📊 Batch size: {args.batch_size}")
@@ -711,21 +711,21 @@ def main():
     print(f"📊 Log frequency: every {args.log_frequency} batches")
     print("=" * 60)
     
-    # 学習開始前のベースライン推論評価
+    # Training開始前のベースライン推論評価
     print(f"\n🔍 Evaluating baseline inference performance (before training)...")
     baseline_success_rate, baseline_avg_steps = evaluate_inference_performance(
         model, tokenizer, label_mappings, device, args.max_seq_len,
         num_examples=args.inference_eval_examples, 
         max_steps=args.inference_max_steps, 
         temperature=args.inference_temperature,
-        difficulty=0.7,  # デフォルトのdifficulty値を使用
-        max_depth=4,  # データ生成時と同じmax_depth値を使用
-        seed=42  # 再現性のため固定シードを使用
+        difficulty=0.7,  # デフォルトのdifficulty値 使用
+        max_depth=4,  # データGeneration時と同じmax_depth値 使用
+        seed=42  # 再現性のため固定シード 使用
     )
     print(f"  Baseline inference success rate: {baseline_success_rate:.3f}")
     print(f"  Baseline inference avg steps (when solved): {baseline_avg_steps:.2f}")
     
-    # ベースライン結果をwandbに記録
+    # ベースライン結果 wandb 記録
     if args.use_wandb and WANDB_AVAILABLE:
         wandb.log({
             "inference/success_rate": baseline_success_rate,
@@ -737,7 +737,7 @@ def main():
     for epoch in range(args.num_epochs):
         print(f"\n🚀 Starting epoch {epoch+1}/{args.num_epochs}")
         
-        # 1エポックの学習を実行
+        # 1エポックのTraining 実行
         avg_loss = train_epoch(
             model=model,
             dataloader=train_loader,
@@ -759,7 +759,7 @@ def main():
         
         print(f"Epoch {epoch+1} completed. Average loss: {avg_loss:.4f}")
         
-        # 推論性能を評価（毎エポック）
+        # 推論性能 評価（毎エポック）
         if True:  # 毎エポック実行
             print(f"\n🔍 Evaluating inference performance after epoch {epoch+1}...")
             inference_success_rate, inference_avg_steps = evaluate_inference_performance(
@@ -767,8 +767,8 @@ def main():
                 num_examples=args.inference_eval_examples, 
                 max_steps=args.inference_max_steps, 
                 temperature=args.inference_temperature,
-                difficulty=0.7,  # デフォルトのdifficulty値を使用
-                max_depth=4  # データ生成時と同じmax_depth値を使用
+                difficulty=0.7,  # デフォルトのdifficulty値 使用
+                max_depth=4  # データGeneration時と同じmax_depth値 使用
             )
             print(f"  Inference success rate: {inference_success_rate:.3f}")
             print(f"  Inference avg steps (when solved): {inference_avg_steps:.2f}")
@@ -776,7 +776,7 @@ def main():
             inference_success_rate = None
             inference_avg_steps = None
         
-        # wandbにログ
+        # Log to wandb
         if args.use_wandb and WANDB_AVAILABLE:
             log_data = {
                 "loss": avg_loss
@@ -788,7 +788,7 @@ def main():
                 })
             wandb.log(log_data)
         
-        # エポックごとにモデルを保存
+        # Save model after each epoch
         if args.save_checkpoints:
             checkpoint_path = f"models/parallel_model_epoch_{epoch+1}.pth"
             os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
@@ -800,14 +800,14 @@ def main():
             }, checkpoint_path)
             print(f"💾 Epoch checkpoint saved: {checkpoint_path}")
     
-    # モデルを保存
+    # Model 保存
     os.makedirs(os.path.dirname(args.save_path), exist_ok=True)
     torch.save(model.state_dict(), args.save_path)
     
     print(f"\n🎉 Parallel training completed!")
     print(f"📁 Model saved to: {args.save_path}")
     
-    # wandb終了
+    # Terminate wandb
     if args.use_wandb and WANDB_AVAILABLE:
         wandb.finish()
         print("📈 Wandb logging completed!")

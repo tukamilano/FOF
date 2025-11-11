@@ -49,7 +49,7 @@ class CharTokenizer:
             vocab.extend([SPECIAL_PAD, SPECIAL_CLS, SPECIAL_SEP, SPECIAL_UNK, SPECIAL_EOS])
         vocab.extend(base_tokens)
         
-        # tactic用トークンを追加
+        # Add tactic tokens
         if add_tactic_tokens:
             tactic_tokens = [f"[TACTIC_{i}]" for i in range(num_tactic_tokens)]
             vocab.extend(tactic_tokens)
@@ -63,7 +63,7 @@ class CharTokenizer:
         self.unk_id = self.token_to_id[SPECIAL_UNK]
         self.eos_id = self.token_to_id[SPECIAL_EOS]
         
-        # tactic用トークンのID範囲を記録
+        # Record ID range of tactic tokens
         if add_tactic_tokens:
             self.tactic_token_start_id = len([SPECIAL_PAD, SPECIAL_CLS, SPECIAL_SEP, SPECIAL_UNK, SPECIAL_EOS]) + len(base_tokens)
             self.tactic_token_end_id = self.tactic_token_start_id + num_tactic_tokens
@@ -76,13 +76,13 @@ class CharTokenizer:
         return len(self.id_to_token)
     
     def is_tactic_token(self, token_id: int) -> bool:
-        """指定されたトークンIDがtactic用トークンかどうかを判定"""
+        """Determine if specified token ID is a tactic token"""
         if self.tactic_token_start_id is None:
             return False
         return self.tactic_token_start_id <= token_id < self.tactic_token_end_id
     
     def get_tactic_token_id(self, tactic_index: int) -> int:
-        """tactic用トークンのインデックス（0-49）から実際のトークンIDを取得"""
+        """Get actual token ID from tactic token index (0-49)"""
         if self.tactic_token_start_id is None:
             raise ValueError("Tactic tokens are not enabled")
         if not (0 <= tactic_index < (self.tactic_token_end_id - self.tactic_token_start_id)):
@@ -112,22 +112,22 @@ class CharTokenizer:
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         エンコード: [CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] ... [EOS]
-        前提の数と長さに制限なし
+        No limit on number and length of premises
         
         Args:
-            goal: ゴール文字列
-            premises: 前提のリスト（任意の数）
-            max_seq_len: 最大シーケンス長
+            goal: Goal string
+            premises: List of premises (any number)
+            max_seq_len: Maximum sequence length
             
         Returns:
             (input_ids, attention_mask, segment_ids)
         """
-        # シーケンスを構築: [CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] ... [EOS]
+        # Build sequence: [CLS] Goal [SEP] Premise₁ [SEP] Premise₂ [SEP] ... [EOS]
         seq: List[int] = [self.cls_id]
         attn_mask: List[int] = [1]
         seg_ids: List[int] = [0]  # 0 for special tokens
         
-        # Goalを追加
+        # Add Goal
         goal_tokens = self._encode_sentence(goal)
         seq.extend(goal_tokens)
         attn_mask.extend([1] * len(goal_tokens))
@@ -136,7 +136,7 @@ class CharTokenizer:
         attn_mask.append(1)
         seg_ids.append(0)  # 0 for special tokens
         
-        # 各前提を追加
+        # Add each premise
         for i, premise in enumerate(premises):
             premise_tokens = self._encode_sentence(premise)
             seq.extend(premise_tokens)
@@ -146,12 +146,12 @@ class CharTokenizer:
             attn_mask.append(1)
             seg_ids.append(0)  # 0 for special tokens
         
-        # [EOS]を追加
+        # [EOS]Add
         seq.append(self.eos_id)
         attn_mask.append(1)
         seg_ids.append(0)  # 0 for special tokens
         
-        # パディング
+        # Padding
         if len(seq) > max_seq_len:
             seq = seq[:max_seq_len]
             attn_mask = attn_mask[:max_seq_len]
@@ -200,7 +200,7 @@ class TransformerClassifier(nn.Module):
         num_layers: int = 2,
         dim_feedforward: int = 256,
         dropout: float = 0.1,
-        # 階層分類用のパラメータ
+        # Parameters for hierarchical classification
         num_main_classes: int = 0,
         num_arg1_classes: int = 0,
         num_arg2_classes: int = 0,
@@ -225,7 +225,7 @@ class TransformerClassifier(nn.Module):
         self.norm = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
         
-        # 階層分類用の3つのヘッド
+        # Three heads for hierarchical classification
         self.head_main = nn.Linear(d_model, num_main_classes)
         self.head_arg1 = nn.Linear(d_model, num_arg1_classes)
         self.head_arg2 = nn.Linear(d_model, num_arg2_classes)
@@ -255,7 +255,7 @@ class TransformerClassifier(nn.Module):
         cls_repr = x[:, 0, :]
         cls_repr_dropout = self.dropout(cls_repr)
         
-        # 階層分類：3つのヘッドから出力
+        # 階層分類：3のヘッド from 出力
         main_logits = self.head_main(cls_repr_dropout)
         arg1_logits = self.head_arg1(cls_repr_dropout)
         arg2_logits = self.head_arg2(cls_repr_dropout)
@@ -268,7 +268,7 @@ def build_hierarchical_label_mappings(
     arg2_values: List[str]
 ) -> Tuple[Dict[str, int], Dict[str, int], Dict[str, int], List[str], List[str], List[str]]:
     """
-    階層分類用のラベルマッピングを構築
+    階層分類用のラベルマッピング 構築
     
     Returns:
         (main_to_id, arg1_to_id, arg2_to_id, id_to_main, id_to_arg1, id_to_arg2)

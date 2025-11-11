@@ -1,6 +1,6 @@
 """
-推論時と学習時で一貫した状態エンコードを行うモジュール
-前提の数と長さに制限なし
+推論時とTraining時 with/at 一貫did状態エンコード 行うモジュール
+No limit on number and length of premises
 """
 import hashlib
 from typing import Dict, List, Tuple, Any, Optional
@@ -8,20 +8,20 @@ from typing import Dict, List, Tuple, Any, Optional
 
 def encode_prover_state(prover) -> Dict[str, List[str]]:
     """
-    推論時と学習時で同じ形式でproverの状態をエンコードする
-    前提の数と長さに制限なし
+    推論時とTraining時 with/at 同じ形式 with/at proverの状態 エンコードdo/perform
+    No limit on number and length of premises
     
     Args:
         prover: Proverインスタンス
         
     Returns:
-        {"premises": [str, ...], "goal": str} の形式（premisesの数は実際の数に応じて変動）
+        {"premises": [str, ...], "goal": str} の形式（premisesの数は実際の数 応じて変動）
     """
-    # 前提を取得（すべての前提を使用、制限なし）
+    # 前提 get（allの前提 使用、制限なし）
     vars_as_str = [str(v) for v in getattr(prover, "variables", [])]
-    premises = vars_as_str  # すべての前提を使用
+    premises = vars_as_str  # allの前提 使用
     
-    # ゴールを取得
+    # ゴール get
     goal = str(getattr(prover, "goal", "")) if getattr(prover, "goal", None) is not None else ""
     
     return {
@@ -32,13 +32,13 @@ def encode_prover_state(prover) -> Dict[str, List[str]]:
 
 def parse_tactic_string(tactic_str: str) -> Dict[str, Any]:
     """
-    文字列形式のtacticを構造化されたJSON形式に変換する
+    文字列形式のtactic 構造化was doneJSON形式 変換do/perform
     
     Args:
         tactic_str: 文字列形式のtactic（例: "apply 0", "specialize 1 2", "add_dn"）
         
     Returns:
-        構造化されたtactic辞書
+        構造化was donetactic辞書
     """
     parts = tactic_str.split()
     
@@ -50,21 +50,21 @@ def parse_tactic_string(tactic_str: str) -> Dict[str, Any]:
             "arg2": None
         }
     elif len(parts) == 2:
-        # 引数1つのtactic
+        # 引数1のtactic
         return {
             "main": parts[0],
             "arg1": parts[1],
             "arg2": None
         }
     elif len(parts) == 3:
-        # 引数2つのtactic
+        # 引数2のtactic
         return {
             "main": parts[0],
             "arg1": parts[1],
             "arg2": parts[2]
         }
     else:
-        # 予期しない形式
+        # 予期しno/not形式
         return {
             "main": tactic_str,
             "arg1": None,
@@ -74,10 +74,10 @@ def parse_tactic_string(tactic_str: str) -> Dict[str, Any]:
 
 def format_tactic_string(tactic_dict: Dict[str, Any]) -> str:
     """
-    構造化されたtactic辞書を文字列形式に変換する
+    構造化was donetactic辞書 文字列形式 変換do/perform
     
     Args:
-        tactic_dict: 構造化されたtactic辞書
+        tactic_dict: 構造化was donetactic辞書
         
     Returns:
         文字列形式のtactic
@@ -96,8 +96,8 @@ def format_tactic_string(tactic_dict: Dict[str, Any]) -> str:
 
 def state_hash(premises: List[str], goal: str) -> str:
     """
-    状態のみのハッシュ（tactic を含まない）
-    強化学習で同じ状態での複数のアクション試行を管理するために使用
+    状態onlyのハッシュ（tactic  含まno/not）
+    強化Training with/at 同じ状態 with/at の複数のアクション試行 管理do/performため 使用
     
     Args:
         premises: 前提のリスト
@@ -113,7 +113,7 @@ def state_hash(premises: List[str], goal: str) -> str:
 def state_tactic_hash(premises: List[str], goal: str, tactic: str) -> str:
     """
     状態とtacticの組み合わせのハッシュ
-    重複チェックやデータ管理に使用
+    重複チェックやデータ管理 使用
     
     Args:
         premises: 前提のリスト

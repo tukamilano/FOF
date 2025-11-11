@@ -6,9 +6,9 @@
 # Example: ./run_train_parallel_loop.sh RL1 RL2 bucket 32 --entropy-reg-weight 0.05 --kl-penalty-weight 0.1 \
 #          --kl-reference-model-template "models/{SRC_LOOP}_temperature_{TEMP}_low_lr.pth" -- --num-epochs 2
 
-set -e  # 途中でエラーが出たら終了
+set -e  # Exit on error
 
-# プロジェクトルートに移動
+# Move to project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
@@ -26,7 +26,7 @@ ARG1_LOSS_WEIGHT=0.8
 ARG2_LOSS_WEIGHT=0.8
 EXTRA_PYTHON_ARGS=()
 
-# オプション解析
+# Parse options
 if [[ $# -gt 0 && "$1" != --* ]]; then
   BATCH_SIZE=$1
   shift
@@ -66,12 +66,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# === 設定 ===
+# === Configuration ===
 TEMPS=("1" "1.25" "1.5" "2")
 LOG_DIR="logs_${DST_LOOP}"
 mkdir -p "${LOG_DIR}"
 
-# === トレーニング実行（順次実行） ===
+# === Execute training（Sequential execution） ===
 echo "=== Starting parallel training for ${DST_LOOP} ==="
 echo "Using batch size: ${BATCH_SIZE}"
 echo "Entropy regularization weight: ${ENTROPY_REG_WEIGHT}"
@@ -119,7 +119,7 @@ done
 
 echo "All training jobs completed."
 
-# === GCSへアップロード ===
+# === GCS to アップロード ===
 echo "Uploading models to gs://${BUCKET}/models/ ..."
 
 for TEMP in "${TEMPS[@]}"; do

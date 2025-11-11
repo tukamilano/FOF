@@ -13,7 +13,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 import subprocess
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, project_root)
 
@@ -27,8 +27,8 @@ from src.core.utils import pushd, import_pyprover
 
 
 def apply_tactic_from_label(prover, label: str) -> bool:
-    """戦略を適用し、成功したかどうかを返す"""
-    # 証明が既に完了している場合は失敗
+    """戦略 適用し、成功didかどうか 返す"""
+    # 証明 既 完了andexists場合は失敗
     if prover.goal is None:
         return False
         
@@ -69,13 +69,13 @@ def apply_tactic_from_label(prover, label: str) -> bool:
 
 
 def record_hash(premises: List[str], goal: str, tactic: str) -> str:
-    """データレコードの重複チェック用ハッシュを生成"""
+    """データレコードの重複チェック用ハッシュ Generation"""
     record_str = f"{'|'.join(premises)}|{goal}|{tactic}"
     return hashlib.md5(record_str.encode()).hexdigest()
 
 
 def example_hash(original_goal: str) -> str:
-    """Example全体の重複チェック用ハッシュを生成（元の目標式のみ）"""
+    """Example全体の重複チェック用ハッシュ Generation（元の目標式only）"""
     return hashlib.md5(original_goal.encode()).hexdigest()
 
 
@@ -134,7 +134,7 @@ def transform_to_new_format(steps: List[Dict]) -> List[Dict]:
         # Example重複チェック
         example_hash_val = example_hash(original_goal)
         if example_hash_val in seen_example_hashes:
-            # 重複をスキップ（ログなし）
+            # 重複 スキップ（ログなし）
             continue
         seen_example_hashes.add(example_hash_val)
         
@@ -145,7 +145,7 @@ def transform_to_new_format(steps: List[Dict]) -> List[Dict]:
             goal = step['goal']
             tactic_str = format_tactic_string(step['tactic'])
             
-            # ハッシュを計算
+            # ハッシュ 計算
             state_hash_val = state_hash(premises, goal)
             state_tactic_hash_val = state_tactic_hash(premises, goal, tactic_str)
             
@@ -169,7 +169,7 @@ def transform_to_new_format(steps: List[Dict]) -> List[Dict]:
             }
         
         example = {
-            "example_hash": example_hash_val,  # 計算済みのハッシュを使用
+            "example_hash": example_hash_val,  # 計算済みのハッシュ 使用
             "meta": {
                 "goal_original": original_goal,
                 "is_proved": is_proved
@@ -243,16 +243,16 @@ def process_formula_data(prover, max_depth: int, check_step_duplicates: bool = F
     proof_path = prover_copy_for_auto.auto_classical(depth_limit=max_depth)
     
     if proof_path:
-        # 証明が見つかった場合、各ステップを記録
-        current_prover = deepcopy(prover)  # 元のproverから新しくコピー
+        # 証明 見かった場合、各ステップ 記録
+        current_prover = deepcopy(prover)  # 元のprover from 新しくコピー
         for i, tactic in enumerate(proof_path):
-            # 証明が完了している場合はループを終了
+            # 証明 完了andexists場合はループ 終了
             if current_prover.goal is None:
                 break
                 
             current_state = encode_prover_state(current_prover)
             
-            # ステップハッシュを常に計算
+            # ステップハッシュ 常 計算
             record_hash_val = record_hash(current_state["premises"], current_state["goal"], tactic)
             
             # ステップ重複チェック（オプション）
@@ -263,18 +263,18 @@ def process_formula_data(prover, max_depth: int, check_step_duplicates: bool = F
                 else:
                     record_hashes.add(record_hash_val)
             
-            # 戦略を適用
+            # 戦略 適用
             success = apply_tactic_from_label(current_prover, tactic)
             
-            # データを記録（このexampleが解けたので、すべてのレコードでis_proved=true）
+            # データ 記録（thisexample 解けたの with/at 、allのレコード with/at is_proved=true）
             if should_add_step:
                 record = {
                     "premises": current_state["premises"],
                     "goal": current_state["goal"],
-                    "tactic": parse_tactic_string(tactic),  # 構造化されたtactic形式に変換
+                    "tactic": parse_tactic_string(tactic),  # 構造化was donetactic形式 変換
                     "tactic_apply": success,
-                    "is_proved": True,  # このexampleが解けたので常にtrue
-                    "record_hash": record_hash_val  # 常にハッシュを保存
+                    "is_proved": True,  # thisexample 解けたの with/at 常 true
+                    "record_hash": record_hash_val  # 常 ハッシュ 保存
                 }
                 collected_steps.append(record)
         
@@ -316,7 +316,7 @@ class ParallelDataCollector:
         # Conservative limit of 8 to prevent memory issues with proof search
         self.num_workers = num_workers or min(mp.cpu_count(), 8)
         self.examples_per_file = examples_per_file
-        # バッファサイズを例数ベースで計算（平均ステップ数を考慮）
+        # バッファサイズ 例数ベース with/at 計算（平均ステップ数 考慮）
         self.buffer_size = min(buffer_size, examples_per_file)  # Buffer size can't exceed file size
         self.avg_steps_per_example = 4.0  # 初期推定値
         self.buffer_steps = int(self.buffer_size * self.avg_steps_per_example)  # ステップ数ベースのバッファ
@@ -343,7 +343,7 @@ class ParallelDataCollector:
         self.load_global_hashes()
     
     def clear_global_hashes(self):
-        """グローバルハッシュファイルを削除してリセット"""
+        """グローバルハッシュファイル 削除andリセット"""
         if os.path.exists(self.global_hashes_file):
             os.remove(self.global_hashes_file)
             print(f"Cleared global hashes file: {self.global_hashes_file}")
@@ -355,7 +355,7 @@ class ParallelDataCollector:
         print("Reset global hash state")
     
     def load_global_hashes(self):
-        """既存のグローバルハッシュを読み込み"""
+        """既存のグローバルハッシュ 読み込み"""
         if os.path.exists(self.global_hashes_file):
             try:
                 with open(self.global_hashes_file, 'r', encoding='utf-8') as f:
@@ -375,7 +375,7 @@ class ParallelDataCollector:
             self.current_file_index = 1
     
     def save_global_hashes(self):
-        """グローバルハッシュを保存"""
+        """グローバルハッシュ 保存"""
         data = {
             'example_hashes': list(self.example_hashes),
             'global_example_counter': self.global_example_counter,
@@ -385,7 +385,7 @@ class ParallelDataCollector:
             json.dump(data, f, ensure_ascii=False, indent=2)
     
     def load_existing_file_hashes(self, filename: str) -> set:
-        """既存ファイルからexample_hashを読み込み"""
+        """既存ファイル from example_hash 読み込み"""
         if not os.path.exists(filename):
             return set()
         
@@ -422,12 +422,12 @@ class ParallelDataCollector:
                         goal_list = filter_formulas(gen, max_len=gen_params.max_len, require_tautology=True, limit=1)
                         if goal_list:
                             goal = goal_list[0]
-                            # Example重複チェック（メインプロセスで実行）
+                            # Example重複チェック（メインプロセス with/at 実行）
                             if self.check_example_duplicates:
                                 example_hash_val = example_hash(goal)
                                 if example_hash_val in self.example_hashes:
-                                    # 重複している場合はスキップ
-                                    processed_count += 1  # スキップした場合もカウントを増加
+                                    # 重複andexists場合はスキップ
+                                    processed_count += 1  # スキップdid場合もカウント 増加
                                     skipped_duplicates += 1
                                     continue
                                 self.example_hashes.add(example_hash_val)
@@ -509,13 +509,13 @@ class ParallelDataCollector:
         print(f"Duplicates skipped: {skipped_duplicates} ({skipped_duplicates/gen_params.count*100:.1f}%)")
         print(f"Global unique examples: {len(self.example_hashes)}")
         
-        # ファイルごとの重複統計を表示
+        # ファイルごとの重複統計 表示
         if self.file_duplicate_stats:
             print(f"\n📈 File-by-file duplicate statistics:")
             for stat in self.file_duplicate_stats:
                 print(f"  File {stat['file_index']:05d}: {stat['duplicates_removed']}/{stat['total_processed']} duplicates ({stat['duplicate_rate']:.1f}%) - Efficiency: {stat['efficiency']:.1f}%")
             
-            # 平均効率を計算
+            # 平均効率 計算
             avg_efficiency = sum(s['efficiency'] for s in self.file_duplicate_stats) / len(self.file_duplicate_stats)
             print(f"  📊 Average efficiency: {avg_efficiency:.1f}%")
         
@@ -575,9 +575,9 @@ class ParallelDataCollector:
         transformed_data = transform_to_new_format(self.all_collected_steps)
         num_examples = len(transformed_data)
         
-        # 平均ステップ数は固定値を使用（シンプル化）
+        # 平均ステップ数は固定値 使用（シンプル化）
         
-        # バッファの例数カウンターをリセット
+        # バッファの例数カウンター リセット
         self.buffer_examples = 0
         
         # Update global example counter
@@ -620,28 +620,28 @@ class ParallelDataCollector:
         else:
             existing_data = []
         
-        # グローバル重複チェック（既存の全ファイルとの重複をチェック）
+        # グローバル重複チェック（既存の全ファイルとの重複 チェック）
         if self.check_example_duplicates:
-            # 現在のファイルの既存ハッシュを取得
+            # 現在のファイルの既存ハッシュ get
             current_file_hashes = set()
             for ex in existing_data:
                 if 'example_hash' in ex:
                     current_file_hashes.add(ex['example_hash'])
             
-            # グローバルハッシュと現在のファイルハッシュをマージ
+            # グローバルハッシュと現在のファイルハッシュ マージ
             all_existing_hashes = self.example_hashes | current_file_hashes
             
-            # 重複を除去
+            # 重複 除去
             filtered_data = []
             duplicates_removed = 0
             for ex in transformed_data:
                 if 'example_hash' in ex and ex['example_hash'] in all_existing_hashes:
-                    # 重複をスキップ
+                    # 重複 スキップ
                     duplicates_removed += 1
-                    # 個別ログを削除（重複が多いため）
+                    # 別ログ 削除（重複 多いため）
                 else:
                     filtered_data.append(ex)
-                    # グローバルハッシュに追加
+                    # グローバルハッシュ 追加
                     if 'example_hash' in ex:
                         self.example_hashes.add(ex['example_hash'])
             
@@ -649,7 +649,7 @@ class ParallelDataCollector:
                 duplicate_rate = (duplicates_removed / len(transformed_data)) * 100
                 print(f"  📊 File {self.current_file_index:05d}: Removed {duplicates_removed}/{len(transformed_data)} duplicates ({duplicate_rate:.1f}%)")
                 
-                # 統計を記録
+                # 統計 記録
                 self.file_duplicate_stats.append({
                     'file_index': self.current_file_index,
                     'duplicates_removed': duplicates_removed,
@@ -680,10 +680,10 @@ class ParallelDataCollector:
         # Update tracking
         self.examples_in_current_file = len(existing_data)
         
-        # グローバルハッシュを保存
+        # グローバルハッシュ 保存
         self.save_global_hashes()
         
-        # ファイル保存時の統計を表示
+        # ファイル保存時の統計 表示
         total_processed = len(transformed_data) + duplicates_removed if 'duplicates_removed' in locals() else len(transformed_data)
         if 'duplicates_removed' in locals() and duplicates_removed > 0:
             print(f"  ✅ File {self.current_file_index:05d} saved: {len(existing_data)} examples (efficiency: {len(transformed_data)/total_processed*100:.1f}%)")
@@ -702,11 +702,11 @@ class ParallelDataCollector:
         self.all_collected_steps.extend(new_steps)
         self.steps_in_current_file += len(new_steps)
         
-        # 新しいステップから例数を推定して更新
+        # 新しいステップ from 例数 推定and更新
         new_examples = len(new_steps) / max(self.avg_steps_per_example, 1.0)
         self.buffer_examples += new_examples
         
-        # バッファサイズまたはファイルサイズのいずれかに達したら保存
+        # バッファサイズorファイルサイズのいずれか 達didら保存
         if (self.buffer_examples >= self.buffer_size or 
             self.buffer_examples >= self.examples_per_file):
             self.save_current_data()
@@ -747,7 +747,7 @@ class ParallelDataCollector:
 
 
 def main() -> None:
-    # パラメータを初期化
+    # Initialize parameters
     gen_params = get_generation_params()
     train_params = get_training_params()
     system_params = get_system_params()
@@ -772,7 +772,7 @@ def main() -> None:
                        help="Keep existing global hashes file (continue from previous run)")
     args = parser.parse_args()
 
-    # パラメータを更新
+    # パラメータ 更新
     default_params.update_generation_params(
         count=args.count,
         difficulty=args.difficulty,
@@ -786,7 +786,7 @@ def main() -> None:
     root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     pyprover_dir = os.path.join(root_dir, "pyprover")
     
-    # システムパラメータを更新
+    # システムパラメータ 更新
     default_params.update_system_params(
         root_dir=root_dir,
         pyprover_dir=pyprover_dir
@@ -815,8 +815,8 @@ def main() -> None:
         buffer_size=args.buffer_size,
         gcs_bucket=args.gcs_bucket,
         gcs_prefix=args.gcs_prefix,
-        check_example_duplicates=True,  # Example重複チェックを有効化
-        check_step_duplicates=False    # ステップ重複チェックを無効化
+        check_example_duplicates=True,  # Example重複チェック 有効化
+        check_step_duplicates=False    # ステップ重複チェック 無効化
     )
     
     # Clear global hashes by default (unless --keep_global_hashes is specified)

@@ -2,9 +2,9 @@
 # Usage: ./run_train_parallel_loop.sh <SRC_LOOP> <DST_LOOP> <BUCKET_NAME> [BATCH_SIZE]
 # Example: ./run_train_parallel_loop.sh RL1 RL2 fof-data-20251010-milano 32
 
-set -e  # 途中でエラーが出たら終了
+set -e  # Exit on error
 
-# プロジェクトルートに移動
+# Move to project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
@@ -12,14 +12,14 @@ cd "$PROJECT_ROOT"
 SRC_LOOP=$1
 DST_LOOP=$2
 BUCKET=$3
-BATCH_SIZE=${4:-32}  # デフォルトバッチサイズは32
+BATCH_SIZE=${4:-32}  # Default batch size is 32
 
-# === 設定 ===
+# === Configuration ===
 TEMPS=("1" "1.25" "1.5" "2")
 LOG_DIR="logs_${DST_LOOP}"
 mkdir -p "${LOG_DIR}"
 
-# === トレーニング実行（順次実行） ===
+# === Execute training（Sequential execution） ===
 echo "=== Starting parallel training for ${DST_LOOP} ==="
 echo "Using batch size: ${BATCH_SIZE}"
 
@@ -46,7 +46,7 @@ done
 
 echo "All training jobs completed."
 
-# === GCSへアップロード ===
+# === GCS to アップロード ===
 echo "Uploading models to gs://${BUCKET}/models/ ..."
 
 for TEMP in "${TEMPS[@]}"; do

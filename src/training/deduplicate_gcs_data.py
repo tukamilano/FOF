@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 GCS上のデータの重複排除スクリプト
-state_hashからstate_tactic_hashを再計算して重複排除を実行
-1Mオーダーのデータに対応する効率的なアルゴリズムを実装
+state_hash from state_tactic_hash 再計算and重複排除 実行
+1Mオーダーのデータ 対応do/perform効率的なアルゴリズム 実装
 """
 import argparse
 import json
@@ -22,7 +22,7 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 import threading
 from queue import Queue
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, project_root)
 
@@ -32,7 +32,7 @@ from src.core.state_encoder import format_tactic_string
 def state_tactic_hash(premises: List[str], goal: str, tactic: str) -> str:
     """
     状態とtacticの組み合わせのハッシュ
-    重複チェックやデータ管理に使用
+    重複チェックやデータ管理 使用
     
     Args:
         premises: 前提のリスト
@@ -54,16 +54,16 @@ def download_single_file(args: Tuple) -> Optional[str]:
         args: (blob, local_dir) のタプル
         
     Returns:
-        ダウンロードしたファイルのパス（失敗時はNone）
+        ダウンロードdidファイルのパス（失敗時はNone）
     """
     blob, local_dir = args
     
     try:
-        # ローカルファイルパスを生成
+        # ローカルファイルパス Generation
         local_filename = os.path.basename(blob.name)
         local_path = os.path.join(local_dir, local_filename)
         
-        # ファイルをダウンロード
+        # ファイル ダウンロード
         blob.download_to_filename(local_path)
         return local_path
         
@@ -75,17 +75,17 @@ def download_single_file(args: Tuple) -> Optional[str]:
 def download_gcs_data_parallel(gcs_bucket: str, gcs_prefix: str, local_dir: str, 
                               max_workers: int = 4, verbose: bool = False) -> List[str]:
     """
-    GCSからデータを並列ダウンロード
+    GCS from データ 並列ダウンロード
     
     Args:
         gcs_bucket: GCSバケット名
         gcs_prefix: GCSプレフィックス
         local_dir: ローカルダウンロード先ディレクトリ
         max_workers: 並列ダウンロードの最大ワーカー数
-        verbose: 詳細ログを表示するかどうか
+        verbose: 詳細ログ 表示do/performかどうか
         
     Returns:
-        ダウンロードしたファイルのパスリスト
+        ダウンロードdidファイルのパスリスト
     """
     print(f"📥 Downloading data from GCS (parallel)...")
     print(f"   Bucket: {gcs_bucket}")
@@ -93,14 +93,14 @@ def download_gcs_data_parallel(gcs_bucket: str, gcs_prefix: str, local_dir: str,
     print(f"   Local directory: {local_dir}")
     print(f"   Max workers: {max_workers}")
     
-    # ローカルディレクトリを作成
+    # ローカルディレクトリ 作成
     os.makedirs(local_dir, exist_ok=True)
     
-    # GCSクライアントを初期化
+    # GCSクライアント 初期化
     client = storage.Client()
     bucket = client.bucket(gcs_bucket)
     
-    # プレフィックスにマッチするファイルを取得
+    # プレフィックス マッチdo/performファイル get
     blobs = bucket.list_blobs(prefix=gcs_prefix)
     json_files = [blob for blob in blobs if blob.name.endswith('.json')]
     
@@ -110,14 +110,14 @@ def download_gcs_data_parallel(gcs_bucket: str, gcs_prefix: str, local_dir: str,
     
     print(f"📁 Found {len(json_files)} JSON files in GCS")
     
-    # 並列ダウンロードを実行
+    # 並列ダウンロード 実行
     downloaded_files = []
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # ダウンロードタスクを準備
+        # ダウンロードタスク 準備
         download_tasks = [(blob, local_dir) for blob in json_files]
         
-        # 並列ダウンロードを実行
+        # 並列ダウンロード 実行
         with tqdm(total=len(download_tasks), desc="Downloading files", unit="file") as pbar:
             future_to_blob = {executor.submit(download_single_file, task): task[0] for task in download_tasks}
             
@@ -140,16 +140,16 @@ def download_gcs_data_parallel(gcs_bucket: str, gcs_prefix: str, local_dir: str,
 
 def download_gcs_data(gcs_bucket: str, gcs_prefix: str, local_dir: str, verbose: bool = False) -> List[str]:
     """
-    GCSからデータをダウンロード（シーケンシャル版、後方互換性のため）
+    GCS from データ ダウンロード（シーケンシャル版、後方互換性のため）
     
     Args:
         gcs_bucket: GCSバケット名
         gcs_prefix: GCSプレフィックス
         local_dir: ローカルダウンロード先ディレクトリ
-        verbose: 詳細ログを表示するかどうか
+        verbose: 詳細ログ 表示do/performかどうか
         
     Returns:
-        ダウンロードしたファイルのパスリスト
+        ダウンロードdidファイルのパスリスト
     """
     return download_gcs_data_parallel(gcs_bucket, gcs_prefix, local_dir, max_workers=1, verbose=verbose)
 
@@ -167,7 +167,7 @@ def process_single_file_worker(args: Tuple) -> Dict[str, Any]:
     file_path, = args
     
     try:
-        # ファイルを読み込み
+        # ファイル 読み込み
         with open(file_path, 'r', encoding='utf-8') as f:
             file_data = json.load(f)
         
@@ -180,13 +180,13 @@ def process_single_file_worker(args: Tuple) -> Dict[str, Any]:
         
         start_time = time.time()
         
-        # ファイル内の全ステップを処理（重複排除なし）
+        # ファイル内の全ステップ 処理（重複排除なし）
         for example in file_data:
             for step in example.get('steps', []):
                 if step.get('tactic_apply', False):
                     file_stats['total_steps'] += 1
                     
-                    # state_tactic_hashを生成
+                    # state_tactic_hash Generation
                     premises = step.get('premises', [])
                     goal = step.get('goal', '')
                     tactic_dict = step.get('tactic', {})
@@ -195,7 +195,7 @@ def process_single_file_worker(args: Tuple) -> Dict[str, Any]:
                         tactic_str = format_tactic_string(tactic_dict)
                         state_tactic_hash_val = state_tactic_hash(premises, goal, tactic_str)
                         
-                        # state_tactic_hashをステップに追加
+                        # state_tactic_hash ステップ 追加
                         step['state_tactic_hash'] = state_tactic_hash_val
                         processed_steps.append(step)
                         
@@ -232,19 +232,19 @@ def deduplicate_gcs_data(
     parallel_download: bool = True
 ) -> Dict[str, Any]:
     """
-    GCS上のデータの重複を除去し、重複排除済みデータを生成
+    GCS上のデータの重複 除去し、重複排除済みデータ Generation
     
     Args:
         gcs_bucket: GCSバケット名
         gcs_prefix: GCSプレフィックス
         output_dir: 出力ディレクトリ
-        temp_dir: 一時ダウンロードディレクトリ（Noneの場合は自動生成）
+        temp_dir: 一時ダウンロードディレクトリ（Noneの場合は自動Generation）
         report_file: 統計レポートファイルのパス
-        verbose: 詳細ログを表示するかどうか
+        verbose: 詳細ログ 表示do/performかどうか
         batch_size: バッチサイズ（デフォルト: 10000）
         memory_efficient: メモリ効率モード（デフォルト: True）
         max_workers: 並列処理の最大ワーカー数（Noneの場合は自動設定）
-        parallel_download: 並列ダウンロードを使用するかどうか（デフォルト: True）
+        parallel_download: 並列ダウンロード 使用do/performかどうか（デフォルト: True）
     
     Returns:
         重複排除統計情報
@@ -257,15 +257,15 @@ def deduplicate_gcs_data(
     print(f"   Memory efficient: {memory_efficient}")
     print(f"   Parallel download: {parallel_download}")
     
-    # 並列処理のワーカー数を設定
+    # 並列処理のワーカー数 設定
     if max_workers is None:
         max_workers = min(mp.cpu_count(), 8)  # 最大8プロセス
     print(f"   Max workers: {max_workers}")
     
-    # 出力ディレクトリを作成
+    # 出力ディレクトリ 作成
     os.makedirs(output_dir, exist_ok=True)
     
-    # 一時ディレクトリを設定
+    # 一時ディレクトリ 設定
     if temp_dir is None:
         temp_dir = tempfile.mkdtemp(prefix="gcs_dedup_")
         cleanup_temp = True
@@ -274,7 +274,7 @@ def deduplicate_gcs_data(
         cleanup_temp = False
     
     try:
-        # GCSからデータをダウンロード
+        # GCS from データ ダウンロード
         if parallel_download:
             input_files = download_gcs_data_parallel(gcs_bucket, gcs_prefix, temp_dir, 
                                                    max_workers=max_workers, verbose=verbose)
@@ -312,7 +312,7 @@ def deduplicate_gcs_data(
         start_time = time.time()
         
         def save_batch(batch_data: List[Dict], batch_num: int) -> None:
-            """バッチデータをファイルに保存"""
+            """バッチデータ ファイル 保存"""
             output_file = os.path.join(output_dir, f"deduplicated_batch_{batch_num:05d}.json")
             try:
                 with open(output_file, 'w', encoding='utf-8') as f:
@@ -323,16 +323,16 @@ def deduplicate_gcs_data(
                 print(f"❌ Error saving batch {batch_num:05d}: {e}")
         
         def process_step(step: Dict) -> Optional[str]:
-            """ステップからstate_tactic_hashを生成"""
+            """ステップ from state_tactic_hash Generation"""
             try:
                 premises = step.get('premises', [])
                 goal = step.get('goal', '')
                 tactic_dict = step.get('tactic', {})
                 
-                # tactic文字列を生成
+                # tactic文字列 Generation
                 tactic_str = format_tactic_string(tactic_dict)
                 
-                # state_tactic_hashを計算
+                # state_tactic_hash 計算
                 return state_tactic_hash(premises, goal, tactic_str)
                 
             except Exception as e:
@@ -344,13 +344,13 @@ def deduplicate_gcs_data(
         if max_workers > 1:
             print(f"🔄 Processing files in parallel mode with {max_workers} workers...")
             
-            # 並列処理用のタスクを準備
+            # 並列処理用のタスク 準備
             file_tasks = [(file_path,) for file_path in input_files]
             
             all_processed_steps = []
             
             with ProcessPoolExecutor(max_workers=max_workers) as executor:
-                # 並列処理を実行
+                # 並列処理 実行
                 with tqdm(total=len(file_tasks), desc="Processing files", unit="file") as pbar:
                     future_to_file = {executor.submit(process_single_file_worker, task): task[0] for task in file_tasks}
                     
@@ -359,10 +359,10 @@ def deduplicate_gcs_data(
                         try:
                             result = future.result()
                             
-                            # 統計情報を更新
+                            # 統計情報 更新
                             stats['total_steps_before'] += result['total_steps']
                             
-                            # 処理されたステップを収集
+                            # 処理was doneステップ 収集
                             if 'processed_steps' in result:
                                 all_processed_steps.extend(result['processed_steps'])
                             
@@ -376,7 +376,7 @@ def deduplicate_gcs_data(
                         finally:
                             pbar.update(1)
             
-            # グローバル重複排除を実行（並列処理後）
+            # グローバル重複排除 実行（並列処理後）
             print(f"🔄 Performing global deduplication on {len(all_processed_steps)} steps...")
             global_unique_steps = []
             global_duplicate_count = 0
@@ -391,13 +391,13 @@ def deduplicate_gcs_data(
                     seen_hashes.add(state_tactic_hash_val)
                     global_unique_steps.append(step)
             
-            # グローバル重複統計を更新
+            # グローバル重複統計 更新
             stats['duplicate_steps'] = global_duplicate_count
             stats['total_steps_after'] = len(global_unique_steps)
             
             print(f"💾 Saving {len(global_unique_steps)} unique steps in batches...")
             
-            # バッチに分割して保存（逐次書き込み）
+            # バッチ 分割and保存（逐次書き込み）
             for i in range(0, len(global_unique_steps), batch_size):
                 batch = global_unique_steps[i:i + batch_size]
                 save_batch(batch, file_counter)
@@ -414,7 +414,7 @@ def deduplicate_gcs_data(
                 if verbose:
                     print(f"\n📄 Processing {os.path.basename(input_file)}...")
                 
-                # JSONファイルを読み込み
+                # JSONファイル 読み込み
                 try:
                     with open(input_file, 'r', encoding='utf-8') as f:
                         file_data = json.load(f)
@@ -422,13 +422,13 @@ def deduplicate_gcs_data(
                     print(f"❌ Error reading {input_file}: {e}")
                     continue
                 
-                # ファイル内の全ステップを処理
+                # ファイル内の全ステップ 処理
                 for example in file_data:
                     for step in example.get('steps', []):
                         if step.get('tactic_apply', False):
                             stats['total_steps_before'] += 1
                             
-                            # state_tactic_hashを生成
+                            # state_tactic_hash Generation
                             premises = step.get('premises', [])
                             goal = step.get('goal', '')
                             tactic_dict = step.get('tactic', {})
@@ -438,26 +438,26 @@ def deduplicate_gcs_data(
                                 state_tactic_hash_val = state_tactic_hash(premises, goal, tactic_str)
                                 
                                 if state_tactic_hash_val in seen_hashes:
-                                    # 重複をスキップ
+                                    # 重複 スキップ
                                     stats['duplicate_steps'] += 1
                                     stats['duplicate_hash_counts'][state_tactic_hash_val] += 1
                                 else:
-                                    # 新しいステップを追加
+                                    # 新しいステップAdd
                                     seen_hashes.add(state_tactic_hash_val)
                                     
-                                    # state_tactic_hashをステップに追加
+                                    # state_tactic_hash ステップ 追加
                                     step['state_tactic_hash'] = state_tactic_hash_val
                                     current_batch.append(step)
                                     stats['total_steps_after'] += 1
                                     
-                                    # バッチサイズに達したらファイルに保存
+                                    # バッチサイズ 達didらファイル 保存
                                     if len(current_batch) >= batch_size:
                                         save_batch(current_batch, file_counter)
                                         file_counter += 1
                                         current_batch = []
                                         
-                                        # メモリ使用量をチェック
-                                        if file_idx % 10 == 0:  # 10ファイルごとにチェック
+                                        # メモリ使用量 チェック
+                                        if file_idx % 10 == 0:  # 10ファイルごと チェック
                                             import psutil
                                             process = psutil.Process()
                                             memory_mb = process.memory_info().rss / 1024 / 1024
@@ -470,21 +470,21 @@ def deduplicate_gcs_data(
                                     print(f"⚠️ Error processing step: {e}")
                                 continue
         
-        # 残りのバッチを保存（シーケンシャルモードの場合のみ）
+        # 残りのバッチ 保存（シーケンシャルモードの場合only）
         if max_workers == 1 and current_batch:
             save_batch(current_batch, file_counter)
             file_counter += 1
         
         stats['output_files'] = file_counter
         
-        # 全体統計を計算
+        # 全体統計 計算
         stats['processing_time'] = time.time() - start_time
         stats['duplicate_rate'] = (
             stats['duplicate_steps'] / stats['total_steps_before'] * 100
             if stats['total_steps_before'] > 0 else 0.0
         )
         
-        # 統計レポートを表示
+        # 統計レポート 表示
         print(f"\n📊 Deduplication Summary")
         print(f"   Input files processed: {stats['total_files']}")
         print(f"   Output files created: {stats['output_files']}")
@@ -500,13 +500,13 @@ def deduplicate_gcs_data(
             print(f"   Parallel processing: {stats['max_workers']} workers")
             print(f"   Processing speed: {stats['total_steps_before'] / stats['processing_time']:.0f} steps/sec")
         
-        # 最も重複が多いハッシュを表示
+        # 最も重複 多いハッシュ 表示
         if stats['duplicate_hash_counts']:
             print(f"\n🔍 Top 10 Most Duplicated States:")
             for hash_val, count in stats['duplicate_hash_counts'].most_common(10):
                 print(f"   Hash: {hash_val[:16]}... Count: {count}")
         
-        # 統計レポートを保存
+        # 統計レポート 保存
         if report_file:
             try:
                 with open(report_file, 'w', encoding='utf-8') as f:
@@ -518,7 +518,7 @@ def deduplicate_gcs_data(
         return stats
         
     finally:
-        # 一時ディレクトリをクリーンアップ
+        # 一時ディレクトリ クリーンアップ
         if cleanup_temp and os.path.exists(temp_dir):
             try:
                 shutil.rmtree(temp_dir)
@@ -621,7 +621,7 @@ Examples:
     
     args = parser.parse_args()
     
-    # 重複排除を実行
+    # 重複排除 実行
     try:
         stats = deduplicate_gcs_data(
             gcs_bucket=args.gcs_bucket,

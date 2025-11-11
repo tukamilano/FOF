@@ -1,8 +1,8 @@
 #!/bin/bash
-# 使い方: ./create_temperature_mixture.sh RL3
-# RL3などのサイクル名を引数に指定すると、自動的にtemperature_1〜2まで実行されます
+# Usage: ./create_temperature_mixture.sh RL3
+# Specify cycle name like RL3 as argument to automatically execute temperature_1~2
 
-# プロジェクトルートに移動
+# Move to project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
@@ -12,7 +12,7 @@ BASE_DIR="$PROJECT_ROOT"
 OUTPUT_DIR="generated_data_${CYCLE}"
 INPUT_DIR="generated_data_${CYCLE}"
 
-# 作成する温度リスト
+# List of temperatures to create
 declare -a TEMPS=("temperature_1" "temperature_1.25" "temperature_1.5" "temperature_2")
 
 echo "Using input directory: ${INPUT_DIR}"

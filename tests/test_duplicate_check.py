@@ -11,20 +11,20 @@ from collections import defaultdict, Counter
 from typing import Dict, List, Set, Tuple
 
 def example_hash(original_goal: str) -> str:
-    """Example全体の重複チェック用ハッシュを生成（元の目標式のみ）"""
+    """Example全体の重複チェック用ハッシュ Generation（元の目標式only）"""
     return hashlib.md5(original_goal.encode()).hexdigest()
 
 def extract_hashes_from_examples(examples: List[Dict]) -> List[Tuple[str, str, str]]:
-    """例からhashを抽出（example_id, hash_type, hash_value）"""
+    """例 from hash 抽出（example_id, hash_type, hash_value）"""
     hashes = []
     
     for example in examples:
         example_id = example.get('example_id', 'unknown')
         
-        # Example全体の重複チェック（example_hashフィールドから直接取得、なければ計算）
+        # Example全体の重複チェック（example_hashフィールド from 直接get、なければ計算）
         example_hash_val = example.get('example_hash', '')
         if not example_hash_val:
-            # 既存のexample_hashがない場合は計算
+            # 既存のexample_hash no/not場合は計算
             original_goal = example.get('meta', {}).get('goal_original', '')
             if original_goal:
                 example_hash_val = example_hash(original_goal)
@@ -32,7 +32,7 @@ def extract_hashes_from_examples(examples: List[Dict]) -> List[Tuple[str, str, s
         if example_hash_val:
             hashes.append((example_id, 'example_hash', example_hash_val))
         
-        # stepsからstate_hashを抽出
+        # steps from state_hash 抽出
         for step in example.get('steps', []):
             state_hash = step.get('state_hash', '')
             if state_hash:
@@ -41,34 +41,34 @@ def extract_hashes_from_examples(examples: List[Dict]) -> List[Tuple[str, str, s
     return hashes
 
 def check_duplicates_in_file(file_path: str) -> Dict:
-    """単一ファイルの重複hashをチェック"""
+    """単一ファイルの重複hash チェック"""
     print(f"Reading {file_path}...")
     with open(file_path, 'r', encoding='utf-8') as f:
         examples = json.load(f)
     
     print(f"Processing {len(examples)} examples...")
     
-    # example_hashのみをチェック（state_hashの重複は自然な現象）
+    # example_hashonly チェック（state_hashの重複は自然な現象）
     example_hash_counter = Counter()
     
     total_examples = len(examples)
     total_steps = 0
     
-    # 実際のステップ数をカウント（tactic_applyがTrueのステップのみ）
+    # 実際のステップ数 カウント（tactic_apply Trueのステップonly）
     for example in examples:
         for step in example.get('steps', []):
             if step.get('tactic_apply', False):
                 total_steps += 1
     
-    # hashを抽出
+    # hash 抽出
     file_hashes = extract_hashes_from_examples(examples)
     
-    # example_hashのみをカウント
+    # example_hashonly カウント
     for example_id, hash_type, hash_value in file_hashes:
         if hash_type == 'example_hash':
             example_hash_counter[hash_value] += 1
     
-    # 重複を検出（example_hashのみ）
+    # 重複 検出（example_hashonly）
     duplicate_example_hashes = {h: count for h, count in example_hash_counter.items() if count > 1}
     
     return {
@@ -81,8 +81,8 @@ def check_duplicates_in_file(file_path: str) -> Dict:
     }
 
 def check_generated_data_duplicates():
-    """generated_data内のすべてのファイルで重複チェックを実行（ファイル間重複も検出）"""
-    # generated_dataディレクトリ内のJSONファイルを取得
+    """generated_data内のallのファイル with/at 重複チェック 実行（ファイル間重複も検出）"""
+    # generated_dataディレクトリ内のJSONファイル get
     pattern = "generated_data/*.json"
     files = glob.glob(pattern)
     
@@ -96,9 +96,9 @@ def check_generated_data_duplicates():
     total_examples = 0
     total_steps = 0
     
-    # 全ファイルのハッシュを集める（ファイル間重複検出用）
+    # 全ファイルのハッシュ 集める（ファイル間重複検出用）
     global_example_hash_counter = Counter()
-    global_example_hash_files = defaultdict(set)  # ハッシュがどのファイルに含まれているかを追跡
+    global_example_hash_files = defaultdict(set)  # ハッシュ どのファイル 含まれてexistsか 追跡
     
     for file_path in sorted(files):
         try:
@@ -108,7 +108,7 @@ def check_generated_data_duplicates():
             total_examples += result['total_examples']
             total_steps += result['total_steps']
             
-            # ファイル内のすべてのハッシュをグローバルカウンターに追加
+            # ファイル内のallのハッシュ グローバルカウンター 追加
             with open(file_path, 'r', encoding='utf-8') as f:
                 examples = json.load(f)
             
@@ -129,11 +129,11 @@ def check_generated_data_duplicates():
             print(f"Error processing {file_path}: {e}")
             continue
     
-    # ファイル間重複を検出
+    # ファイル間重複 検出
     cross_file_duplicates = {h: count for h, count in global_example_hash_counter.items() if count > 1}
     cross_file_duplicate_count = len(cross_file_duplicates)
     
-    # 全体の結果を表示
+    # 全体の結果 表示
     print(f"\n" + "="*60)
     print("全体の重複チェック結果")
     print("="*60)
@@ -153,15 +153,15 @@ def check_generated_data_duplicates():
         print(f"\n重複Exampleの詳細:")
         for hash_value, count in list(cross_file_duplicates.items())[:10]:
             files_list = sorted(global_example_hash_files[hash_value])
-            print(f"  {hash_value} (出現回数: {count}, ファイル: {', '.join(files_list)})")
+            print(f"  {hash_value} (出現 times数: {count}, ファイル: {', '.join(files_list)})")
         if cross_file_duplicate_count > 10:
-            print(f"  ... 他 {cross_file_duplicate_count - 10} 個")
+            print(f"  ... 他 {cross_file_duplicate_count - 10} ")
     else:
-        print(f"\n✓ 重複は見つかりませんでした！")
+        print(f"\n✓ 重複は見かりません with/at did！")
     
 
 def check_single_file(file_path: str):
-    """単一ファイルの重複チェックを実行"""
+    """単一ファイルの重複チェック 実行"""
     try:
         result = check_duplicates_in_file(file_path)
         
@@ -181,11 +181,11 @@ def check_single_file(file_path: str):
         if result['duplicate_example_hashes'] > 0:
             print(f"\n重複Exampleの詳細:")
             for hash_value, count in list(result['duplicate_example_hash_details'].items())[:10]:
-                print(f"  {hash_value} (出現回数: {count})")
+                print(f"  {hash_value} (出現 times数: {count})")
             if result['duplicate_example_hashes'] > 10:
-                print(f"  ... 他 {result['duplicate_example_hashes'] - 10} 個")
+                print(f"  ... 他 {result['duplicate_example_hashes'] - 10} ")
         else:
-            print(f"\n✓ 重複は見つかりませんでした！")
+            print(f"\n✓ 重複は見かりません with/at did！")
             
     except Exception as e:
         print(f"Error processing {file_path}: {e}")

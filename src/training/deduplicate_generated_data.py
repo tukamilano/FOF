@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 generated_dataディレクトリの重複排除スクリプト
-学習前に重複を事前に除去し、重複排除済みデータを生成する
+Training前 重複 事前 除去し、重複排除済みデータ Generationdo/perform
 """
 import argparse
 import json
@@ -13,7 +13,7 @@ from typing import List, Dict, Any, Set
 from collections import Counter, defaultdict
 from tqdm import tqdm
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, project_root)
 
@@ -26,13 +26,13 @@ def deduplicate_generated_data(
     batch_size: int = 10000
 ) -> Dict[str, Any]:
     """
-    generated_dataディレクトリの重複を除去し、重複排除済みデータを生成
+    generated_dataディレクトリの重複 除去し、重複排除済みデータ Generation
     
     Args:
         input_dir: 入力ディレクトリ（generated_data）
         output_dir: 出力ディレクトリ（deduplicated_data）
         report_file: 統計レポートファイルのパス
-        verbose: 詳細ログを表示するかどうか
+        verbose: 詳細ログ 表示do/performかどうか
         batch_size: バッチサイズ（デフォルト: 10000）
     
     Returns:
@@ -43,10 +43,10 @@ def deduplicate_generated_data(
     print(f"   Output directory: {output_dir}")
     print(f"   Batch size: {batch_size}")
     
-    # 出力ディレクトリを作成
+    # 出力ディレクトリ 作成
     os.makedirs(output_dir, exist_ok=True)
     
-    # 入力ファイルを取得
+    # 入力ファイル get
     input_files = glob.glob(os.path.join(input_dir, "*.json"))
     if not input_files:
         print(f"❌ No JSON files found in {input_dir}")
@@ -76,7 +76,7 @@ def deduplicate_generated_data(
     start_time = time.time()
     
     def save_batch(batch_data: List[Dict], batch_num: int) -> None:
-        """バッチデータをファイルに保存"""
+        """バッチデータ ファイル 保存"""
         output_file = os.path.join(output_dir, f"deduplicated_batch_{batch_num:05d}.json")
         try:
             with open(output_file, 'w', encoding='utf-8') as f:
@@ -86,14 +86,14 @@ def deduplicate_generated_data(
         except Exception as e:
             print(f"❌ Error saving batch {batch_num:05d}: {e}")
     
-    # 全ファイルを統合してグローバル重複排除を実行
+    # 全ファイル 統合andグローバル重複排除 実行
     print(f"🔄 Processing all files for global deduplication...")
     
     for file_idx, input_file in enumerate(tqdm(input_files, desc="Processing files")):
         if verbose:
             print(f"\n📄 Processing {os.path.basename(input_file)}...")
         
-        # JSONファイルを読み込み
+        # JSONファイル 読み込み
         try:
             with open(input_file, 'r', encoding='utf-8') as f:
                 file_data = json.load(f)
@@ -101,7 +101,7 @@ def deduplicate_generated_data(
             print(f"❌ Error reading {input_file}: {e}")
             continue
         
-        # ファイル内の全ステップを処理
+        # ファイル内の全ステップ 処理
         for example in file_data:
             for step in example.get('steps', []):
                 if step.get('tactic_apply', False):
@@ -110,36 +110,36 @@ def deduplicate_generated_data(
                     state_tactic_hash = step.get('state_tactic_hash', '')
                     
                     if state_tactic_hash in seen_hashes:
-                        # 重複をスキップ
+                        # 重複 スキップ
                         stats['duplicate_steps'] += 1
                         stats['duplicate_hash_counts'][state_tactic_hash] += 1
                     else:
-                        # 新しいステップを追加
+                        # 新しいステップAdd
                         seen_hashes.add(state_tactic_hash)
                         current_batch.append(step)
                         stats['total_steps_after'] += 1
                         
-                        # バッチサイズに達したらファイルに保存
+                        # バッチサイズ 達didらファイル 保存
                         if len(current_batch) >= batch_size:
                             save_batch(current_batch, file_counter)
                             file_counter += 1
                             current_batch = []
     
-    # 残りのバッチを保存
+    # 残りのバッチ 保存
     if current_batch:
         save_batch(current_batch, file_counter)
         file_counter += 1
     
     stats['output_files'] = file_counter
     
-    # 全体統計を計算
+    # 全体統計 計算
     stats['processing_time'] = time.time() - start_time
     stats['duplicate_rate'] = (
         stats['duplicate_steps'] / stats['total_steps_before'] * 100
         if stats['total_steps_before'] > 0 else 0.0
     )
     
-    # 統計レポートを表示
+    # 統計レポート 表示
     print(f"\n📊 Deduplication Summary")
     print(f"   Input files processed: {stats['total_files']}")
     print(f"   Output files created: {stats['output_files']}")
@@ -150,13 +150,13 @@ def deduplicate_generated_data(
     print(f"   Processing time: {stats['processing_time']:.2f}s")
     print(f"   Average steps per output file: {stats['total_steps_after'] / stats['output_files']:.0f}")
     
-    # 最も重複が多いハッシュを表示
+    # 最も重複 多いハッシュ 表示
     if stats['duplicate_hash_counts']:
         print(f"\n🔍 Top 10 Most Duplicated States:")
         for hash_val, count in stats['duplicate_hash_counts'].most_common(10):
             print(f"   Hash: {hash_val[:16]}... Count: {count}")
     
-    # 統計レポートを保存
+    # 統計レポート 保存
     if report_file:
         try:
             with open(report_file, 'w', encoding='utf-8') as f:
@@ -223,7 +223,7 @@ Examples:
         print(f"❌ Input directory not found: {args.input_dir}")
         sys.exit(1)
     
-    # 重複排除を実行
+    # 重複排除 実行
     try:
         stats = deduplicate_generated_data(
             input_dir=args.input_dir,

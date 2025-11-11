@@ -6,7 +6,7 @@ parameter.pyの同期テスト
 import sys
 import os
 
-# プロジェクトルートをパスに追加
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0, project_root)
 
@@ -17,10 +17,10 @@ from src.core.parameter import (
 
 
 def test_parameter_consistency():
-    """パラメータの一貫性をテスト"""
+    """パラメータの一貫性 テスト"""
     print("Testing parameter consistency...")
     
-    # デフォルトパラメータを取得
+    # Default parameters get
     model_params = get_model_params()
     training_params = get_training_params()
     generation_params = get_generation_params()
@@ -38,14 +38,14 @@ def test_parameter_updates():
     """パラメータ更新のテスト"""
     print("Testing parameter updates...")
     
-    # 元の値を保存
+    # 元の値 保存
     original_d_model = get_model_params().d_model
     
-    # パラメータを更新
+    # パラメータ 更新
     default_params.update_model_params(d_model=256)
     assert get_model_params().d_model == 256, "Model parameter update failed"
     
-    # 元に戻す
+    # 元 戻す
     default_params.update_model_params(d_model=original_d_model)
     assert get_model_params().d_model == original_d_model, "Parameter rollback failed"
     
